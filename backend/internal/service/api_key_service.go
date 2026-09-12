@@ -1045,7 +1045,11 @@ func (s *APIKeyService) GetAvailableGroups(ctx context.Context, userID int64) ([
 	// 过滤出用户有权限的分组
 	availableGroups := make([]Group, 0)
 	for _, group := range allGroups {
-		if s.canUserBindGroupInternal(user, &group, subscribedGroupIDs) {
+		// Yingzo Agent is the product's built-in aggregate group. It must be
+		// available to every authenticated user so the Yingzo web client can
+		// create its fixed-scope key, regardless of legacy public-group
+		// visibility settings.
+		if group.IsAgent() || s.canUserBindGroupInternal(user, &group, subscribedGroupIDs) {
 			availableGroups = append(availableGroups, group)
 		}
 	}
