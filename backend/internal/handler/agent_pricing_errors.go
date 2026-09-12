@@ -28,22 +28,3 @@ func writeOpenAIAgentPricingError(c *gin.Context, err error) {
 		"message": agentPricingPublicMessage(err),
 	}})
 }
-
-func writeAnthropicAgentPricingError(c *gin.Context, err error) {
-	c.JSON(http.StatusServiceUnavailable, gin.H{
-		"type": "error",
-		"error": gin.H{
-			"type":    agentPricingUnavailableCode,
-			"message": agentPricingPublicMessage(err),
-		},
-	})
-}
-
-func writeGoogleAgentPricingError(c *gin.Context, err error) {
-	c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{
-		"code":    http.StatusServiceUnavailable,
-		"message": agentPricingPublicMessage(err),
-		"status":  "UNAVAILABLE",
-		"reason":  agentPricingUnavailableCode,
-	}})
-}

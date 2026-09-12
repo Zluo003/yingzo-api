@@ -136,6 +136,7 @@ func NewFileStorageService(
 	} else if absolute, err := filepath.Abs(localPath); err == nil {
 		localPath = absolute
 	}
+	// #nosec G703 -- 与 EffectiveLocalPath 同源：路径来自配置或数据目录，非用户输入。
 	_ = os.MkdirAll(localPath, 0700)
 	return &FileStorageService{
 		db:               db,
@@ -181,6 +182,9 @@ func (s *FileStorageService) EffectiveLocalPath(ctx context.Context) (string, er
 		}
 		return dir, nil
 	}
+	// #nosec G703 -- 目录不是用户输入：它来自管理员在设置页配置的 local_dir，
+	// 已通过 normalizeFileStorageLocalDir 校验（必须是绝对路径、拒绝系统目录），
+	// 保存时还会做真实写入探针；这里只是按需创建该目录。
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return "", fmt.Errorf("create local asset directory: %w", err)
 	}

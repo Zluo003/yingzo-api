@@ -14,16 +14,6 @@ import (
 
 var ErrOpenAIImagePublication = errors.New("generated image URL publication failed")
 
-func openAIImagePublicationClientMessage(err error) string {
-	if errors.Is(err, ErrOpenAIImagePublication) {
-		return "Generated image URL is temporarily unavailable"
-	}
-	if err == nil {
-		return "Generated image URL is temporarily unavailable"
-	}
-	return err.Error()
-}
-
 type openAIImageURLPublicationContextKey struct{}
 
 type openAIImageURLPublication struct {
@@ -59,14 +49,6 @@ func openAIImageURLPublicationFromContext(ctx context.Context) (openAIImageURLPu
 	}
 	publication, ok := ctx.Value(openAIImageURLPublicationContextKey{}).(openAIImageURLPublication)
 	return publication, ok && publication.publisher != nil
-}
-
-func openAIImageURLPublicationEnabled(ctx context.Context, responseFormat string) bool {
-	if !strings.EqualFold(strings.TrimSpace(responseFormat), "url") {
-		return false
-	}
-	_, ok := openAIImageURLPublicationFromContext(ctx)
-	return ok
 }
 
 func publishOpenAIImageResultURL(ctx context.Context, encodedImage, outputFormat string) (string, error) {

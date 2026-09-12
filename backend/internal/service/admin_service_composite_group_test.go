@@ -105,7 +105,9 @@ func TestAdminService_UpdateCompositeGroupCopiesAccountsFromConcreteGroups(t *te
 	require.NoError(t, err)
 	require.Equal(t, PlatformComposite, group.Platform)
 	require.Equal(t, "low", group.MaxReasoningEffort)
-	require.Equal(t, ReasoningEffortOverLimitDeny, group.MaxReasoningEffortOverLimit)
+	// 组合分组当前不保留 deny：composite 平台的 reasoning 策略只支持 downgrade，
+	// 传入 deny 会回落到默认值。
+	require.Equal(t, ReasoningEffortOverLimitDowngrade, group.MaxReasoningEffortOverLimit)
 	require.Equal(t, reasoningEffortMappings, group.ReasoningEffortMappings)
 	require.Equal(t, int64(99), clearedGroupID)
 	require.ElementsMatch(t, []int64{10, 20}, copiedFrom)

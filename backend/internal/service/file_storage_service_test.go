@@ -67,7 +67,7 @@ func (s *fileStorageObjectStore) UploadFile(_ context.Context, _ string, filePat
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	info, err := f.Stat()
 	if err != nil {
 		return 0, err

@@ -1188,8 +1188,8 @@ func (s *OpenAIGatewayService) handlePublishedOpenAIImagesStream(resp *http.Resp
 				lines[i] = "data: " + string(transformed)
 			}
 		}
-		out.WriteString(strings.Join(lines, "\n"))
-		out.WriteString("\n\n")
+		_, _ = out.WriteString(strings.Join(lines, "\n"))
+		_, _ = out.WriteString("\n\n")
 	}
 	responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.responseHeaderFilter)
 	c.Data(resp.StatusCode, "text/event-stream", []byte(out.String()))

@@ -782,7 +782,7 @@ func ProvideVideoService(
 }
 
 func ProvidePluginHostInfo(buildInfo BuildInfo) PluginHostInfo {
-	return PluginHostInfo{Version: buildInfo.Version, BuildType: buildInfo.BuildType}
+	return PluginHostInfo(buildInfo)
 }
 
 // ProviderSet is the Wire provider set for all services

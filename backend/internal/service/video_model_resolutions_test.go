@@ -46,7 +46,8 @@ func TestNormalizeVideoModelResolutionsMatchesResolutionCaseInsensitively(t *tes
 		},
 	})
 	require.NoError(t, err)
-	byModel := normalized[VideoModelResolutionsExtraKey].(map[string]any)
+	byModel, ok := normalized[VideoModelResolutionsExtraKey].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, []any{VideoResolution4K}, byModel[VideoModelSeedance20])
 }
 

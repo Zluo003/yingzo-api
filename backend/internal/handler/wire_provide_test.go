@@ -19,7 +19,7 @@ func TestProvideAdminHandlersForwardsEveryHandler(t *testing.T) {
 	arguments := make([]reflect.Value, provideType.NumIn())
 	for i := range arguments {
 		parameter := provideType.In(i)
-		require.Equalf(t, reflect.Ptr, parameter.Kind(), "参数 %d 不是指针，无法用非 nil 值占位", i)
+		require.Equalf(t, reflect.Pointer, parameter.Kind(), "参数 %d 不是指针，无法用非 nil 值占位", i)
 		arguments[i] = reflect.New(parameter.Elem())
 	}
 
@@ -32,7 +32,7 @@ func TestProvideAdminHandlersForwardsEveryHandler(t *testing.T) {
 	missing := make([]string, 0)
 	for i := 0; i < handlers.NumField(); i++ {
 		field := handlers.Field(i)
-		if field.Kind() != reflect.Ptr {
+		if field.Kind() != reflect.Pointer {
 			continue
 		}
 		if field.IsNil() {

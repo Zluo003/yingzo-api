@@ -402,10 +402,6 @@ func (s *VideoService) GetTask(ctx context.Context, publicID string, apiKey *API
 	return videoResponseFromTask(task), nil
 }
 
-func (s *VideoService) selectAccount(ctx context.Context, groupID int64, model string, resolution string, agentGroup bool) (*Account, error) {
-	return s.selectAccountForRequest(ctx, groupID, &normalizedVideoRequest{Model: model, Resolution: resolution}, agentGroup)
-}
-
 func (s *VideoService) selectAccountForRequest(ctx context.Context, groupID int64, normalized *normalizedVideoRequest, agentGroup bool) (*Account, error) {
 	if normalized == nil {
 		return nil, ErrVideoAccountNotFound
@@ -604,15 +600,6 @@ func (s *VideoService) startLifecycle(input VideoTaskLifecycleInput) {
 		}
 		s.pollLifecycle(input, created.ID)
 	}()
-}
-
-func isTerminalVideoTaskStatus(status string) bool {
-	switch status {
-	case VideoTaskStatusCompleted, VideoTaskStatusFailed, VideoTaskStatusCancelled:
-		return true
-	default:
-		return false
-	}
 }
 
 func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTaskID string) {
@@ -1425,10 +1412,6 @@ func videoUpstreamModelForAccount(account *Account, normalized *normalizedVideoR
 
 func videoUpstreamBodyForAccount(account *Account, normalized *normalizedVideoRequest, upstreamModel string) map[string]any {
 	return videoProviderAdapterForAccount(account).BuildCreateBody(normalized, upstreamModel)
-}
-
-func isVideoAccountCompatible(account *Account, model string, resolution string) bool {
-	return videoProviderAdapterForAccount(account).Compatible(model, resolution)
 }
 
 func isVideoAccountCompatibleForRequest(account *Account, normalized *normalizedVideoRequest) bool {

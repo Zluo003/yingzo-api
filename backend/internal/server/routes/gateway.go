@@ -1,13 +1,8 @@
 package routes
 
 import (
-	"bytes"
 	"errors"
-	"io"
-	"mime"
-	"mime/multipart"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
@@ -667,42 +662,6 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 	}
 }
 
-func compositeRequestModelFromBody(contentType string, body []byte) string {
-	if model := strings.TrimSpace(gjson.GetBytes(body, "model").String()); model != "" {
-		return model
-	}
-	return compositeMultipartModelFromBody(contentType, body)
-}
-
-func compositeMultipartModelFromBody(contentType string, body []byte) string {
-	mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(contentType))
-	if err != nil || !strings.EqualFold(mediaType, "multipart/form-data") {
-		return ""
-	}
-	boundary := strings.TrimSpace(params["boundary"])
-	if boundary == "" {
-		return ""
-	}
-	reader := multipart.NewReader(bytes.NewReader(body), boundary)
-	for {
-		part, err := reader.NextPart()
-		if errors.Is(err, io.EOF) {
-			return ""
-		}
-		if err != nil {
-			return ""
-		}
-		if part.FormName() != "model" || part.FileName() != "" {
-			continue
-		}
-		data, err := io.ReadAll(part)
-		if err != nil {
-			return ""
-		}
-		return strings.TrimSpace(string(data))
-	}
-}
-
 func compositeGeminiTargetPlatformMiddleware(resolver *service.CompositeRouteResolver) gin.HandlerFunc {
 	if resolver == nil {
 		resolver = service.NewCompositeRouteResolver(nil)
@@ -745,12 +704,6 @@ func compositeGeminiModelFromParams(c *gin.Context) string {
 		return strings.TrimSpace(modelAction[:idx])
 	}
 	return modelAction
-}
-
-func resetRequestBody(c *gin.Context, body []byte) {
-	c.Request.Body = io.NopCloser(bytes.NewReader(body))
-	c.Request.ContentLength = int64(len(body))
-	c.Request.Header.Set("Content-Length", strconv.Itoa(len(body)))
 }
 
 func compositeRouteEndpointForPath(path string) string {

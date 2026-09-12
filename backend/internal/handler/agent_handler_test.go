@@ -68,7 +68,7 @@ func (s *memoryObjectStore) UploadFile(ctx context.Context, key, filePath, conte
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	return s.Upload(ctx, key, f, contentType)
 }
 

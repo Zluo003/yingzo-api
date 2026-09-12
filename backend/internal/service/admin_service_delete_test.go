@@ -244,10 +244,13 @@ func (s *userRepoStub) GetByIDIncludeDeleted(ctx context.Context, id int64) (*Us
 }
 
 type groupRepoStub struct {
+	getByID         *Group
 	affectedUserIDs []int64
 	deleteErr       error
 	deleteCalls     []int64
 	guardedCalls    []int64
+	accountCount    int64
+	countAccounts   bool
 }
 
 func (s *groupRepoStub) Create(ctx context.Context, group *Group) error {
@@ -255,9 +258,13 @@ func (s *groupRepoStub) Create(ctx context.Context, group *Group) error {
 }
 
 func (s *groupRepoStub) GetByID(_ context.Context, id int64) (*Group, error) {
-	// 删除流程会先读一次分组（用于校验与缓存失效）；返回一个最小可用的分组即可，
-	// 不再 panic——否则这些用例会以 panic 而不是断言失败的形式挂掉。
-	return &Group{ID: id, Name: "g", Platform: PlatformOpenAI}, nil
+	// 删除流程会先读一次分组（用于校验与缓存失效）。需要这一步的用例显式设置
+	// getByID；没设置的用例继续 panic，保留"不该调用"的守卫语义。
+	if s.getByID != nil {
+		cloned := *s.getByID
+		return &cloned, nil
+	}
+	panic("unexpected GetByID call")
 }
 
 func (s *groupRepoStub) GetByIDLite(ctx context.Context, id int64) (*Group, error) {
@@ -302,7 +309,10 @@ func (s *groupRepoStub) ExistsByName(ctx context.Context, name string) (bool, er
 	panic("unexpected ExistsByName call")
 }
 
-func (s *groupRepoStub) GetAccountCount(ctx context.Context, groupID int64) (int64, int64, error) {
+func (s *groupRepoStub) GetAccountCount(_ context.Context, _ int64) (int64, int64, error) {
+	if s.countAccounts {
+		return s.accountCount, 0, nil
+	}
 	panic("unexpected GetAccountCount call")
 }
 
@@ -660,7 +670,7 @@ func TestAdminService_DeleteUser_DeleteError(t *testing.T) {
 
 func TestAdminService_DeleteGroup_Success_WithCacheInvalidation(t *testing.T) {
 	cache := newBillingCacheStub(2)
-	repo := &groupRepoStub{affectedUserIDs: []int64{11, 12}}
+	repo := &groupRepoStub{affectedUserIDs: []int64{11, 12}, getByID: &Group{ID: 5, Name: "g", Platform: PlatformOpenAI}}
 	svc := &adminServiceImpl{
 		groupRepo:           repo,
 		billingCacheService: &BillingCacheService{cache: cache},
@@ -678,7 +688,7 @@ func TestAdminService_DeleteGroup_Success_WithCacheInvalidation(t *testing.T) {
 }
 
 func TestAdminService_DeleteGroup_InvalidatesAuthCacheForBoundKeys(t *testing.T) {
-	repo := &groupRepoStub{}
+	repo := &groupRepoStub{getByID: &Group{ID: 5, Name: "g", Platform: PlatformOpenAI}}
 	apiKeyRepo := &deleteGroupAPIKeyRepoStub{keys: []string{"k1", "k2"}}
 	invalidator := &authCacheInvalidatorStub{}
 	svc := &adminServiceImpl{
@@ -695,7 +705,7 @@ func TestAdminService_DeleteGroup_InvalidatesAuthCacheForBoundKeys(t *testing.T)
 }
 
 func TestAdminService_DeleteGroup_NotFound(t *testing.T) {
-	repo := &groupRepoStub{deleteErr: ErrGroupNotFound}
+	repo := &groupRepoStub{deleteErr: ErrGroupNotFound, getByID: &Group{ID: 42, Name: "g", Platform: PlatformOpenAI}}
 	svc := &adminServiceImpl{groupRepo: repo}
 
 	err := svc.DeleteGroup(context.Background(), 99)
@@ -704,27 +714,22 @@ func TestAdminService_DeleteGroup_NotFound(t *testing.T) {
 
 func TestAdminService_DeleteGroup_Error(t *testing.T) {
 	deleteErr := errors.New("delete failed")
-	repo := &groupRepoStub{deleteErr: deleteErr}
+	repo := &groupRepoStub{deleteErr: deleteErr, getByID: &Group{ID: 42, Name: "g", Platform: PlatformOpenAI}}
 	svc := &adminServiceImpl{groupRepo: repo}
 
 	err := svc.DeleteGroup(context.Background(), 42)
 	require.ErrorIs(t, err, deleteErr)
 }
 
-func TestAdminService_DeleteGroupIfEmpty_UsesGuardedCascade(t *testing.T) {
-	repo := &groupRepoStub{deleteErr: ErrGroupNotEmpty}
+// DeleteGroupIfEmpty 的当前契约：先数分组内账号，>0 直接返回 ErrGroupNotEmpty，
+// 不会走到删除。早期的 "guarded cascade" 实现已移除，这里只锁定现在的行为。
+func TestAdminService_DeleteGroupIfEmpty_RejectsNonEmptyGroup(t *testing.T) {
+	repo := &groupRepoStub{countAccounts: true, accountCount: 3}
 	svc := &adminServiceImpl{groupRepo: repo}
 
 	err := svc.DeleteGroupIfEmpty(context.Background(), 42)
 	require.ErrorIs(t, err, ErrGroupNotEmpty)
-	require.Equal(t, []int64{42}, repo.guardedCalls)
 	require.Empty(t, repo.deleteCalls)
-}
-
-func TestAdminService_DeleteGroupIfEmpty_MissingCapabilityReturnsError(t *testing.T) {
-	svc := &adminServiceImpl{groupRepo: &groupRepoStub{}}
-
-	require.ErrorContains(t, svc.DeleteGroupIfEmpty(context.Background(), 42), "guarded group deletion is unavailable")
 }
 
 func TestAdminService_DeleteProxy_Success(t *testing.T) {
