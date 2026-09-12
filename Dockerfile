@@ -23,14 +23,11 @@ ARG NPM_CONFIG_REGISTRY=
 FROM --platform=${BUILDPLATFORM} ${NODE_IMAGE} AS frontend-builder
 ARG NPM_CONFIG_REGISTRY
 
-# Build the unchanged legacy admin frontend into /admin so administrator
-# sessions keep their existing UI while the root user experience uses yingzo-web.
 WORKDIR /app/legacy-frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --frozen-lockfile
 COPY frontend/ ./
 COPY docs/legal/ /app/docs/legal/
-RUN pnpm exec vite build --outDir /app/yingzo-web/public/admin --base /admin/
 
 WORKDIR /app/yingzo-web
 
@@ -47,6 +44,15 @@ RUN npm ci --no-audit --no-fund
 # in the image (WORKDIR /app/yingzo-web -> resolves to /app/docs/legal/*.md).
 # Copy only that subtree to keep the build dependency minimal.
 COPY yingzo-web/ ./
+
+# Build the admin frontend into /admin so administrator sessions keep their
+# existing UI while the root user experience uses yingzo-web.
+#
+# 这一步必须排在 `COPY yingzo-web/ ./` 之后：仓库里保留了上一版 admin 构建产物
+# （yingzo-web/public/admin），先构建再 COPY 会被旧产物覆盖 index.html，镜像里
+# 永远发的是旧管理端 UI（新页面/新按钮在浏览器里根本看不到）。
+RUN cd /app/legacy-frontend && pnpm exec vite build --outDir /app/yingzo-web/public/admin --base /admin/
+
 RUN npm run build
 
 # -----------------------------------------------------------------------------
