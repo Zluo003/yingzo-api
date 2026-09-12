@@ -33,6 +33,7 @@
           <select v-model="editVideoProvider" class="input">
             <option value="aigod">{{ t('admin.accounts.video.providers.aigod') }}</option>
             <option value="newtoken">{{ t('admin.accounts.video.providers.newtoken') }}</option>
+            <option value="mikuapi">{{ t('admin.accounts.video.providers.mikuapi') }}</option>
           </select>
           <p class="input-hint">{{ t('admin.accounts.video.providerHint') }}</p>
         </div>
@@ -3215,7 +3216,7 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
-type VideoProvider = 'aigod' | 'newtoken'
+type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi'
 
 /** 对外提供的视频模型：单一来源见 @/views/admin/videoModelResolutions。 */
 const videoDefaultModels = VIDEO_MODEL_CODES
@@ -3254,7 +3255,8 @@ const editVideoDefaultsMap: Record<
   { baseUrl: string; apiPath: string; pollIntervalMs: number; pollTimeoutMs: number; requestTimeoutMs: number; connectTimeoutMs: number }
 > = {
   aigod: { baseUrl: 'https://api.aigod.one', apiPath: '/v1/videos', pollIntervalMs: 2000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
-  newtoken: { baseUrl: 'https://newtoken.club', apiPath: '/v1/videos', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 300000, connectTimeoutMs: 15000 }
+  newtoken: { baseUrl: 'https://newtoken.club', apiPath: '/v1/videos', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 300000, connectTimeoutMs: 15000 },
+  mikuapi: { baseUrl: 'https://mikuapi.org', apiPath: '/v1/videos', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 }
 }
 const editVideoDefaultsFor = (provider: VideoProvider) =>
   editVideoDefaultsMap[provider] ?? editVideoDefaultsMap.aigod
@@ -3956,8 +3958,8 @@ watch(editVideoProvider, (_newProvider, oldProvider) => {
     editVideoConnectTimeoutMs.value = editVideoProviderDefaults.value.connectTimeoutMs
   }
   if (props.account?.platform !== 'video') return
-  // aigod 与 newtoken 都使用白名单：newtoken 由后端按 (model, resolution) 路由上游
-  // 模型 id，扁平的 from→to 映射无法表达，只能限定下游可用模型。
+  // 三家上游都使用白名单：newtoken / mikuapi 的上游模型名由后端适配器决定
+  // （newtoken 把分辨率编进模型名），扁平的 from→to 映射无法表达，只能限定下游可用模型。
   modelRestrictionMode.value = 'whitelist'
   allowedModels.value = [...videoDefaultModels]
   modelMappings.value = []
@@ -4335,10 +4337,11 @@ const syncFormFromAccount = (newAccount: Account | null) => {
         editZhipuProject.value = typeof credentials.zhipu_project === 'string' ? credentials.zhipu_project : ''
       }
     }
-    // 只认 aigod/newtoken；未知取值回落 aigod（后端也会在写入时校验并拒绝）。
-    const storedVideoProvider: VideoProvider = extra?.video_provider === 'newtoken'
-      ? 'newtoken'
-      : 'aigod'
+    // 只认已接入的三家；未知取值回落 aigod（后端也会在写入时校验并拒绝）。
+    const storedVideoProvider: VideoProvider =
+      extra?.video_provider === 'newtoken' || extra?.video_provider === 'mikuapi'
+        ? extra.video_provider
+        : 'aigod'
     const platformDefaultUrl =
       newAccount.platform === 'openai'
         ? 'https://api.openai.com'

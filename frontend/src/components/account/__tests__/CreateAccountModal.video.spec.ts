@@ -108,14 +108,35 @@ describe('CreateAccountModal video mode', () => {
     expect(payload.type).toBe('apikey')
   })
 
-  it('offers exactly aigod and newtoken as upstreams', async () => {
+  it('offers aigod, newtoken and mikuapi as upstreams', async () => {
     const wrapper = await mountVideoModal()
 
-    expect(wrapper.find('[data-testid="video-provider-aigod"]').exists()).toBe(true)
-    expect(wrapper.find('[data-testid="video-provider-newtoken"]').exists()).toBe(true)
-    for (const removed of ['ycyapi', 'jingyu', 'mikuapi']) {
+    for (const supported of ['aigod', 'newtoken', 'mikuapi']) {
+      expect(wrapper.find(`[data-testid="video-provider-${supported}"]`).exists()).toBe(true)
+    }
+    // 早期清理掉的上游不能悄悄回来。
+    for (const removed of ['ycyapi', 'jingyu']) {
       expect(wrapper.find(`[data-testid="video-provider-${removed}"]`).exists()).toBe(false)
     }
+  })
+
+  it('switches base URL + timeouts when mikuapi is picked', async () => {
+    const wrapper = await mountVideoModal()
+
+    await wrapper.get('[data-testid="video-provider-mikuapi"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('mikuapi account')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('sk-mikuapi')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    const payload = createAccountMock.mock.calls[0]?.[0]
+    expect(payload.extra.video_provider).toBe('mikuapi')
+    expect(payload.extra.base_url).toBe('https://mikuapi.org')
+    expect(payload.extra.api_path).toBe('/v1/videos')
+    expect(payload.extra.poll_interval_ms).toBe(5000)
+    expect(payload.extra.poll_timeout_ms).toBe(900000)
   })
 
   it('defaults to aigod and switches base URL + timeouts when newtoken is picked', async () => {

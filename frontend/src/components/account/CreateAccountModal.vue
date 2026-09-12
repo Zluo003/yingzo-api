@@ -4356,8 +4356,8 @@ function onCnPresetSelect(preset: { mode: CnAccountMode; protocol: CnApiProtocol
   apiKeyBaseUrl.value = preset.url
 }
 
-/** 视频上游平台。只接入 aigod 与 newtoken 两家，后端适配器同名单一来源。 */
-type VideoProvider = 'aigod' | 'newtoken'
+/** 视频上游平台。只接入 aigod / newtoken / mikuapi 三家，后端适配器同名单一来源。 */
+type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi'
 
 const videoProvider = ref<VideoProvider>('aigod')
 const videoAPIPath = ref('/v1/videos')
@@ -4397,6 +4397,14 @@ const videoProviderDefaultsMap: Record<
     pollTimeoutMs: 900000,
     requestTimeoutMs: 300000,
     connectTimeoutMs: 15000
+  },
+  mikuapi: {
+    baseUrl: 'https://mikuapi.org',
+    apiPath: '/v1/videos',
+    pollIntervalMs: 5000,
+    pollTimeoutMs: 900000,
+    requestTimeoutMs: 60000,
+    connectTimeoutMs: 15000
   }
 }
 
@@ -4414,6 +4422,11 @@ const videoProviderOptions: {
     value: 'newtoken',
     labelKey: 'admin.accounts.video.providers.newtoken',
     hintKey: 'admin.accounts.video.newtokenAdapter'
+  },
+  {
+    value: 'mikuapi',
+    labelKey: 'admin.accounts.video.providers.mikuapi',
+    hintKey: 'admin.accounts.video.mikuapiAdapter'
   }
 ]
 

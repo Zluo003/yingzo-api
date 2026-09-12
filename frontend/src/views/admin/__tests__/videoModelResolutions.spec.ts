@@ -274,3 +274,34 @@ describe('video model resolutions', () => {
     expect(parseVideoModelResolutions(payload, 'aigod')).toEqual(selection)
   })
 })
+
+describe('mikuapi video provider', () => {
+  it('exposes the same resolution tiers as the seedance spec', () => {
+    // mikuapi 把清晰度放在请求体里，档位与官方一致：2.0 含 4K、fast 仅 480p/720p、
+    // 2.5 没有 4K（传 4K 会被上游降到 1080p）。
+    expect(videoProviderModelResolutions('mikuapi', 'seedance-2.0')).toEqual([
+      '480p',
+      '720p',
+      '1080p',
+      '4K'
+    ])
+    expect(videoProviderModelResolutions('mikuapi', 'seedance-2.0-fast')).toEqual(['480p', '720p'])
+    expect(videoProviderModelResolutions('mikuapi', 'seedance-2.5')).toEqual([
+      '480p',
+      '720p',
+      '1080p'
+    ])
+    // 2.5 的官方档位本身就不含 4K（上游文档也说明传 4K 会落到 1080p），
+    // 所以"该上游不提供"的列表是空的。
+    expect(unsupportedVideoResolutions('mikuapi', 'seedance-2.5')).toEqual([])
+  })
+
+  it('prunes selections that mikuapi cannot serve', () => {
+    const pruned = pruneVideoModelResolutions(
+      { 'seedance-2.0': ['720p', '4K'], 'seedance-2.5': ['1080p', '4K'] },
+      'mikuapi'
+    )
+    expect(pruned['seedance-2.0']).toEqual(['720p', '4K'])
+    expect(pruned['seedance-2.5']).toEqual(['1080p'])
+  })
+})

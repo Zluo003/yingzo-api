@@ -15,7 +15,7 @@
  * 注意 4K 的官方写法是大写 K：后端按大小写不敏感匹配后回写官方写法，
  * 因此前后端之间只传官方字符串，不要用 ToLower 的副本。
  */
-export type VideoProvider = 'aigod' | 'newtoken'
+export type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi'
 
 export interface VideoModelResolutionSpec {
   model: string
@@ -56,6 +56,13 @@ export const VIDEO_PROVIDER_RESOLUTIONS: Record<
     // newtoken 目录含 sd2.5-1080p-official（见其 Seedance OpenAI 兼容文档的
     // official 模型表），因此 2.5 的 1080p 也可服务。
     'seedance-2.5': ['720p', '1080p']
+  },
+  mikuapi: {
+    // mikuapi 的清晰度走请求体字段（不拼进模型名），三档与官方档位一致：
+    // 2.0 含 4K、2.0-fast 仅 480p/720p、2.5 没有 4K（传 4K 会被上游降到 1080p）。
+    'seedance-2.0': ['480p', '720p', '1080p', '4K'],
+    'seedance-2.0-fast': ['480p', '720p'],
+    'seedance-2.5': ['480p', '720p', '1080p']
   }
 }
 

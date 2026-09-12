@@ -25,11 +25,13 @@ import (
 const (
 	videoProviderAigod    = "aigod"
 	videoProviderNewtoken = "newtoken"
+	videoProviderMikuapi  = "mikuapi"
 	// videoAigodSubjectType：aigod 要求参考图/参考视频统一声明主体类型。
 	// 该上游把参考素材一律按真人链路处理，与下游是否传 subject_type 无关。
 	videoAigodSubjectType       = "person"
 	videoDefaultBaseURL         = "https://api.aigod.one"
 	videoDefaultNewtokenBaseURL = "https://newtoken.club"
+	videoDefaultMikuapiBaseURL  = "https://mikuapi.org"
 	videoDefaultAPIPath         = "/v1/videos"
 	// newtoken encodes the output resolution into the upstream model id, so the
 	// adapter routes on (downstream model, resolution) instead of a static map.
@@ -42,10 +44,13 @@ const (
 	// videoDefaultPollTimeout：Seedance 视频任务的轮询超时，aigod 与 newtoken 统一
 	// 使用 15 分钟。上游最长链条是 aigod 的"真人过白（≤10 分钟）+ 生成"，
 	// 15 分钟覆盖该窗口并留出生成余量。账号 extra 里的 poll_timeout_ms 仍可覆盖。
-	videoDefaultPollTimeout      = 15 * time.Minute
-	videoDefaultRequestTimeout   = 60 * time.Second
-	videoDefaultConnectTimeout   = 15 * time.Second
-	videoNewtokenPollInterval    = 5 * time.Second
+	videoDefaultPollTimeout    = 15 * time.Minute
+	videoDefaultRequestTimeout = 60 * time.Second
+	videoDefaultConnectTimeout = 15 * time.Second
+	videoNewtokenPollInterval  = 5 * time.Second
+	// mikuapi 的视频创建立即返回任务 id，成片要自己轮询；按 5 秒一轮，
+	// 与 newtoken 一样不去打秒级轮询。
+	videoMikuapiPollInterval     = 5 * time.Second
 	videoNewtokenRequestTimeout  = 5 * time.Minute
 	videoNewtokenConnectTimeout  = 15 * time.Second
 	videoMinDurationSeconds      = 4
@@ -515,11 +520,11 @@ func (s *VideoService) createUpstreamTask(ctx context.Context, account *Account,
 }
 
 func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, upstreamTaskID string) (*videoPollResult, error) {
-	endpoint, err := videoAccountEndpoint(account)
+	baseEndpoint, err := videoAccountEndpoint(account)
 	if err != nil {
 		return nil, err
 	}
-	endpoint = strings.TrimRight(endpoint, "/") + "/" + url.PathEscape(upstreamTaskID)
+	endpoint := strings.TrimRight(baseEndpoint, "/") + "/" + url.PathEscape(upstreamTaskID)
 	reqCtx, cancel := context.WithTimeout(ctx, videoAccountDuration(account, "request_timeout_ms", videoAccountDefaultDuration(account, "request_timeout_ms")))
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, endpoint, nil)
@@ -544,7 +549,11 @@ func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, u
 	status := normalizeVideoUpstreamStatus(rawStatus)
 	result := &videoPollResult{Status: status}
 	if status == VideoTaskStatusCompleted {
-		result.VideoURL = videoAbsoluteResultURL(endpoint, videoResultURLFromPayload(payload))
+		// 成片地址由适配器决定：多数上游把地址放在状态响应里，mikuapi 只提供
+		// /v1/videos/{id}/content，需要按任务 id 拼出来。注意这里传的是**基础**
+		// endpoint（.../v1/videos），任务 id 由适配器自己拼，避免拼成
+		// /v1/videos/{id}/{id}/content。
+		result.VideoURL = videoAbsoluteResultURL(baseEndpoint, videoResultURLForAccount(account, baseEndpoint, upstreamTaskID, payload))
 		if result.VideoURL == "" {
 			return nil, &videoUpstreamError{StatusCode: resp.StatusCode, Body: respBody, Err: errors.New("missing video result URL")}
 		}
@@ -616,6 +625,11 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	// 轮询容错：上游（尤其 mikuapi）偶发查不到任务或短暂 5xx 时不能一次就判失败，
+	// 否则用户被扣费却拿不到成片。容忍次数由适配器声明，见 shouldAbandonVideoPoll。
+	pollTolerance := videoPollFailureTolerance(input.Account)
+	consecutiveFailures := 0
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -631,9 +645,19 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 		case <-ticker.C:
 			result, err := s.pollUpstreamTask(ctx, input.Account, upstreamTaskID)
 			if err != nil {
+				consecutiveFailures++
 				clientErr := mapVideoUpstreamError(err, true)
 				s.recordVideoAccountFailure(context.Background(), input.Account, clientErr, err)
-				if clientErr.Retryable {
+				if !shouldAbandonVideoPoll(clientErr.Retryable, consecutiveFailures, pollTolerance) {
+					if !clientErr.Retryable {
+						// 上游暂时查不到任务/抖动：在容忍次数内继续轮询，不判失败。
+						slog.Warn("video poll failure tolerated",
+							"task_id", input.PublicID,
+							"provider", videoAccountProvider(input.Account),
+							"consecutive_failures", consecutiveFailures,
+							"tolerance", pollTolerance,
+							"error", err)
+					}
 					continue
 				}
 				task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
@@ -643,6 +667,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 				_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 				return
 			}
+			consecutiveFailures = 0
 			switch result.Status {
 			case VideoTaskStatusQueued, VideoTaskStatusProcessing:
 				_, _ = s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
@@ -688,16 +713,28 @@ func (s *VideoService) publishVideoResult(ctx context.Context, input VideoTaskLi
 	if input.APIKey == nil || input.APIKey.User == nil || input.APIKey.Group == nil {
 		return "", errors.New("video result owner is unavailable")
 	}
-	publishedURL, err := s.videoResultPublisher.PublishGeneratedVideo(
-		ctx,
-		TemporaryAssetOwner{
-			UserID:   input.APIKey.User.ID,
-			APIKeyID: input.APIKey.ID,
-			GroupID:  input.APIKey.Group.ID,
-		},
-		input.ResultPublicBaseURL,
-		upstreamURL,
-	)
+	owner := TemporaryAssetOwner{
+		UserID:   input.APIKey.User.ID,
+		APIKeyID: input.APIKey.ID,
+		GroupID:  input.APIKey.Group.ID,
+	}
+	// 有的上游成片地址是受保护的下载端点（mikuapi 的 /content），回捞时要带 key；
+	// 其余上游给的是预签名/公开地址，保持原样不带授权头。
+	var publishedURL string
+	var err error
+	if authorization := videoProviderAdapterForAccount(input.Account).ResultAuthorization(input.Account); authorization != "" {
+		authenticated, ok := s.videoResultPublisher.(AuthenticatedVideoResultPublisher)
+		if !ok {
+			return "", errors.New("video result publisher does not support authenticated downloads")
+		}
+		publishedURL, err = authenticated.PublishGeneratedVideoWithAuth(
+			ctx, owner, input.ResultPublicBaseURL, upstreamURL, authorization,
+		)
+	} else {
+		publishedURL, err = s.videoResultPublisher.PublishGeneratedVideo(
+			ctx, owner, input.ResultPublicBaseURL, upstreamURL,
+		)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -1425,7 +1462,7 @@ func isVideoAccountCompatibleForRequest(account *Account, normalized *normalized
 // unsupported request is routed to another upstream instead of failing there.
 func videoProviderNeedsRequestCompatibility(provider string) bool {
 	switch provider {
-	case videoProviderNewtoken:
+	case videoProviderNewtoken, videoProviderMikuapi:
 		return true
 	default:
 		return false
@@ -1501,6 +1538,22 @@ func (s *VideoService) recordVideoAccountFailure(ctx context.Context, account *A
 		}
 		_ = s.accountRepo.SetTempUnschedulable(ctx, account.ID, time.Now().UTC().Add(1*time.Minute), reason)
 	}
+}
+
+// shouldAbandonVideoPoll 决定一次轮询失败是否直接判任务失败。
+//
+//   - 可重试错误（5xx / 网络错误 / 429）在轮询阶段一律继续重试；
+//   - 不可重试错误（例如上游暂时查不到任务返回 404）只有连续失败到 tolerance 次
+//     才放弃，避免上游抖动被当成终态；
+//   - tolerance <= 1 时不可重试错误一次即失败，与 aigod / newtoken 的既有行为一致。
+func shouldAbandonVideoPoll(retryable bool, consecutiveFailures, tolerance int) bool {
+	if retryable {
+		return false
+	}
+	if tolerance <= 1 {
+		return true
+	}
+	return consecutiveFailures >= tolerance
 }
 
 func normalizeVideoUpstreamStatus(status string) string {
@@ -1643,6 +1696,8 @@ func videoAccountProvider(account *Account) string {
 	switch provider {
 	case videoProviderNewtoken:
 		return videoProviderNewtoken
+	case videoProviderMikuapi:
+		return videoProviderMikuapi
 	default:
 		return videoProviderAigod
 	}
@@ -1666,6 +1721,11 @@ func videoAccountDuration(account *Account, key string, fallback time.Duration) 
 
 func videoAccountDefaultDuration(account *Account, key string) time.Duration {
 	switch videoAccountProvider(account) {
+	case videoProviderMikuapi:
+		switch key {
+		case "poll_interval_ms":
+			return videoMikuapiPollInterval
+		}
 	case videoProviderNewtoken:
 		switch key {
 		case "poll_interval_ms":

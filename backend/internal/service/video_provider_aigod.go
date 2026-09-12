@@ -89,3 +89,19 @@ func (a aigodVideoProviderAdapter) BuildCreateBody(normalized *normalizedVideoRe
 	}
 	return normalized.UpstreamBody(upstreamModel)
 }
+
+// ResultURL：aigod 的状态响应自带成片地址，交给通用解析。
+func (a aigodVideoProviderAdapter) ResultURL(string, string, map[string]any) string {
+	return ""
+}
+
+// ResultAuthorization：aigod 的成片地址是公开/预签名地址，不需要额外授权头。
+func (a aigodVideoProviderAdapter) ResultAuthorization(*Account) string {
+	return ""
+}
+
+// PollMaxConsecutiveFailures：保持既有轮询容错（可重试错误继续重试，
+// 其余错误一次即判失败）。
+func (a aigodVideoProviderAdapter) PollMaxConsecutiveFailures() int {
+	return 1
+}

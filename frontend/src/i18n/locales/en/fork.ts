@@ -230,9 +230,11 @@ export default {
         providers: {
           aigod: 'aigod',
           newtoken: 'newtoken',
+          mikuapi: 'mikuapi',
         },
         aigodAdapter: 'Seedance 2.0 / 2.0 Fast / 2.5',
         newtokenAdapter: 'Routes the upstream model by resolution: 2.0 / 1080p, 2.0 Fast, 2.5',
+        mikuapiAdapter: 'Routes by the resolution field: 2.0 (incl. 4K) / 2.0 Fast (480p/720p, 5s or 10s only) / 2.5 (no 4K)',
         models: 'Available models',
         modelsHint: 'Only the checked models are scheduled to this account; all are enabled by default.',
         resolutions: 'Supported resolutions',

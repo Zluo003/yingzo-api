@@ -189,3 +189,18 @@ func isSeedanceAspectRatio(ratio string) bool {
 		return false
 	}
 }
+
+// ResultURL：newtoken 的状态响应自带成片地址，交给通用解析。
+func (n newtokenVideoProviderAdapter) ResultURL(string, string, map[string]any) string {
+	return ""
+}
+
+// ResultAuthorization：newtoken 的成片地址自带授权，不需要额外请求头。
+func (n newtokenVideoProviderAdapter) ResultAuthorization(*Account) string {
+	return ""
+}
+
+// PollMaxConsecutiveFailures：保持既有轮询容错。
+func (n newtokenVideoProviderAdapter) PollMaxConsecutiveFailures() int {
+	return 1
+}
