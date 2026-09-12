@@ -145,6 +145,11 @@ type AdminGroupOperation string
 const (
 	AdminGroupOperationBasic     AdminGroupOperation = "basic"
 	AdminGroupOperationDuplicate AdminGroupOperation = "duplicate"
+	// 以下为 simple 模式下不允许直接调用的高级分组操作（与基座保持一致）。
+	AdminGroupOperationCompositeRoute AdminGroupOperation = "composite_route"
+	AdminGroupOperationMultiplier     AdminGroupOperation = "multiplier"
+	AdminGroupOperationRPMOverride    AdminGroupOperation = "rpm_override"
+	AdminGroupOperationSort           AdminGroupOperation = "sort"
 )
 
 func (s *adminServiceImpl) ValidateSimpleModeGroupOperation(operation AdminGroupOperation) error {
