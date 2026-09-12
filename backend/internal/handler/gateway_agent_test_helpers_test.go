@@ -40,15 +40,6 @@ func (r *gatewayAgentModelRepoStub) UpdateModelConfig(context.Context, int64, in
 func (r *gatewayAgentModelRepoStub) ExcludeModel(context.Context, int64, int64, time.Time) error {
 	return nil
 }
-func (r *gatewayAgentModelRepoStub) CreateManual(_ context.Context, model *service.AgentGroupModel, prices []service.AgentModelPrice) error {
-	stored := *model
-	stored.ID = int64(len(r.models) + 1)
-	stored.Manual = true
-	stored.Prices = append([]service.AgentModelPrice(nil), prices...)
-	r.models = append(r.models, stored)
-	model.ID = stored.ID
-	return nil
-}
 func enabledGatewayAgentModel(platform, modelCode, mediaType string) service.AgentGroupModel {
 	return service.AgentGroupModel{
 		Platform: platform, ModelCode: modelCode, MediaType: mediaType,

@@ -336,7 +336,6 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		groups.PUT("/sort-order", h.Admin.Group.UpdateSortOrder)
 		groups.GET("/:id/models-list-candidates", h.Admin.Group.GetModelsListCandidates)
 		groups.GET("/:id/agent-models", h.Admin.Group.GetAgentModels)
-		groups.POST("/:id/agent-models", h.Admin.Group.CreateAgentModel)
 		groups.POST("/:id/agent-models/sync", h.Admin.Group.SyncAgentModels)
 		groups.PUT("/:id/agent-models/:model_id", h.Admin.Group.UpdateAgentModel)
 		groups.DELETE("/:id/agent-models/:model_id", h.Admin.Group.DeleteAgentModel)

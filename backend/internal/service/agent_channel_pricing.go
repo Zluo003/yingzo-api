@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
-
-	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 )
 
 var (
@@ -346,10 +344,10 @@ func (s *OpenAIGatewayService) ValidateAgentLanguagePricing(
 
 // ValidateAgentRequestPricing 在转发前按目录登记的媒体类型选择校验口径。
 //
-// 图片模型（Gemini 标准图片接口、OpenAI 图片接口之外的语言入口）必须走"每张单价"
-// 口径，否则会被语言口径的"缺倍率/缺渠道价"误判为不可计费而在入口 4xx —— 图片
-// 模型本来就没有文本倍率。请求前拿不到分辨率时只要求存在任一档位价格，实际计费
-// 仍按上游返回的 result.ImageSize 取档。
+// Gemini 标准图片接口（/v1beta ...:generateContent）与文本走同一个入口：图片模型必须
+// 按"每张单价"口径校验，否则会被语言口径的"缺倍率/缺渠道价"误判为不可计费而在入口
+// 4xx —— 图片模型本来就没有文本倍率。请求前拿不到分辨率时只要求存在任一档位价格，
+// 实际计费仍按上游返回的 result.ImageSize 取档。
 func (s *GatewayService) ValidateAgentRequestPricing(ctx context.Context, group *Group, account *Account, platform, model string) error {
 	if group == nil || !group.IsAgent() {
 		return nil
@@ -387,23 +385,6 @@ func (s *OpenAIGatewayService) ValidateAgentImagePricing(ctx context.Context, gr
 	}
 	_, _, err := s.resolver.ResolveAgentMediaUnitPrice(ctx, group.ID, platform, AgentMediaTypeImage, imageSize, model)
 	return err
-}
-
-// agentManualModelAllowsAccount 报告聚合分组里"管理员手工声明的模型"是否应当放行
-// 账号的 model_mapping 白名单过滤。
-//
-// 手工声明的模型本就不在任何账号映射里（那正是管理员要手工加它的原因），若仍按
-// mapping 过滤，请求会因为选不到账号而失败。判定范围严格限定在"启用 + 未排除 +
-// manual = TRUE"的目录行，因此不会放宽其它任何模型的准入。
-func agentManualModelAllowsAccount(ctx context.Context, catalog *AgentModelCatalogService, account *Account, requestedModel string) bool {
-	if catalog == nil || account == nil || ctx == nil {
-		return false
-	}
-	group, ok := ctx.Value(ctxkey.Group).(*Group)
-	if !ok || group == nil || !group.IsAgent() {
-		return false
-	}
-	return catalog.ManualModelEnabledForPlatform(ctx, group.ID, account.Platform, requestedModel)
 }
 
 // isAgentLanguagePlatform 报告该平台的账号能否承载聚合分组的文本模型计费

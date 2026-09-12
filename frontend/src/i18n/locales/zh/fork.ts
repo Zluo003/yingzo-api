@@ -79,25 +79,6 @@ export default {
         '在「账号管理」里把账号的分组改为 Yingzo Agent，即可把它提供的模型聚合进来（OpenAI / Anthropic / Gemini / Grok / DeepSeek / GLM / Kimi / MiniMax / 视频）。移出分组后对应模型会标记为不可用（配置与价格会保留，重新加入即恢复）。',
       manageAccounts: '去账号管理设置归属 →',
       sourceUnavailableHint: '分组内已没有可用账号提供该模型；重新加入账号后会自动恢复。',
-      manualBadge: '手工添加',
-      manualHint:
-        '管理员手工声明的模型：不参与「同步没看到就置为不可用」，也不要求账号的模型映射里存在。',
-      addImageModel: {
-        button: '添加图片模型',
-        title: '添加图片模型',
-        hint: '用于上游新出的图片模型：目录发现不到它时，在这里按下游标准的 OpenAI 图片生成/编辑或 Gemini 图片接口声明，声明后即可被下游调用。',
-        platform: '接口平台',
-        platformOpenAI: 'OpenAI 标准图片接口（/v1/images/generations、/v1/images/edits）',
-        platformGemini: 'Gemini 标准图片接口（generateContent 图像输出）',
-        modelCode: '模型名',
-        modelCodePlaceholder: '如 gemini-3-pro-image',
-        modelCodeRequired: '请填写模型名',
-        prices: '每张单价（留空的档位视为未定价）',
-        priceRequired: '启用状态下至少要填写一个分辨率单价',
-        enabled: '立即启用',
-        success: '已添加图片模型 {model}',
-        failed: '添加图片模型失败',
-      },
       loadFailed: '加载 Yingzo Agent 配置失败',
       groupMissing: '未找到系统内置的 Yingzo Agent 分组（应有迁移种入，kind=agent / system_code=yingzo）',
       syncSuccess: '已同步，共 {count} 个模型',
@@ -241,6 +222,25 @@ export default {
     accounts: {
       platforms: {
         video: '视频',
+      },
+      createImageAccount: '添加图片账号',
+      image: {
+        createTitle: '添加图片账号',
+        createDescription:
+          '图片账号专门提供图片模型：平台选 OpenAI 或 Gemini，模型按下游标准图片接口调用（OpenAI /v1/images/generations、/v1/images/edits；Gemini generateContent 图像输出）。创建后模型会自动同步进 Yingzo Agent 目录，在那里填 1K/2K/4K 每张单价并启用。',
+        platformOpenAI: 'OpenAI',
+        platformOpenAIHint: '走 OpenAI 标准图片生成 / 编辑接口',
+        platformGemini: 'Gemini',
+        platformGeminiHint: '走 Gemini 标准图片接口（图像输出）',
+        models: '图片模型',
+        modelPlaceholder: '下游模型名，如 gemini-3-pro-image',
+        upstreamPlaceholder: '上游模型名（留空 = 同名）',
+        addModel: '添加模型',
+        modelsHint:
+          '一行一个模型。左边是下游请求用的名字，右边是真正发给上游的名字（中转站改名时才需要填）。这些模型只有本账号会提供，不会被调度到其它账号。',
+        modelsRequired: '请至少填写一个图片模型',
+        syncedToAgent: '图片账号已添加，{count} 个模型已同步到 Yingzo Agent（{moved} 个已标为图片类型）',
+        syncToAgentFailed: '账号已创建，但同步 Yingzo Agent 目录失败，请到该页面手动点「同步模型目录」',
       },
       createVideoAccount: '添加视频账号',
       video: {

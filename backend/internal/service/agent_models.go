@@ -45,7 +45,6 @@ var (
 	ErrAgentModelCatalogUnavailable = errors.New("agent model catalog unavailable")
 	ErrAgentModelNotConfigured      = errors.New("agent model is not enabled or available")
 	ErrAgentModelRateUnavailable    = errors.New("agent text model multiplier is not configured")
-	ErrAgentModelExists             = errors.New("agent model already exists in this group")
 )
 
 type AgentModelPrice struct {
@@ -76,9 +75,6 @@ type AgentGroupModel struct {
 	// RateMultiplier 是文本模型在源渠道价之上的下游倍率。nil 表示尚未配置，
 	// 此时该文本模型不可被调用（与"启用但没定价"等价）。0 是合法值。
 	RateMultiplier *float64 `json:"rate_multiplier"`
-	// Manual 表示这条目录行是管理员手工声明的（而非从账号 model_mapping 发现）。
-	// 它不参与"同步没看到就置为不可用"，也不要求账号映射里存在。
-	Manual bool `json:"manual"`
 }
 
 type AgentModelDiscovery struct {
@@ -106,17 +102,6 @@ type AgentModelRepository interface {
 	GetEnabledModel(ctx context.Context, groupID int64, platform, modelCode string) (*AgentGroupModel, error)
 	UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, prices []AgentModelPrice) error
 	ExcludeModel(ctx context.Context, groupID, modelID int64, excludedAt time.Time) error
-	// CreateManual 写入管理员手工声明的模型（manual = TRUE）。
-	CreateManual(ctx context.Context, model *AgentGroupModel, prices []AgentModelPrice) error
-}
-
-// ManualImageModelInput 是"手工添加图片模型"的入参。当前只用于图片模型：接口按
-// 下游标准的 OpenAI 图片生成/编辑与 Gemini 图片接口调用，价格按 1K/2K/4K 每张。
-type ManualImageModelInput struct {
-	Platform  string
-	ModelCode string
-	Enabled   bool
-	Prices    []AgentModelPrice
 }
 
 // AgentModelCatalogEntry describes one client-visible model and the native
@@ -220,52 +205,6 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 	return s.GetConfig(ctx, groupID)
 }
 
-// CreateManualImageModel 手工声明一个图片模型。
-//
-// 用途：上游新出的图片模型既不在账号 model_mapping 里、也不在内置清单里时，目录无从
-// 得知它存在；管理员在页面上显式声明后，该模型立即可被下游按标准图片接口调用
-// （OpenAI /v1/images/generations|edits、Gemini /v1beta ...:generateContent）。
-//
-// 平台限制在"能服务图片的平台"内（openai / grok / gemini）：其余平台没有图片接口，
-// 声明出来也调不通，属于该在发现阶段就挡掉的错误。
-func (s *AgentModelCatalogService) CreateManualImageModel(ctx context.Context, groupID int64, input ManualImageModelInput) (*AgentModelCatalogConfig, error) {
-	if err := s.requireAgentGroup(ctx, groupID); err != nil {
-		return nil, err
-	}
-	platform := normalizeAgentPlatform(input.Platform)
-	if !isAgentImagePlatform(platform) {
-		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", fmt.Sprintf("platform %q cannot serve image models", input.Platform))
-	}
-	modelCode := strings.TrimSpace(input.ModelCode)
-	if modelCode == "" {
-		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "model_code is required")
-	}
-	prices, err := normalizeAgentModelPrices(AgentMediaTypeImage, input.Prices)
-	if err != nil {
-		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", err.Error())
-	}
-	if input.Enabled && len(prices) == 0 {
-		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "an enabled image model requires at least one resolution price")
-	}
-	model := &AgentGroupModel{
-		GroupID:   groupID,
-		Platform:  platform,
-		ModelCode: modelCode,
-		MediaType: AgentMediaTypeImage,
-		Enabled:   input.Enabled,
-		Available: true,
-		Manual:    true,
-	}
-	if err := s.modelRepo.CreateManual(ctx, model, prices); err != nil {
-		if errors.Is(err, ErrAgentModelExists) {
-			return nil, infraerrors.Conflict("AGENT_MODEL_EXISTS", "This model already exists in the group; edit it in the list instead")
-		}
-		return nil, fmt.Errorf("create manual Agent model: %w", err)
-	}
-	s.invalidateModelPlatforms(groupID)
-	return s.GetConfig(ctx, groupID)
-}
-
 func (s *AgentModelCatalogService) ExcludeModel(ctx context.Context, groupID, modelID int64) (*AgentModelCatalogConfig, error) {
 	if err := s.requireAgentGroup(ctx, groupID); err != nil {
 		return nil, err
@@ -298,33 +237,12 @@ func (s *AgentModelCatalogService) ListAvailable(ctx context.Context, groupID in
 		if !model.Enabled || !model.Available || model.Excluded {
 			continue
 		}
-		// 手工声明的模型不要求"当前账号里能发现"：它本来就是管理员为上游新模型加的。
-		if !model.Manual {
-			if _, ok := current[agentModelKey(model.Platform, model.ModelCode)]; !ok {
-				continue
-			}
+		if _, ok := current[agentModelKey(model.Platform, model.ModelCode)]; !ok {
+			continue
 		}
 		addConfiguredAgentCatalogEntry(entries, model)
 	}
 	return flattenAgentCatalog(entries), nil
-}
-
-// ManualModelEnabledForPlatform 报告该 (平台, 模型) 是否是管理员手工声明且启用、
-// 未排除的目录行。调度侧用它给这类模型放行账号映射白名单过滤：模型是否存在于聚合
-// 分组，以目录（管理员显式声明）为准，而不是以某个账号的 mapping 是否写了它为准。
-func (s *AgentModelCatalogService) ManualModelEnabledForPlatform(ctx context.Context, groupID int64, platform, modelCode string) bool {
-	if s == nil || s.modelRepo == nil || groupID <= 0 {
-		return false
-	}
-	modelCode = strings.TrimSpace(modelCode)
-	if modelCode == "" {
-		return false
-	}
-	model, err := s.modelRepo.GetEnabledModel(ctx, groupID, normalizeAgentPlatform(platform), modelCode)
-	if err != nil || model == nil || !model.Manual {
-		return false
-	}
-	return true
 }
 
 // ResolveTextModelRate returns the downstream multiplier configured for the first
@@ -369,8 +287,8 @@ func (s *AgentModelCatalogService) RequireAccountLanguageModel(ctx context.Conte
 	return "", fmt.Errorf("%w for platform %s", ErrAgentModelNotConfigured, account.Platform)
 }
 
-// EnsureAgentImageModelPriced 判断该 (平台, 模型) 是否登记为图片模型，并校验它至少
-// 配置了一个档位的每张单价（首个返回值表示"确实声明为图片模型"）。
+// EnsureAgentImageModelPriced 判断该 (平台, 模型) 是否在目录里登记为图片模型，并校验
+// 它至少配置了一个档位的每张单价（首个返回值表示"确实是图片模型"）。
 //
 // Gemini 标准图片接口只能在请求前确定"这是图片模型"，具体分辨率要等上游返回后才
 // 知道（计费按 result.ImageSize 取档），因此这里只要求存在任一档位价格：不能因为
@@ -421,11 +339,8 @@ func (s *AgentModelCatalogService) ResolveMediaUnitPrice(
 		if modelErr != nil || model == nil || model.MediaType != mediaType {
 			continue
 		}
-		// 手工声明的模型不要求能在账号映射里发现（账号选择侧同样为它放行）。
-		if !model.Manual {
-			if _, ok := current[agentModelKey(platform, modelCode)]; !ok {
-				continue
-			}
+		if _, ok := current[agentModelKey(platform, modelCode)]; !ok {
+			continue
 		}
 		for _, price := range model.Prices {
 			if price.Resolution == resolution && price.BillingUnit == billingUnitForAgentMedia(mediaType) && price.UnitPrice >= 0 {
@@ -749,7 +664,7 @@ func isAgentPlatformSupported(platform string) bool {
 	}
 }
 
-// isAgentImagePlatform 报告该平台是否有可用的图片接口（手工声明图片模型的白名单）。
+// isAgentImagePlatform 报告该平台是否有可用的图片接口（OpenAI 图片端点与 Gemini 图片输出）。
 func isAgentImagePlatform(platform string) bool {
 	switch normalizeAgentPlatform(platform) {
 	case PlatformOpenAI, PlatformGrok, PlatformGemini:

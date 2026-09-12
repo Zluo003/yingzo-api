@@ -1,7 +1,13 @@
 <template>
   <BaseDialog
     :show="show"
-    :title="isVideoMode ? t('admin.accounts.video.createTitle') : t('admin.accounts.createAccount')"
+    :title="
+      isVideoMode
+        ? t('admin.accounts.video.createTitle')
+        : isImageMode
+          ? t('admin.accounts.image.createTitle')
+          : t('admin.accounts.createAccount')
+    "
     width="wide"
     @close="handleClose"
   >
@@ -67,8 +73,87 @@
         <p class="input-hint">{{ t('admin.accounts.notesHint') }}</p>
       </div>
 
+      <!-- 图片账号：只允许 openai / gemini 两个走标准图片接口的平台 -->
+      <div v-if="isImageMode" data-testid="image-account-platform">
+        <label class="input-label">{{ t('admin.accounts.platform') }}</label>
+        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button
+            v-for="option in imagePlatformOptions"
+            :key="option.value"
+            type="button"
+            :data-testid="`image-platform-${option.value}`"
+            @click="form.platform = option.value"
+            :class="[
+              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
+              form.platform === option.value
+                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+                : 'border-gray-200 hover:border-primary-300 dark:border-dark-600 dark:hover:border-primary-700'
+            ]"
+          >
+            <PlatformIcon :platform="option.value" size="sm" />
+            <div>
+              <span class="block text-sm font-medium text-gray-900 dark:text-white">
+                {{ t(option.labelKey) }}
+              </span>
+              <span class="text-xs text-gray-500 dark:text-gray-400">{{ t(option.hintKey) }}</span>
+            </div>
+          </button>
+        </div>
+
+        <div class="mt-4 rounded-lg bg-primary-50 p-3 dark:bg-primary-900/20">
+          <p class="text-xs text-primary-700 dark:text-primary-300">
+            {{ t('admin.accounts.image.createDescription') }}
+          </p>
+        </div>
+
+        <!-- 图片模型：一行一个，公开名 → 上游模型名（留空表示同名） -->
+        <div class="mt-4">
+          <label class="input-label">{{ t('admin.accounts.image.models') }}</label>
+          <div class="mt-2 space-y-2">
+            <div
+              v-for="(mapping, index) in imageModelRows"
+              :key="index"
+              class="flex items-center gap-2"
+            >
+              <input
+                v-model="mapping.from"
+                type="text"
+                class="input flex-1"
+                :data-testid="`image-model-name-${index}`"
+                :placeholder="t('admin.accounts.image.modelPlaceholder')"
+              />
+              <span class="text-gray-400">→</span>
+              <input
+                v-model="mapping.to"
+                type="text"
+                class="input flex-1"
+                :data-testid="`image-model-upstream-${index}`"
+                :placeholder="t('admin.accounts.image.upstreamPlaceholder')"
+              />
+              <button
+                type="button"
+                class="text-red-500 hover:text-red-700"
+                :data-testid="`image-model-remove-${index}`"
+                @click="imageModelRows.splice(index, 1)"
+              >
+                <Icon name="trash" size="sm" />
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            class="btn btn-secondary mt-2 text-sm"
+            data-testid="image-model-add-row"
+            @click="imageModelRows.push({ from: '', to: '' })"
+          >
+            + {{ t('admin.accounts.image.addModel') }}
+          </button>
+          <p class="input-hint">{{ t('admin.accounts.image.modelsHint') }}</p>
+        </div>
+      </div>
+
       <!-- Platform Selection - Segmented Control Style -->
-      <div v-if="!isVideoMode">
+      <div v-if="!isVideoMode && !isImageMode">
         <label class="input-label">{{ t('admin.accounts.platform') }}</label>
         <div class="mt-2 flex flex-wrap rounded-lg bg-gray-100 p-1 dark:bg-dark-700" data-tour="account-form-platform">
           <button
@@ -4139,16 +4224,51 @@ interface Props {
   /**
    * 'video' 打开的是“添加视频账号”专用入口：平台固定为 video，
    * 隐藏平台选择器，表单直接呈现上游平台 / 可用模型 / API Key。
+   * 'image' 是“添加图片账号”入口：平台限定 openai / gemini（分别走 OpenAI 标准
+   * 图片接口与 Gemini 标准图片接口），表单直接填写该账号提供的图片模型。
    */
-  mode?: 'standard' | 'video'
+  mode?: 'standard' | 'video' | 'image'
 }
 
 const props = defineProps<Props>()
 
 const isVideoMode = computed(() => props.mode === 'video')
+const isImageMode = computed(() => props.mode === 'image')
+
+/** 图片账号只支持有标准图片接口的两个平台。 */
+const imagePlatformOptions = [
+  { value: 'openai' as const, labelKey: 'admin.accounts.image.platformOpenAI', hintKey: 'admin.accounts.image.platformOpenAIHint' },
+  { value: 'gemini' as const, labelKey: 'admin.accounts.image.platformGemini', hintKey: 'admin.accounts.image.platformGeminiHint' },
+]
+const imagePlatformBaseUrls: Record<string, string> = {
+  openai: 'https://api.openai.com',
+  gemini: 'https://generativelanguage.googleapis.com',
+}
+/** 图片模型行：公开模型名 → 上游模型名（留空表示同名透传）。 */
+const imageModelRows = ref<{ from: string; to: string }[]>([{ from: '', to: '' }])
+
+/**
+ * 把"图片模型"输入区转成 credentials.model_mapping：
+ * 公开名 → 上游模型名（上游名留空表示同名透传，中转站大多如此）。
+ */
+function buildImageModelMapping(): Record<string, string> | null {
+  const mapping: Record<string, string> = {}
+  for (const row of imageModelRows.value) {
+    const from = row.from.trim()
+    if (!from) {
+      continue
+    }
+    mapping[from] = row.to.trim() || from
+  }
+  return Object.keys(mapping).length > 0 ? mapping : null
+}
+
+/** 图片账号声明的模型名（提交成功后交给父组件去同步目录/纠正媒体类型）。 */
+const declaredImageModels = computed(() => Object.keys(buildImageModelMapping() ?? {}))
 const emit = defineEmits<{
   close: []
-  created: []
+  /** created 附带本次创建的账号与（图片账号模式下）声明的图片模型名。 */
+  created: [payload?: { accountId?: number; imageModels?: string[] }]
 }>()
 
 const appStore = useAppStore()
@@ -4976,6 +5096,29 @@ watch(
         videoRequestTimeoutMs.value = videoProviderDefaults.value.requestTimeoutMs
         videoConnectTimeoutMs.value = videoProviderDefaults.value.connectTimeoutMs
         applyVideoProviderModelDefaults()
+      } else if (isImageMode.value) {
+        // 图片账号：平台固定走标准图片接口的 openai / gemini，凭证走 API Key，
+        // 模型清单用映射模式（公开名 → 上游名）而不是平台预置白名单。
+        form.platform = 'gemini'
+        form.type = 'apikey'
+        accountCategory.value = 'apikey'
+        form.concurrency = 1
+        form.load_factor = null
+        modelRestrictionMode.value = 'mapping'
+        modelMappings.value = []
+        if (!apiKeyBaseUrl.value.trim()) {
+          apiKeyBaseUrl.value = imagePlatformBaseUrls.gemini
+        }
+        if (imageModelRows.value.length === 0) {
+          imageModelRows.value = [{ from: '', to: '' }]
+        }
+        // 默认绑定系统内置聚合分组：图片模型要进 Yingzo Agent 目录才能定价与分发。
+        const agentGroup = props.groups.find(
+          (group) => group.kind === 'agent' && group.system_code === 'yingzo'
+        )
+        if (agentGroup && form.group_ids.length === 0) {
+          form.group_ids = [agentGroup.id]
+        }
       } else {
         // Modal opened - fill related models
         allowedModels.value = [...getModelsByPlatform(form.platform)]
@@ -5203,6 +5346,20 @@ const handleSelectGeminiOAuthType = (oauthType: 'code_assist' | 'google_one' | '
 }
 
 // Auto-fill related models when switching to whitelist mode or changing platform
+// 图片账号在两个平台之间切换时，base_url 跟着换成对应默认地址（用户手填过就不覆盖）。
+watch(
+  () => form.platform,
+  (platform, previous) => {
+    if (!isImageMode.value || platform === previous) {
+      return
+    }
+    const previousDefault = previous ? imagePlatformBaseUrls[previous] : undefined
+    if (!apiKeyBaseUrl.value.trim() || apiKeyBaseUrl.value === previousDefault) {
+      apiKeyBaseUrl.value = imagePlatformBaseUrls[platform] ?? apiKeyBaseUrl.value
+    }
+  }
+)
+
 watch(
   [modelRestrictionMode, () => form.platform],
   ([newMode]) => {
@@ -5518,7 +5675,10 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
       }
     }
     appStore.showSuccess(t('admin.accounts.accountCreated'))
-    emit('created')
+    emit('created', {
+      accountId: account?.id,
+      imageModels: isImageMode.value ? declaredImageModels.value : undefined,
+    })
     handleClose()
   } catch (error: any) {
     if (error.response?.status === 409 && error.response?.data?.error === 'mixed_channel_warning' && needsMixedChannelCheck(form.platform)) {
@@ -5542,21 +5702,23 @@ const resetForm = () => {
   step.value = 1
   form.name = ''
   form.notes = ''
-  form.platform = isVideoMode.value ? 'video' : 'anthropic'
-  form.type = isVideoMode.value ? 'apikey' : 'oauth'
+  form.platform = isImageMode.value ? 'gemini' : isVideoMode.value ? 'video' : 'anthropic'
+  form.type = isVideoMode.value || isImageMode.value ? 'apikey' : 'oauth'
   form.credentials = {}
   form.proxy_id = null
-  form.concurrency = 10
+  form.concurrency = isImageMode.value ? 1 : 10
   form.load_factor = null
   form.priority = 1
   form.rate_multiplier = 1
   form.group_ids = []
   form.expires_at = null
-  accountCategory.value = isVideoMode.value ? 'apikey' : 'oauth-based'
+  accountCategory.value = isVideoMode.value || isImageMode.value ? 'apikey' : 'oauth-based'
   addMethod.value = 'oauth'
-  apiKeyBaseUrl.value = isVideoMode.value
-    ? videoProviderDefaultsMap.aigod.baseUrl
-    : 'https://api.anthropic.com'
+  apiKeyBaseUrl.value = isImageMode.value
+    ? imagePlatformBaseUrls.gemini
+    : isVideoMode.value
+      ? videoProviderDefaultsMap.aigod.baseUrl
+      : 'https://api.anthropic.com'
   apiKeyValue.value = ''
   videoProvider.value = 'aigod'
   videoAPIPath.value = videoProviderDefaultsMap.aigod.apiPath
@@ -5578,7 +5740,8 @@ const resetForm = () => {
   editResetTimezone.value = null
   modelMappings.value = []
   openAICompactModelMappings.value = []
-  modelRestrictionMode.value = 'whitelist'
+  modelRestrictionMode.value = isImageMode.value ? 'mapping' : 'whitelist'
+  imageModelRows.value = [{ from: '', to: '' }]
   // Default fill related models（视频模式用 Seedance 三档，避免灌入 Claude 模型）
   allowedModels.value = isVideoMode.value
     ? [...videoDefaultModels]
@@ -6016,6 +6179,13 @@ const handleSubmit = async () => {
     return
   }
 
+  // 图片账号必须写明它提供哪些图片模型：留空等于"允许所有模型"，
+  // 会让这个账号被所有文本请求选中，与"图片专用账号"的意图相反。
+  if (isImageMode.value && !buildImageModelMapping()) {
+    appStore.showError(t('admin.accounts.image.modelsRequired'))
+    return
+  }
+
   // Determine default base URL based on platform
   const defaultBaseUrl =
     form.platform === 'openai'
@@ -6068,7 +6238,14 @@ const handleSubmit = async () => {
   }
 
   // Add model mapping if configured（OpenAI 开启自动透传时不应用）
-  if (!isOpenAIModelRestrictionDisabled.value) {
+  if (isImageMode.value) {
+    // 图片账号：模型清单直接来自"图片模型"输入区，公开名 → 上游名（留空同名）。
+    // 聚合目录靠账号映射发现这些模型，因此候选账号天然只包含写了映射的账号。
+    const modelMapping = buildImageModelMapping()
+    if (modelMapping) {
+      credentials.model_mapping = modelMapping
+    }
+  } else if (!isOpenAIModelRestrictionDisabled.value) {
     const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
     if (modelMapping) {
       credentials.model_mapping = modelMapping

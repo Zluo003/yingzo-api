@@ -79,25 +79,6 @@ export default {
         'Assign an account to the Yingzo Agent group in Accounts to aggregate the models it provides (OpenAI / Anthropic / Gemini / Grok / DeepSeek / GLM / Kimi / MiniMax / Video). Removing it marks those models unavailable (configuration and prices are kept and restored on re-join).',
       manageAccounts: 'Manage account membership →',
       sourceUnavailableHint: 'No available account in this group provides the model right now; re-adding an account restores it.',
-      manualBadge: 'Manual',
-      manualHint:
-        'Declared by an administrator: this row is never marked unavailable by a sync and does not require the model to exist in any account model mapping.',
-      addImageModel: {
-        button: 'Add image model',
-        title: 'Add image model',
-        hint: 'For brand-new upstream image models that discovery cannot see: declare it here as a standard downstream OpenAI images (generations/edits) or Gemini image model and it becomes callable immediately.',
-        platform: 'Interface platform',
-        platformOpenAI: 'OpenAI standard images API (/v1/images/generations, /v1/images/edits)',
-        platformGemini: 'Gemini standard image API (generateContent with image output)',
-        modelCode: 'Model name',
-        modelCodePlaceholder: 'e.g. gemini-3-pro-image',
-        modelCodeRequired: 'Enter the model name',
-        prices: 'Price per image (a blank tier counts as unpriced)',
-        priceRequired: 'An enabled model needs at least one resolution price',
-        enabled: 'Enable now',
-        success: 'Image model {model} added',
-        failed: 'Failed to add the image model',
-      },
       loadFailed: 'Failed to load the Yingzo Agent configuration',
       groupMissing: 'The built-in Yingzo Agent group was not found (migration-seeded, kind=agent / system_code=yingzo)',
       syncSuccess: 'Synced {count} models',
@@ -241,6 +222,25 @@ export default {
     accounts: {
       platforms: {
         video: 'Video',
+      },
+      createImageAccount: 'Add Image Account',
+      image: {
+        createTitle: 'Add Image Account',
+        createDescription:
+          'An image account provides image models only: pick OpenAI or Gemini and the models are called through the standard image interfaces (OpenAI /v1/images/generations, /v1/images/edits; Gemini generateContent image output). Models are synced into the Yingzo Agent catalog on creation — set the 1K/2K/4K per-image prices and enable them there.',
+        platformOpenAI: 'OpenAI',
+        platformOpenAIHint: 'Uses the OpenAI standard image generation / edit APIs',
+        platformGemini: 'Gemini',
+        platformGeminiHint: 'Uses the Gemini standard image API (image output)',
+        models: 'Image models',
+        modelPlaceholder: 'Downstream model name, e.g. gemini-3-pro-image',
+        upstreamPlaceholder: 'Upstream model name (blank = same)',
+        addModel: 'Add model',
+        modelsHint:
+          'One model per row. The left side is the name downstream requests use; the right side is what is actually sent upstream (only needed when a reseller renames models). Only this account serves these models.',
+        modelsRequired: 'Add at least one image model',
+        syncedToAgent: 'Image account added; {count} model(s) synced to Yingzo Agent ({moved} marked as image)',
+        syncToAgentFailed: 'Account created, but syncing the Yingzo Agent catalog failed — open that page and click "Sync model catalog"',
       },
       createVideoAccount: 'Add Video Account',
       video: {

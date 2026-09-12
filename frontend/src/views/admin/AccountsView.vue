@@ -16,6 +16,7 @@
             @refresh="handleManualRefresh"
             @create="showCreate = true"
             @create-video="showCreateVideo = true"
+            @create-image="showCreateImage = true"
           >
             <template #after>
               <!-- Auto Refresh Dropdown -->
@@ -460,6 +461,14 @@
       @close="showCreateVideo = false"
       @created="reload"
     />
+    <CreateAccountModal
+      :show="showCreateImage"
+      mode="image"
+      :proxies="proxies"
+      :groups="groups"
+      @close="showCreateImage = false"
+      @created="handleImageAccountCreated"
+    />
     <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
@@ -501,6 +510,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
 import { adminAPI } from '@/api/admin'
+import { agentModelsAPI } from '@/api/admin/agentModels'
 import { useTableLoader } from '@/composables/useTableLoader'
 import { useSwipeSelect, type SwipeSelectVirtualContext } from '@/composables/useSwipeSelect'
 import { useTableSelection } from '@/composables/useTableSelection'
@@ -597,6 +607,7 @@ const selTypes = computed<AccountType[]>(() => {
   return [...types]
 })
 const showCreate = ref(false)
+const showCreateImage = ref(false)
 // 「添加视频账号」专用入口：打开同一个弹窗但预置 platform=video。
 const showCreateVideo = ref(false)
 const showEdit = ref(false)
@@ -2260,6 +2271,47 @@ const handleProbeUpstreamBilling = async (account: Account) => {
     probingUpstreamBilling.delete(account.id)
   }
 }
+/**
+ * 图片账号创建成功后的收尾：把账号里声明的图片模型同步进 Yingzo Agent 目录。
+ *
+ * 目录只认"分组内账号的 model_mapping"，所以新建账号必须同步一次才会出现；
+ * 目录里的媒体类型按模型名关键词推断，推断成文本的（自定义名字）在这里显式改成
+ * 图片并保持未启用 —— 单价要管理员在 Yingzo Agent 页填，启用也是那一步的事。
+ */
+const handleImageAccountCreated = async (payload?: { imageModels?: string[] }) => {
+  await reload()
+  const declared = payload?.imageModels ?? []
+  const agentGroup = groups.value.find(
+    (group) => group.kind === 'agent' && group.system_code === 'yingzo'
+  )
+  if (!agentGroup || declared.length === 0) {
+    return
+  }
+  try {
+    const config = await agentModelsAPI.syncAgentModels(agentGroup.id)
+    const byCode = new Map(config.models.map((model) => [model.model_code, model]))
+    let moved = 0
+    for (const modelCode of declared) {
+      const model = byCode.get(modelCode)
+      if (!model || model.media_type === 'image') {
+        continue
+      }
+      await agentModelsAPI.updateAgentModel(agentGroup.id, model.id, {
+        media_type: 'image',
+        enabled: false,
+      })
+      moved += 1
+    }
+    appStore.showSuccess(
+      t('admin.accounts.image.syncedToAgent', { count: declared.length, moved })
+    )
+  } catch (error: any) {
+    appStore.showWarning(
+      error?.message ?? t('admin.accounts.image.syncToAgentFailed')
+    )
+  }
+}
+
 const handleAccountUpdated = (updatedAccount: Account) => {
   patchAccountInList(updatedAccount)
   enterAutoRefreshSilentWindow()

@@ -3,7 +3,6 @@
  *
  * 后端接口（均为分组维度，分组必须真的是 agent 分组，否则返回错误）：
  * - GET    /admin/groups/:id/agent-models            读取当前目录（模型 + 倍率 + 单价）
- * - POST   /admin/groups/:id/agent-models            手工声明一个图片模型（平台 + 模型名 + 价格）
  * - POST   /admin/groups/:id/agent-models/sync       从分组内可用账号重新发现模型
  * - PUT    /admin/groups/:id/agent-models/:model_id  启用/停用 + 配置价格
  * - DELETE /admin/groups/:id/agent-models/:model_id  排除模型（软删除，重新同步也不会回来）
@@ -42,11 +41,6 @@ export interface AgentGroupModel {
   prices: AgentModelPrice[]
   /** 文本模型在源渠道价之上的下游倍率；null 表示尚未配置（该模型不可调用）。 */
   rate_multiplier: number | null
-  /**
-   * 管理员手工声明（而非从账号 model_mapping 发现）的目录行。
-   * 它不参与"同步没看到就置为不可用"，也不要求账号映射里存在。
-   */
-  manual: boolean
 }
 
 export interface AgentModelCatalogConfig {
@@ -61,14 +55,6 @@ export interface UpdateAgentModelPayload {
   prices?: AgentModelPrice[]
 }
 
-export interface CreateAgentModelPayload {
-  /** 图片接口所属平台：openai（OpenAI 标准图片生成/编辑）或 gemini（Gemini 标准图片接口）。 */
-  platform: 'openai' | 'gemini'
-  model_code: string
-  enabled: boolean
-  prices: AgentModelPrice[]
-}
-
 export async function getAgentModels(groupId: number): Promise<AgentModelCatalogConfig> {
   const { data } = await apiClient.get<AgentModelCatalogConfig>(
     `/admin/groups/${groupId}/agent-models`,
@@ -79,21 +65,6 @@ export async function getAgentModels(groupId: number): Promise<AgentModelCatalog
 export async function syncAgentModels(groupId: number): Promise<AgentModelCatalogConfig> {
   const { data } = await apiClient.post<AgentModelCatalogConfig>(
     `/admin/groups/${groupId}/agent-models/sync`,
-  )
-  return data
-}
-
-/**
- * 手工声明一个图片模型：上游新模型既不在账号 model_mapping 里、也不在内置清单里时，
- * 目录无从得知它存在；管理员显式声明后即可按标准图片接口调用（价格按 1K/2K/4K 每张）。
- */
-export async function createAgentModel(
-  groupId: number,
-  payload: CreateAgentModelPayload,
-): Promise<AgentModelCatalogConfig> {
-  const { data } = await apiClient.post<AgentModelCatalogConfig>(
-    `/admin/groups/${groupId}/agent-models`,
-    payload,
   )
   return data
 }
@@ -122,7 +93,6 @@ export async function deleteAgentModel(
 
 export const agentModelsAPI = {
   getAgentModels,
-  createAgentModel,
   syncAgentModels,
   updateAgentModel,
   deleteAgentModel,
