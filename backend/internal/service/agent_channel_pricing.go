@@ -98,6 +98,55 @@ func (s *ChannelService) ResolveAgentAccountChannelPricing(
 	return nil, ErrAgentChannelPricingUnavailable
 }
 
+// AgentTextPricing is the complete answer for one Agent text request: the source
+// channel price of the concrete account that will serve it, plus the Agent
+// group's own downstream multiplier for that model.
+type AgentTextPricing struct {
+	Resolved       *ResolvedPricing
+	BillingModel   string
+	RateMultiplier float64
+}
+
+// ResolveAgentTextPricing resolves the billing basis for an Agent text request.
+// A candidate qualifies only when the Agent catalogue offers it as an enabled
+// text model with a configured multiplier AND the concrete account's source
+// channel prices it; anything half-configured simply advances to the next
+// candidate. Ambiguous channel ownership fails immediately.
+func (r *ModelPricingResolver) ResolveAgentTextPricing(
+	ctx context.Context,
+	agentGroupID int64,
+	account *Account,
+	models ...string,
+) (*AgentTextPricing, error) {
+	if r == nil || account == nil || agentGroupID <= 0 {
+		return nil, ErrAgentChannelPricingUnavailable
+	}
+	if r.agentModelCatalog == nil {
+		return nil, fmt.Errorf("%w: %v", ErrAgentChannelPricingUnavailable, ErrAgentModelCatalogUnavailable)
+	}
+	var lastUnavailable error
+	for _, candidate := range agentPricingModelCandidates(account, models...) {
+		rate, modelCode, rateErr := r.agentModelCatalog.ResolveTextModelRate(ctx, agentGroupID, account.Platform, candidate)
+		if rateErr != nil {
+			lastUnavailable = rateErr
+			continue
+		}
+		resolved, err := r.ResolveAgentAccount(ctx, agentGroupID, account, modelCode)
+		if err != nil {
+			if !errors.Is(err, ErrAgentChannelPricingUnavailable) {
+				return nil, err
+			}
+			lastUnavailable = err
+			continue
+		}
+		return &AgentTextPricing{Resolved: resolved, BillingModel: modelCode, RateMultiplier: rate}, nil
+	}
+	if lastUnavailable != nil {
+		return nil, lastUnavailable
+	}
+	return nil, ErrAgentChannelPricingUnavailable
+}
+
 // ResolveAgentAccountCandidates tries billing-model candidates in order. Only
 // a missing price advances to the next candidate; ambiguous channel ownership
 // and other configuration errors fail immediately.
@@ -156,10 +205,7 @@ func validateAgentLanguagePricing(
 	if _, err := resolver.agentModelCatalog.RequireAccountLanguageModel(ctx, group.ID, account, models...); err != nil {
 		return fmt.Errorf("%w: %v", ErrAgentChannelPricingUnavailable, err)
 	}
-	if _, err := resolver.ResolveAgentPlatformRate(ctx, group.ID, account.Platform); err != nil {
-		return fmt.Errorf("%w: %v", ErrAgentChannelPricingUnavailable, err)
-	}
-	_, _, err := resolver.ResolveAgentAccountCandidates(ctx, group.ID, account, models...)
+	_, err := resolver.ResolveAgentTextPricing(ctx, group.ID, account, models...)
 	return err
 }
 
@@ -213,9 +259,12 @@ func (s *OpenAIGatewayService) ValidateAgentImagePricing(ctx context.Context, gr
 	return err
 }
 
+// isAgentLanguagePlatform 报告该平台的账号能否承载聚合分组的文本模型计费
+// （源渠道价 × 模型倍率）。覆盖全部文本平台：三大协议平台 + grok + 国产供应商。
 func isAgentLanguagePlatform(platform string) bool {
 	switch strings.ToLower(strings.TrimSpace(platform)) {
-	case PlatformOpenAI, PlatformAnthropic, PlatformGemini:
+	case PlatformOpenAI, PlatformAnthropic, PlatformGemini,
+		PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
 		return true
 	default:
 		return false

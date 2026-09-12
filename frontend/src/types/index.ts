@@ -637,6 +637,10 @@ export interface AdminGroup extends Group {
   force_openai_fast: boolean
   free_openai_fast: boolean
   model_pricing: import('@/api/admin/channels').ChannelModelPricing[]
+  // 系统内置分组标识：kind==='agent' && system_code==='yingzo' 即 Yingzo Agent。
+  // 后端拒绝删除这类分组，前端据此隐藏删除入口并给出系统分组标记。
+  kind?: string
+  system_code?: string
   // 分组利润控制（openai/anthropic/gemini/grok/antigravity 分组可启用；margin/buffer 为小数存储）。
   // 仅管理员可见：与 rate_multiplier 相乘即可反推上游成本上限，不得下放到 Group。
   profit_control_enabled: boolean

@@ -50,11 +50,10 @@ func (s *agentCatalogGroupRepoStub) GetByIDLite(context.Context, int64) (*Group,
 type agentModelMemoryRepo struct {
 	nextID int64
 	models map[string]*AgentGroupModel
-	rates  map[string]AgentPlatformRate
 }
 
 func newAgentModelMemoryRepo() *agentModelMemoryRepo {
-	return &agentModelMemoryRepo{nextID: 1, models: map[string]*AgentGroupModel{}, rates: map[string]AgentPlatformRate{}}
+	return &agentModelMemoryRepo{nextID: 1, models: map[string]*AgentGroupModel{}}
 }
 
 func (r *agentModelMemoryRepo) SyncDiscovered(_ context.Context, groupID int64, discovered []AgentModelDiscovery, seenAt time.Time) error {
@@ -118,12 +117,18 @@ func (r *agentModelMemoryRepo) GetEnabledModel(_ context.Context, groupID int64,
 	return &copy, nil
 }
 
-func (r *agentModelMemoryRepo) UpdateModelConfig(_ context.Context, groupID, modelID int64, mediaType string, enabled bool, prices []AgentModelPrice) error {
+func (r *agentModelMemoryRepo) UpdateModelConfig(_ context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, prices []AgentModelPrice) error {
 	for _, model := range r.models {
 		if model.GroupID == groupID && model.ID == modelID && !model.Excluded {
 			model.MediaType = mediaType
 			model.Enabled = enabled
 			model.Prices = append([]AgentModelPrice(nil), prices...)
+			if rateMultiplier == nil {
+				model.RateMultiplier = nil
+			} else {
+				rate := *rateMultiplier
+				model.RateMultiplier = &rate
+			}
 			return nil
 		}
 	}
@@ -144,34 +149,27 @@ func (r *agentModelMemoryRepo) ExcludeModel(_ context.Context, groupID, modelID 
 	return sql.ErrNoRows
 }
 
-func (r *agentModelMemoryRepo) ListPlatformRates(_ context.Context, groupID int64) ([]AgentPlatformRate, error) {
-	rates := make([]AgentPlatformRate, 0)
-	for _, rate := range r.rates {
-		if rate.GroupID == groupID {
-			rates = append(rates, rate)
-		}
-	}
-	sort.Slice(rates, func(i, j int) bool { return rates[i].Platform < rates[j].Platform })
-	return rates, nil
-}
-
-func (r *agentModelMemoryRepo) UpsertPlatformRate(_ context.Context, groupID int64, platform string, multiplier float64) error {
-	r.rates[platform] = AgentPlatformRate{GroupID: groupID, Platform: platform, RateMultiplier: multiplier}
-	return nil
-}
-
-func (r *agentModelMemoryRepo) GetPlatformRate(_ context.Context, groupID int64, platform string) (*AgentPlatformRate, error) {
-	rate, ok := r.rates[platform]
-	if !ok || rate.GroupID != groupID {
-		return nil, sql.ErrNoRows
-	}
-	return &rate, nil
-}
-
 func cloneAgentModelForTest(model *AgentGroupModel) AgentGroupModel {
 	copy := *model
 	copy.Prices = append([]AgentModelPrice(nil), model.Prices...)
+	if model.RateMultiplier != nil {
+		rate := *model.RateMultiplier
+		copy.RateMultiplier = &rate
+	}
 	return copy
+}
+
+// setAgentTextModelRate 是测试里配置文本模型倍率的简写：直接改内存仓库，
+// 避免为了过一遍服务层校验再额外装配分组仓库。
+func setAgentTextModelRate(t *testing.T, repo *agentModelMemoryRepo, groupID int64, platform, modelCode string, rate float64) {
+	t.Helper()
+	model := repo.models[agentModelKey(platform, modelCode)]
+	require.NotNil(t, model, "model %s/%s must be discovered first", platform, modelCode)
+	require.Equal(t, groupID, model.GroupID)
+	value := rate
+	model.Enabled = true
+	model.Available = true
+	model.RateMultiplier = &value
 }
 
 func newAgentCatalogForTest(accounts *agentCatalogAccountRepoStub) (*AgentModelCatalogService, *agentModelMemoryRepo) {
@@ -191,6 +189,10 @@ func TestAgentModelCatalogSyncsAssignedAccountMappingsAcrossNativeProviders(t *t
 		}}},
 		{ID: 4, Platform: PlatformVideo, Credentials: map[string]any{"model_mapping": map[string]any{"video-custom": "upstream-video"}}},
 		{ID: 5, Platform: PlatformGrok, Credentials: map[string]any{"model_mapping": map[string]any{"grok-4": "grok-4"}}},
+		{ID: 6, Platform: PlatformDeepseek, Credentials: map[string]any{"model_mapping": map[string]any{"deepseek-v4-pro": "deepseek-v4-pro"}}},
+		{ID: 7, Platform: PlatformKimi, Credentials: map[string]any{"model_mapping": map[string]any{"kimi-k3": "kimi-k3"}}},
+		{ID: 8, Platform: PlatformZhipu, Credentials: map[string]any{"model_mapping": map[string]any{"glm-5": "glm-5"}}},
+		{ID: 9, Platform: PlatformMiniMax, Credentials: map[string]any{"model_mapping": map[string]any{"MiniMax-M3": "MiniMax-M3"}}},
 	}}
 	catalogService, _ := newAgentCatalogForTest(accounts)
 	_, err := catalogService.Sync(context.Background(), 9)
@@ -198,13 +200,89 @@ func TestAgentModelCatalogSyncsAssignedAccountMappingsAcrossNativeProviders(t *t
 
 	catalog, err := catalogService.ListAvailable(context.Background(), 9)
 	require.NoError(t, err)
+	// 聚合分组覆盖应用支持的全部 provider：三方协议平台 + grok + 国产供应商 + 视频。
 	require.Equal(t, []string{
-		"claude-opus-4-8", "embedding-alias", "gemini-2.5-flash", "gemini-image-alias",
-		"gpt-5.4", "image-alias", "video-custom",
+		"MiniMax-M3", "claude-opus-4-8", "deepseek-v4-pro", "embedding-alias",
+		"gemini-2.5-flash", "gemini-image-alias", "glm-5", "gpt-5.4", "grok-4",
+		"image-alias", "kimi-k3", "video-custom",
 	}, agentCatalogIDsForTest(catalog))
-	require.Equal(t, []string{AgentMediaTypeText}, catalog[1].MediaTypes)
-	require.Equal(t, []string{AgentInterfaceOpenAIEmbeddings}, catalog[1].Interfaces)
-	require.Equal(t, []string{AgentMediaTypeVideo}, catalog[6].MediaTypes)
+	byID := map[string]AgentModelCatalogEntry{}
+	for _, entry := range catalog {
+		byID[entry.ID] = entry
+	}
+	require.Equal(t, []string{AgentMediaTypeText}, byID["embedding-alias"].MediaTypes)
+	require.Equal(t, []string{AgentInterfaceOpenAIEmbeddings}, byID["embedding-alias"].Interfaces)
+	require.Equal(t, []string{AgentMediaTypeVideo}, byID["video-custom"].MediaTypes)
+	// 国产供应商按 OpenAI 兼容 chat completions 调用。
+	require.Equal(t, []string{AgentInterfaceOpenAIChatCompletions}, byID["deepseek-v4-pro"].Interfaces)
+	require.Equal(t, []string{PlatformDeepseek}, byID["deepseek-v4-pro"].Platforms)
+	require.Equal(t, []string{PlatformKimi}, byID["kimi-k3"].Platforms)
+	require.Equal(t, []string{PlatformZhipu}, byID["glm-5"].Platforms)
+	require.Equal(t, []string{PlatformMiniMax}, byID["MiniMax-M3"].Platforms)
+	// grok 同时支持 responses 与 chat completions。
+	require.ElementsMatch(t, []string{
+		AgentInterfaceOpenAIResponses, AgentInterfaceOpenAIChatCompletions,
+	}, byID["grok-4"].Interfaces)
+}
+
+// 目录里不能出现"能配价却永远调不通"的模型：视频只有 video 平台有计费链路，
+// 图片端点只对 openai / grok / gemini 开放。
+func TestAgentModelCatalogSkipsModelsThePlatformCannotServe(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{
+		{ID: 1, Platform: PlatformGrok, Credentials: map[string]any{"model_mapping": map[string]any{
+			"grok-4": "grok-4", "grok-imagine-video": "grok-imagine-video", "grok-2-image": "grok-2-image",
+		}}},
+		{ID: 2, Platform: PlatformZhipu, Credentials: map[string]any{"model_mapping": map[string]any{
+			"glm-5": "glm-5", "cogview-4": "cogview-4",
+		}}},
+	}}
+	catalogService, _ := newAgentCatalogForTest(accounts)
+	config, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+
+	byCode := map[string]AgentGroupModel{}
+	for _, model := range config.Models {
+		byCode[model.ModelCode] = model
+	}
+	require.Contains(t, byCode, "grok-4")
+	require.Equal(t, AgentMediaTypeImage, byCode["grok-2-image"].MediaType, "grok 有图片端点，可以直接服务")
+	require.NotContains(t, byCode, "grok-imagine-video", "grok 视频模型在聚合分组里没有计费链路")
+	require.NotContains(t, byCode, "cogview-4", "国产供应商没有图片端点")
+}
+
+func TestAgentModelCatalogResolvesModelPlatform(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{
+		{ID: 1, Platform: PlatformOpenAI, Credentials: map[string]any{"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4"}}},
+		{ID: 2, Platform: PlatformDeepseek, Credentials: map[string]any{"model_mapping": map[string]any{"deepseek-v4-pro": "deepseek-v4-pro"}}},
+	}}
+	catalogService, models := newAgentCatalogForTest(accounts)
+	_, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+
+	platform, found, err := catalogService.ResolveModelPlatform(context.Background(), 9, "deepseek-v4-pro")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, PlatformDeepseek, platform)
+
+	_, found, err = catalogService.ResolveModelPlatform(context.Background(), 9, "gpt-5.4")
+	require.NoError(t, err)
+	require.True(t, found)
+
+	_, found, err = catalogService.ResolveModelPlatform(context.Background(), 9, "not-configured")
+	require.NoError(t, err)
+	require.False(t, found)
+
+	// 停用后不再参与分发（避免把请求派给一个已经关掉的模型）。这里走服务层写入，
+	// 顺带验证写入会失效平台缓存，而不是让旧映射陈尸 15 秒。
+	deepseek := models.models[agentModelKey(PlatformDeepseek, "deepseek-v4-pro")]
+	require.NotNil(t, deepseek)
+	_, err = catalogService.UpdateModel(context.Background(), 9, deepseek.ID, AgentModelConfigInput{
+		MediaType: AgentMediaTypeText, Enabled: false,
+	})
+	require.NoError(t, err)
+	_, found, err = catalogService.ResolveModelPlatform(context.Background(), 9, "deepseek-v4-pro")
+	require.NoError(t, err)
+	require.False(t, found)
 }
 
 func TestAgentModelCatalogDoesNotInventSeedanceModels(t *testing.T) {
@@ -270,7 +348,7 @@ func TestAgentModelCatalogPreservesExclusionAcrossSync(t *testing.T) {
 	require.False(t, all[0].Enabled)
 }
 
-func TestAgentModelPricingSupportsPlatformAndExplicitZeroModelPrices(t *testing.T) {
+func TestAgentModelPricingSupportsExplicitZeroModelPrices(t *testing.T) {
 	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
 		Platform:    PlatformOpenAI,
 		Credentials: map[string]any{"model_mapping": map[string]any{"image-alias": "gpt-image-2"}},
@@ -278,14 +356,14 @@ func TestAgentModelPricingSupportsPlatformAndExplicitZeroModelPrices(t *testing.
 	catalogService, _ := newAgentCatalogForTest(accounts)
 	_, err := catalogService.Sync(context.Background(), 9)
 	require.NoError(t, err)
-	config, err := catalogService.SetPlatformRate(context.Background(), 9, PlatformOpenAI, 0)
+	config, err := catalogService.GetConfig(context.Background(), 9)
 	require.NoError(t, err)
-	require.Zero(t, config.PlatformRates[0].RateMultiplier)
 
+	zero := 0.0
 	_, err = catalogService.UpdateModel(context.Background(), 9, config.Models[0].ID, AgentModelConfigInput{
 		MediaType: AgentMediaTypeImage,
 		Enabled:   true,
-		Prices:    []AgentModelPrice{{Resolution: ImageBillingSize2K, UnitPrice: 0}},
+		Prices:    []AgentModelPrice{{Resolution: ImageBillingSize2K, UnitPrice: zero}},
 	})
 	require.NoError(t, err)
 	price, model, err := catalogService.ResolveMediaUnitPrice(
@@ -328,4 +406,105 @@ func agentCatalogIDsForTest(catalog []AgentModelCatalogEntry) []string {
 		ids = append(ids, entry.ID)
 	}
 	return ids
+}
+
+func TestAgentTextModelRateMustBeConfiguredToEnableAModel(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
+		Platform:    PlatformOpenAI,
+		Credentials: map[string]any{"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4"}},
+	}}}
+	catalogService, models := newAgentCatalogForTest(accounts)
+	config, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	require.Len(t, config.Models, 1)
+	modelID := config.Models[0].ID
+
+	// 启用但没给倍率：直接拒绝，避免模型可选却在请求时才失败。
+	_, err = catalogService.UpdateModel(context.Background(), 9, modelID, AgentModelConfigInput{
+		MediaType: AgentMediaTypeText, Enabled: true,
+	})
+	require.ErrorContains(t, err, "requires rate_multiplier")
+
+	// 停用则不要求倍率。
+	_, err = catalogService.UpdateModel(context.Background(), 9, modelID, AgentModelConfigInput{
+		MediaType: AgentMediaTypeText, Enabled: false,
+	})
+	require.NoError(t, err)
+
+	rate := 0.0
+	_, err = catalogService.UpdateModel(context.Background(), 9, modelID, AgentModelConfigInput{
+		MediaType: AgentMediaTypeText, Enabled: true, RateMultiplier: &rate,
+	})
+	require.NoError(t, err, "explicit zero is a valid free multiplier")
+
+	resolved, modelCode, err := catalogService.ResolveTextModelRate(context.Background(), 9, PlatformOpenAI, "gpt-5.4")
+	require.NoError(t, err)
+	require.Zero(t, resolved)
+	require.Equal(t, "gpt-5.4", modelCode)
+	require.NotNil(t, models.models[agentModelKey(PlatformOpenAI, "gpt-5.4")].RateMultiplier)
+}
+
+func TestAgentMediaModelRejectsTextMultiplierAndRequiresResolutionPrices(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
+		Platform:    PlatformOpenAI,
+		Credentials: map[string]any{"model_mapping": map[string]any{"gpt-image-2": "gpt-image-2"}},
+	}}}
+	catalogService, _ := newAgentCatalogForTest(accounts)
+	config, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	require.Len(t, config.Models, 1)
+	modelID := config.Models[0].ID
+
+	rate := 1.5
+	_, err = catalogService.UpdateModel(context.Background(), 9, modelID, AgentModelConfigInput{
+		MediaType: AgentMediaTypeImage, Enabled: true, RateMultiplier: &rate,
+		Prices: []AgentModelPrice{{Resolution: ImageBillingSize1K, UnitPrice: 0.1}},
+	})
+	require.ErrorContains(t, err, "cannot set rate_multiplier")
+
+	// 启用但一张价都没有：同样在校验期拒绝。
+	_, err = catalogService.UpdateModel(context.Background(), 9, modelID, AgentModelConfigInput{
+		MediaType: AgentMediaTypeImage, Enabled: true,
+	})
+	require.ErrorContains(t, err, "requires at least one resolution price")
+
+	_, err = catalogService.UpdateModel(context.Background(), 9, modelID, AgentModelConfigInput{
+		MediaType: AgentMediaTypeImage, Enabled: true,
+		Prices: []AgentModelPrice{{Resolution: ImageBillingSize1K, UnitPrice: 0.1}},
+	})
+	require.NoError(t, err)
+}
+
+func TestResolveTextModelRateFollowsCandidateOrderAndSkipsUnpricedModels(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
+		Platform: PlatformAnthropic,
+		Credentials: map[string]any{"model_mapping": map[string]any{
+			"claude-sonnet-4-6": "claude-sonnet-4-6",
+			"claude-opus-4-8":   "claude-opus-4-8",
+		}},
+	}}}
+	catalogService, models := newAgentCatalogForTest(accounts)
+	_, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	setAgentTextModelRate(t, models, 9, PlatformAnthropic, "claude-opus-4-8", 2.5)
+
+	rate, modelCode, err := catalogService.ResolveTextModelRate(
+		context.Background(), 9, PlatformAnthropic, "claude-sonnet-4-6", "claude-opus-4-8",
+	)
+	require.NoError(t, err, "an unpriced candidate must not block a priced one")
+	require.InDelta(t, 2.5, rate, 1e-12)
+	require.Equal(t, "claude-opus-4-8", modelCode)
+
+	_, _, err = catalogService.ResolveTextModelRate(context.Background(), 9, PlatformAnthropic, "claude-sonnet-4-6")
+	require.ErrorIs(t, err, ErrAgentModelRateUnavailable)
+}
+
+func TestAgentTextModelRateIsNotResolvedForVideoOrUnknownPlatforms(t *testing.T) {
+	catalogService, models := newAgentCatalogForTest(&agentCatalogAccountRepoStub{})
+	require.NoError(t, models.SyncDiscovered(context.Background(), 9, []AgentModelDiscovery{
+		{Platform: PlatformVideo, ModelCode: "seedance-2.5", MediaType: AgentMediaTypeVideo},
+	}, time.Now().UTC()))
+
+	_, _, err := catalogService.ResolveTextModelRate(context.Background(), 9, PlatformVideo, "seedance-2.5")
+	require.ErrorIs(t, err, ErrAgentModelRateUnavailable)
 }

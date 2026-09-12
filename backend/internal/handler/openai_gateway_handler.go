@@ -767,6 +767,20 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			return
 		}
 
+		// Agent 分组：价格 = 选中账号的源渠道价 × 该模型配置的倍率，缺一不可。
+		// 必须在转发前失败并释放账号槽位，避免这单既收不到钱又要付上游成本。
+		if apiKey.Group != nil && apiKey.Group.IsAgent() {
+			if priceErr := h.gatewayService.ValidateAgentLanguagePricing(c.Request.Context(), apiKey.Group, account, reqModel); priceErr != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				reqLog.Warn("openai.responses.agent_pricing_unavailable",
+					zap.Int64("account_id", account.ID), zap.String("model", reqModel), zap.Error(priceErr))
+				writeOpenAIAgentPricingError(c, priceErr)
+				return
+			}
+		}
+
 		// Forward request
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())
 		forwardStart := time.Now()

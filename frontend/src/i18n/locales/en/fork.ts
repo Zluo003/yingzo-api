@@ -6,6 +6,7 @@ export default {
     fileService: 'File Service',
     modelPlaza: 'Model Plaza',
     apiDocs: 'API Docs',
+    yingzoAgent: 'Yingzo Agent',
   },
   apiDocs: {
     title: 'API Docs',
@@ -61,6 +62,67 @@ export default {
     },
   },
   admin: {
+    yingzoAgent: {
+      title: 'Yingzo Agent',
+      description:
+        'Built-in aggregate group: assign accounts to this group to let Yingzo Agent call the models they provide, then price them per text, image, and video. This group cannot be deleted.',
+      systemBadge: 'Built-in',
+      systemGroupNotDeletable: 'Built-in aggregate group; it cannot be deleted',
+      sync: 'Sync model catalog',
+      syncing: 'Syncing…',
+      saveChanges: 'Save changes',
+      reset: 'Discard changes',
+      empty: 'No models in this section. Assign accounts to the Yingzo Agent group, then run "Sync model catalog".',
+      ratePlaceholder: 'Rate',
+      pricePlaceholder: 'Price',
+      aggregationHint:
+        'Assign an account to the Yingzo Agent group in Accounts to aggregate the models it provides (OpenAI / Anthropic / Gemini / Grok / DeepSeek / GLM / Kimi / MiniMax / Video). Removing it marks those models unavailable (configuration and prices are kept and restored on re-join).',
+      manageAccounts: 'Manage account membership →',
+      sourceUnavailableHint: 'No available account in this group provides the model right now; re-adding an account restores it.',
+      loadFailed: 'Failed to load the Yingzo Agent configuration',
+      groupMissing: 'The built-in Yingzo Agent group was not found (migration-seeded, kind=agent / system_code=yingzo)',
+      syncSuccess: 'Synced {count} models',
+      syncFailed: 'Failed to sync the model catalog',
+      saveSuccess: 'Saved',
+      saveFailed: 'Failed to save',
+      deleteSuccess: 'Model {model} excluded',
+      deleteFailed: 'Failed to exclude the model',
+      summary: {
+        group: 'Group',
+        status: 'Status',
+        accounts: 'Active / total accounts',
+        models: 'Enabled / total models',
+        aggregation: 'Aggregation',
+      },
+      columns: {
+        model: 'Model',
+        platform: 'Platform',
+        source: 'Source',
+        enabled: 'Enabled',
+        rateMultiplier: 'Multiplier (channel price × multiplier)',
+        pricePerImage: '{resolution} price per image',
+        pricePerSecond: '{resolution} price per second',
+        actions: 'Actions',
+      },
+      source: {
+        available: 'Account available',
+        unavailable: 'Account removed',
+      },
+      tabs: {
+        text: {
+          title: 'Text models',
+          hint: 'Text is billed as the source group channel price × this model multiplier. An empty multiplier means unpriced, and the model cannot be called.',
+        },
+        image: {
+          title: 'Image models',
+          hint: 'Images are billed per image: fill in the 1K/2K/4K unit price for each model; an empty tier counts as unpriced.',
+        },
+        video: {
+          title: 'Video models',
+          hint: 'Video is billed as generated seconds × per-second price: fill in the per-second price for each resolution; reference-video seconds are not billed.',
+        },
+      },
+    },
     groups: {
       description: 'Manage standard groups, system Agent routing, and rate multipliers',
       agent: {

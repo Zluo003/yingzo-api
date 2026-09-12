@@ -77,3 +77,33 @@ func TestAgentModelCatalogMigrationKeepsPricingExplicit(t *testing.T) {
 	require.NotContains(t, sql, "insert into agent_model_prices")
 	require.NotContains(t, sql, "drop table")
 }
+
+// 244 把被误删的系统内置聚合分组找回来：只能恢复/补种，绝不允许顺手删掉别的分组或
+// 清空绑定关系之外的数据。
+func TestRestoreYingzoAgentGroupMigrationIsScopedToTheSystemGroup(t *testing.T) {
+	content, err := FS.ReadFile("244_restore_yingzo_agent_group.sql")
+	require.NoError(t, err)
+	sql := strings.ToLower(string(content))
+
+	require.Contains(t, sql, "system_code = 'yingzo'")
+	require.Contains(t, sql, "set deleted_at = null")
+	require.Contains(t, sql, "allow_image_generation = true")
+	require.Contains(t, sql, "is_exclusive = false")
+	require.Contains(t, sql, "insert into groups")
+	require.NotContains(t, sql, "delete from")
+	require.NotContains(t, sql, "drop table")
+	require.NotContains(t, sql, "+goose down")
+}
+
+// 245 把"系统聚合分组有且仅有一个"落成数据库不变式。
+func TestSingleAgentGroupMigrationEnforcesUniqueness(t *testing.T) {
+	content, err := FS.ReadFile("245_single_agent_group.sql")
+	require.NoError(t, err)
+	sql := strings.ToLower(string(content))
+
+	require.Contains(t, sql, "create unique index if not exists idx_groups_single_live_agent")
+	require.Contains(t, sql, "where kind = 'agent' and deleted_at is null")
+	require.Contains(t, sql, "set deleted_at = now()")
+	require.NotContains(t, sql, "drop table")
+	require.NotContains(t, sql, "+goose down")
+}

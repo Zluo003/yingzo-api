@@ -339,7 +339,6 @@ func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		groups.POST("/:id/agent-models/sync", h.Admin.Group.SyncAgentModels)
 		groups.PUT("/:id/agent-models/:model_id", h.Admin.Group.UpdateAgentModel)
 		groups.DELETE("/:id/agent-models/:model_id", h.Admin.Group.DeleteAgentModel)
-		groups.PUT("/:id/agent-platform-rates/:platform", h.Admin.Group.SetAgentPlatformRate)
 		groups.GET("/:id/composite-routes", h.Admin.Group.ListCompositeRoutes)
 		groups.POST("/:id/composite-routes", h.Admin.Group.CreateCompositeRoute)
 		groups.POST("/:id/composite-routes/preview", h.Admin.Group.PreviewCompositeRoute)

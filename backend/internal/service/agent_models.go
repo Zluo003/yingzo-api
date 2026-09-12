@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/xai"
 )
 
 const (
@@ -42,16 +44,8 @@ const (
 var (
 	ErrAgentModelCatalogUnavailable = errors.New("agent model catalog unavailable")
 	ErrAgentModelNotConfigured      = errors.New("agent model is not enabled or available")
-	ErrAgentPlatformRateUnavailable = errors.New("agent language platform multiplier is not configured")
+	ErrAgentModelRateUnavailable    = errors.New("agent text model multiplier is not configured")
 )
-
-type AgentPlatformRate struct {
-	GroupID        int64     `json:"group_id"`
-	Platform       string    `json:"platform"`
-	RateMultiplier float64   `json:"rate_multiplier"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
-}
 
 type AgentModelPrice struct {
 	ID           int64     `json:"id"`
@@ -78,6 +72,9 @@ type AgentGroupModel struct {
 	CreatedAt    time.Time         `json:"created_at"`
 	UpdatedAt    time.Time         `json:"updated_at"`
 	Prices       []AgentModelPrice `json:"prices"`
+	// RateMultiplier 是文本模型在源渠道价之上的下游倍率。nil 表示尚未配置，
+	// 此时该文本模型不可被调用（与"启用但没定价"等价）。0 是合法值。
+	RateMultiplier *float64 `json:"rate_multiplier"`
 }
 
 type AgentModelDiscovery struct {
@@ -90,11 +87,12 @@ type AgentModelConfigInput struct {
 	MediaType string            `json:"media_type"`
 	Enabled   bool              `json:"enabled"`
 	Prices    []AgentModelPrice `json:"prices"`
+	// RateMultiplier 仅文本模型使用；媒体模型的价格在 Prices 里按分辨率给出。
+	RateMultiplier *float64 `json:"rate_multiplier,omitempty"`
 }
 
 type AgentModelCatalogConfig struct {
-	PlatformRates []AgentPlatformRate `json:"platform_rates"`
-	Models        []AgentGroupModel   `json:"models"`
+	Models []AgentGroupModel `json:"models"`
 }
 
 type AgentModelRepository interface {
@@ -102,11 +100,8 @@ type AgentModelRepository interface {
 	ListModels(ctx context.Context, groupID int64, includeExcluded bool) ([]AgentGroupModel, error)
 	GetModelByID(ctx context.Context, groupID, modelID int64) (*AgentGroupModel, error)
 	GetEnabledModel(ctx context.Context, groupID int64, platform, modelCode string) (*AgentGroupModel, error)
-	UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, prices []AgentModelPrice) error
+	UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, prices []AgentModelPrice) error
 	ExcludeModel(ctx context.Context, groupID, modelID int64, excludedAt time.Time) error
-	ListPlatformRates(ctx context.Context, groupID int64) ([]AgentPlatformRate, error)
-	UpsertPlatformRate(ctx context.Context, groupID int64, platform string, multiplier float64) error
-	GetPlatformRate(ctx context.Context, groupID int64, platform string) (*AgentPlatformRate, error)
 }
 
 // AgentModelCatalogEntry describes one client-visible model and the native
@@ -124,6 +119,20 @@ type AgentModelCatalogService struct {
 	accountRepo AccountRepository
 	groupRepo   GroupRepository
 	modelRepo   AgentModelRepository
+
+	// platformCache 缓存"模型 → 所属平台"，用于每个 Agent 请求的入口平台解析
+	// （account selection 需要按模型归属平台选号）。目录写入路径会主动失效，
+	// TTL 只用于兜底多实例部署下其它实例的写入。
+	platformMu    sync.Mutex
+	platformCache map[int64]agentModelPlatformSnapshot
+}
+
+// agentModelPlatformSnapshotTTL 是模型→平台映射的最长陈旧时间。
+const agentModelPlatformSnapshotTTL = 15 * time.Second
+
+type agentModelPlatformSnapshot struct {
+	byModel   map[string]string
+	expiresAt time.Time
 }
 
 type agentModelCatalogAccumulator struct {
@@ -148,6 +157,7 @@ func (s *AgentModelCatalogService) Sync(ctx context.Context, groupID int64) (*Ag
 	if err := s.modelRepo.SyncDiscovered(ctx, groupID, discovered, time.Now().UTC()); err != nil {
 		return nil, fmt.Errorf("sync Agent models: %w", err)
 	}
+	s.invalidateModelPlatforms(groupID)
 	return s.GetConfig(ctx, groupID)
 }
 
@@ -155,38 +165,14 @@ func (s *AgentModelCatalogService) GetConfig(ctx context.Context, groupID int64)
 	if err := s.requireAgentGroup(ctx, groupID); err != nil {
 		return nil, err
 	}
-	rates, err := s.modelRepo.ListPlatformRates(ctx, groupID)
-	if err != nil {
-		return nil, fmt.Errorf("list Agent platform rates: %w", err)
-	}
 	models, err := s.modelRepo.ListModels(ctx, groupID, false)
 	if err != nil {
 		return nil, fmt.Errorf("list Agent models: %w", err)
 	}
-	if rates == nil {
-		rates = []AgentPlatformRate{}
-	}
 	if models == nil {
 		models = []AgentGroupModel{}
 	}
-	return &AgentModelCatalogConfig{PlatformRates: rates, Models: models}, nil
-}
-
-func (s *AgentModelCatalogService) SetPlatformRate(ctx context.Context, groupID int64, platform string, multiplier float64) (*AgentModelCatalogConfig, error) {
-	if err := s.requireAgentGroup(ctx, groupID); err != nil {
-		return nil, err
-	}
-	platform = normalizeAgentPlatform(platform)
-	if !isAgentLanguagePlatform(platform) {
-		return nil, infraerrors.BadRequest("AGENT_PLATFORM_RATE_INVALID", fmt.Sprintf("unsupported Agent language platform %q", platform))
-	}
-	if multiplier < 0 {
-		return nil, infraerrors.BadRequest("AGENT_PLATFORM_RATE_INVALID", "rate_multiplier must be non-negative")
-	}
-	if err := s.modelRepo.UpsertPlatformRate(ctx, groupID, platform, multiplier); err != nil {
-		return nil, fmt.Errorf("save Agent platform rate: %w", err)
-	}
-	return s.GetConfig(ctx, groupID)
+	return &AgentModelCatalogConfig{Models: models}, nil
 }
 
 func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, modelID int64, input AgentModelConfigInput) (*AgentModelCatalogConfig, error) {
@@ -205,9 +191,17 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 	if err != nil {
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", err.Error())
 	}
-	if err := s.modelRepo.UpdateModelConfig(ctx, groupID, model.ID, mediaType, input.Enabled, prices); err != nil {
+	rate, err := normalizeAgentModelRate(mediaType, input.Enabled, input.RateMultiplier)
+	if err != nil {
+		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", err.Error())
+	}
+	if input.Enabled && mediaType != AgentMediaTypeText && len(prices) == 0 {
+		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "an enabled image or video model requires at least one resolution price")
+	}
+	if err := s.modelRepo.UpdateModelConfig(ctx, groupID, model.ID, mediaType, input.Enabled, rate, prices); err != nil {
 		return nil, fmt.Errorf("update Agent model: %w", err)
 	}
+	s.invalidateModelPlatforms(groupID)
 	return s.GetConfig(ctx, groupID)
 }
 
@@ -221,6 +215,7 @@ func (s *AgentModelCatalogService) ExcludeModel(ctx context.Context, groupID, mo
 	if err := s.modelRepo.ExcludeModel(ctx, groupID, modelID, time.Now().UTC()); err != nil {
 		return nil, fmt.Errorf("exclude Agent model: %w", err)
 	}
+	s.invalidateModelPlatforms(groupID)
 	return s.GetConfig(ctx, groupID)
 }
 
@@ -250,19 +245,29 @@ func (s *AgentModelCatalogService) ListAvailable(ctx context.Context, groupID in
 	return flattenAgentCatalog(entries), nil
 }
 
-func (s *AgentModelCatalogService) ResolvePlatformRate(ctx context.Context, groupID int64, platform string) (float64, error) {
+// ResolveTextModelRate returns the downstream multiplier configured for the first
+// candidate model that the Agent group currently offers as an enabled, priced
+// text model. Candidates are matched in order, so the caller's billing-model
+// preference is preserved.
+func (s *AgentModelCatalogService) ResolveTextModelRate(ctx context.Context, groupID int64, platform string, models ...string) (float64, string, error) {
 	if s == nil || s.modelRepo == nil || groupID <= 0 {
-		return 0, ErrAgentPlatformRateUnavailable
+		return 0, "", ErrAgentModelRateUnavailable
 	}
 	platform = normalizeAgentPlatform(platform)
 	if !isAgentLanguagePlatform(platform) {
-		return 0, fmt.Errorf("%w: platform %s", ErrAgentPlatformRateUnavailable, platform)
+		return 0, "", fmt.Errorf("%w: platform %s", ErrAgentModelRateUnavailable, platform)
 	}
-	rate, err := s.modelRepo.GetPlatformRate(ctx, groupID, platform)
-	if err != nil || rate == nil || rate.RateMultiplier < 0 {
-		return 0, fmt.Errorf("%w for platform %s", ErrAgentPlatformRateUnavailable, platform)
+	for _, modelCode := range compactAgentModelCandidates(models) {
+		model, err := s.modelRepo.GetEnabledModel(ctx, groupID, platform, modelCode)
+		if err != nil || model == nil || model.MediaType != AgentMediaTypeText || model.RateMultiplier == nil {
+			continue
+		}
+		if *model.RateMultiplier < 0 {
+			continue
+		}
+		return *model.RateMultiplier, model.ModelCode, nil
 	}
-	return rate.RateMultiplier, nil
+	return 0, "", fmt.Errorf("%w for platform %s model %s", ErrAgentModelRateUnavailable, platform, firstAgentModelCandidate(models))
 }
 
 func (s *AgentModelCatalogService) RequireAccountLanguageModel(ctx context.Context, groupID int64, account *Account, models ...string) (string, error) {
@@ -323,6 +328,70 @@ func (s *AgentModelCatalogService) ResolveMediaUnitPrice(
 	return 0, "", fmt.Errorf("%w for model %s resolution %s", ErrVideoPricingRuleNotFound, firstAgentModelCandidate(models), resolution)
 }
 
+// ResolveModelPlatform 返回分组内提供该模型的平台，供请求入口选择账号平台使用。
+// 只要 enabled ∧ available ∧ 未排除 的目录行；同一个模型名出现在多个平台时取平台名
+// 字典序最小者，保证同一请求在多次调用间稳定（避免选号与计费落在不同平台）。
+func (s *AgentModelCatalogService) ResolveModelPlatform(ctx context.Context, groupID int64, model string) (string, bool, error) {
+	model = strings.TrimSpace(model)
+	if s == nil || s.modelRepo == nil || groupID <= 0 || model == "" {
+		return "", false, nil
+	}
+	byModel, err := s.modelPlatformIndex(ctx, groupID)
+	if err != nil {
+		return "", false, err
+	}
+	platform, ok := byModel[model]
+	return platform, ok, nil
+}
+
+func (s *AgentModelCatalogService) modelPlatformIndex(ctx context.Context, groupID int64) (map[string]string, error) {
+	now := time.Now()
+	s.platformMu.Lock()
+	if snapshot, ok := s.platformCache[groupID]; ok && now.Before(snapshot.expiresAt) {
+		byModel := snapshot.byModel
+		s.platformMu.Unlock()
+		return byModel, nil
+	}
+	s.platformMu.Unlock()
+
+	models, err := s.modelRepo.ListModels(ctx, groupID, false)
+	if err != nil {
+		return nil, fmt.Errorf("list Agent models: %w", err)
+	}
+	byModel := make(map[string]string, len(models))
+	for _, model := range models {
+		if !model.Enabled || !model.Available || model.Excluded {
+			continue
+		}
+		code := strings.TrimSpace(model.ModelCode)
+		if code == "" {
+			continue
+		}
+		platform := normalizeAgentPlatform(model.Platform)
+		if existing, ok := byModel[code]; ok && existing <= platform {
+			continue
+		}
+		byModel[code] = platform
+	}
+
+	s.platformMu.Lock()
+	if s.platformCache == nil {
+		s.platformCache = make(map[int64]agentModelPlatformSnapshot)
+	}
+	s.platformCache[groupID] = agentModelPlatformSnapshot{byModel: byModel, expiresAt: now.Add(agentModelPlatformSnapshotTTL)}
+	s.platformMu.Unlock()
+	return byModel, nil
+}
+
+func (s *AgentModelCatalogService) invalidateModelPlatforms(groupID int64) {
+	if s == nil {
+		return
+	}
+	s.platformMu.Lock()
+	delete(s.platformCache, groupID)
+	s.platformMu.Unlock()
+}
+
 func (s *AgentModelCatalogService) requireAgentGroup(ctx context.Context, groupID int64) error {
 	if s == nil || s.accountRepo == nil || s.groupRepo == nil || s.modelRepo == nil {
 		return ErrAgentModelCatalogUnavailable
@@ -366,6 +435,26 @@ func normalizeAgentModelPrices(mediaType string, prices []AgentModelPrice) ([]Ag
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Resolution < out[j].Resolution })
 	return out, nil
+}
+
+// normalizeAgentModelRate validates the per-model configuration shape: text
+// models carry a multiplier, media models carry per-resolution unit prices.
+// An enabled model must be fully priced, otherwise it would be selectable and
+// then fail at request time.
+func normalizeAgentModelRate(mediaType string, enabled bool, rate *float64) (*float64, error) {
+	if mediaType == AgentMediaTypeText {
+		if rate != nil && *rate < 0 {
+			return nil, errors.New("text model rate_multiplier must be non-negative")
+		}
+		if enabled && rate == nil {
+			return nil, errors.New("an enabled text model requires rate_multiplier")
+		}
+		return rate, nil
+	}
+	if rate != nil {
+		return nil, errors.New("image and video models are priced per resolution and cannot set rate_multiplier")
+	}
+	return nil, nil
 }
 
 func normalizeAgentPriceResolution(mediaType, resolution string) (string, error) {
@@ -458,9 +547,28 @@ func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
 	return out
 }
 
+// agentMediaTypeServable 报告该平台的账号能否在本网关真正服务这类模型。
+// 目录里出现一个"能配价却永远调不通"的模型比不出现更糟：视频目前只有 video 平台
+// （seedance）有计费链路，图片端点只对 openai / grok / gemini 开放。
+func agentMediaTypeServable(platform, mediaType string) bool {
+	switch mediaType {
+	case AgentMediaTypeVideo:
+		return platform == PlatformVideo
+	case AgentMediaTypeImage:
+		switch platform {
+		case PlatformOpenAI, PlatformGrok, PlatformGemini:
+			return true
+		default:
+			return false
+		}
+	default:
+		return true
+	}
+}
+
 func addAgentDiscovery(discovered map[string]AgentModelDiscovery, platform, modelCode, mediaType string) {
 	modelCode = strings.TrimSpace(modelCode)
-	if modelCode == "" || !isValidAgentMediaType(mediaType) {
+	if modelCode == "" || !isValidAgentMediaType(mediaType) || !agentMediaTypeServable(platform, mediaType) {
 		return
 	}
 	key := agentModelKey(platform, modelCode)
@@ -520,9 +628,23 @@ type agentModelDescriptor struct {
 	mediaType string
 }
 
+// isAgentPlatformSupported 报告该平台的账号能否向聚合分组贡献模型。
+// 覆盖应用支持的全部 provider：三大协议平台 + grok + 国产 OpenAI 兼容供应商 + 视频。
 func isAgentPlatformSupported(platform string) bool {
 	switch normalizeAgentPlatform(platform) {
-	case PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformVideo:
+	case PlatformOpenAI, PlatformAnthropic, PlatformGemini, PlatformVideo,
+		PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsOpenAICompatibleAgentPlatform 报告聚合分组里该平台是否由 OpenAI 兼容链路服务
+// （决定 /v1/chat/completions、/v1/responses、/v1/messages 走哪个 handler）。
+func IsOpenAICompatibleAgentPlatform(platform string) bool {
+	switch normalizeAgentPlatform(platform) {
+	case PlatformOpenAI, PlatformGrok, PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
 		return true
 	default:
 		return false
@@ -544,6 +666,13 @@ func defaultAgentModels(platform string) (map[string]agentModelDescriptor, bool)
 		for _, model := range geminicli.DefaultModels {
 			models[model.ID] = defaultAgentModelDescriptorForID(platform, model.ID)
 		}
+	case PlatformGrok:
+		for _, model := range xai.DefaultModels() {
+			models[model.ID] = defaultAgentModelDescriptorForID(platform, model.ID)
+		}
+	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
+		// 国产供应商的模型清单随上游版本频繁变化，不内置固定清单：与 video 平台同一
+		// 策略，模型必须由账号的 model_mapping 声明（未声明则该账号不贡献模型）。
 	case PlatformVideo:
 		// Video models must be declared by each account's model_mapping. There is
 		// intentionally no gateway-wide fixed video model list.
@@ -564,6 +693,18 @@ func defaultAgentModelDescriptorForID(platform, model string) agentModelDescript
 	case PlatformGemini:
 		if strings.Contains(lower, "image") || strings.Contains(lower, "imagen") {
 			mediaType = AgentMediaTypeImage
+		}
+	case PlatformZhipu:
+		// 智谱的图像模型叫 cogview 系列，名字里没有 "image"。
+		if strings.Contains(lower, "image") || strings.Contains(lower, "cogview") {
+			mediaType = AgentMediaTypeImage
+		}
+	case PlatformGrok:
+		if strings.Contains(lower, "image") {
+			mediaType = AgentMediaTypeImage
+		}
+		if strings.Contains(lower, "imagine") || strings.Contains(lower, "video") {
+			mediaType = AgentMediaTypeVideo
 		}
 	case PlatformVideo:
 		mediaType = AgentMediaTypeVideo
@@ -604,6 +745,17 @@ func agentInterfacesForModel(platform, mediaType, modelCode string) []string {
 		return []string{AgentInterfaceGeminiGenerateContent}
 	case PlatformVideo:
 		return []string{AgentInterfaceSeedanceVideos}
+	case PlatformGrok:
+		if mediaType == AgentMediaTypeImage {
+			return []string{AgentInterfaceOpenAIImages}
+		}
+		return []string{AgentInterfaceOpenAIResponses, AgentInterfaceOpenAIChatCompletions}
+	case PlatformKimi, PlatformZhipu, PlatformDeepseek, PlatformMiniMax:
+		if mediaType == AgentMediaTypeImage {
+			return []string{AgentInterfaceOpenAIImages}
+		}
+		// 国产供应商在本网关按 OpenAI 兼容 chat completions 调用。
+		return []string{AgentInterfaceOpenAIChatCompletions}
 	default:
 		return nil
 	}

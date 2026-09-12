@@ -267,8 +267,14 @@ func (s *groupRepoStub) GetByID(_ context.Context, id int64) (*Group, error) {
 	panic("unexpected GetByID call")
 }
 
-func (s *groupRepoStub) GetByIDLite(ctx context.Context, id int64) (*Group, error) {
-	panic("unexpected GetByIDLite call")
+func (s *groupRepoStub) GetByIDLite(_ context.Context, _ int64) (*Group, error) {
+	// 账号侧的混渠道检查会按分组判断"是不是系统聚合分组"，因此这里返回已配置的
+	// 分组（取 getByID）而不是 panic；未配置时视为普通分组。
+	if s.getByID != nil {
+		cloned := *s.getByID
+		return &cloned, nil
+	}
+	return nil, ErrGroupNotFound
 }
 
 func (s *groupRepoStub) Update(ctx context.Context, group *Group) error {
@@ -723,6 +729,24 @@ func TestAdminService_DeleteGroup_Error(t *testing.T) {
 
 // DeleteGroupIfEmpty 的当前契约：先数分组内账号，>0 直接返回 ErrGroupNotEmpty，
 // 不会走到删除。早期的 "guarded cascade" 实现已移除，这里只锁定现在的行为。
+// 系统内置聚合分组（Yingzo Agent）不可删除：删除路径必须在动数据库之前拒绝，
+// 否则管理员一次误点就会把系统分组的账号绑定、模型目录与价格全部级联删掉。
+func TestAdminService_DeleteGroup_RejectsSystemAgentGroup(t *testing.T) {
+	repo := &groupRepoStub{
+		getByID:       &Group{ID: 7, Name: "Yingzo Agent", Platform: PlatformOpenAI, Kind: "agent", SystemCode: "yingzo"},
+		countAccounts: true, accountCount: 0,
+	}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	err := svc.DeleteGroup(context.Background(), 7)
+	require.ErrorContains(t, err, "cannot be deleted")
+	require.Empty(t, repo.deleteCalls, "the system group must never reach the cascade delete")
+
+	err = svc.DeleteGroupIfEmpty(context.Background(), 7)
+	require.Error(t, err)
+	require.Empty(t, repo.deleteCalls)
+}
+
 func TestAdminService_DeleteGroupIfEmpty_RejectsNonEmptyGroup(t *testing.T) {
 	repo := &groupRepoStub{countAccounts: true, accountCount: 3}
 	svc := &adminServiceImpl{groupRepo: repo}
@@ -818,4 +842,16 @@ func TestAdminService_BatchDeleteRedeemCodes_PartialFailures(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(2), deleted)
 	require.Equal(t, []int64{1, 2, 3}, repo.deletedIDs)
+}
+
+// 系统内置聚合分组不能被复制：复制会连带复制账号绑定与计费规则，造出一个
+// "影子 Agent 分组"，与"唯一分组"的产品约定冲突。
+func TestAdminService_DuplicateGroupRejectsSystemAgentGroup(t *testing.T) {
+	repo := &groupRepoStub{getByID: &Group{
+		ID: 7, Name: "Yingzo Agent", Platform: PlatformOpenAI, Kind: "agent", SystemCode: "yingzo",
+	}}
+	svc := &adminServiceImpl{groupRepo: repo}
+
+	_, err := svc.DuplicateGroup(context.Background(), 7, "admin", "op-key")
+	require.ErrorContains(t, err, "cannot be duplicated")
 }

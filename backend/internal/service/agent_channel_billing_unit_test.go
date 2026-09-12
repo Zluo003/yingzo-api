@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGatewayServiceRecordUsage_AgentUsesSelectedAccountChannelAndPlatformMultiplier(t *testing.T) {
+func TestGatewayServiceRecordUsage_AgentUsesSelectedAccountChannelAndModelMultiplier(t *testing.T) {
 	agentGroupID := int64(7101)
 	sourceGroupID := int64(7102)
 	channelID := int64(7103)
@@ -27,7 +27,7 @@ func TestGatewayServiceRecordUsage_AgentUsesSelectedAccountChannelAndPlatformMul
 			BillingMode: BillingModeToken, InputPrice: &inputPrice, OutputPrice: &outputPrice,
 		}},
 	}}, map[int64]string{agentGroupID: "agent", sourceGroupID: PlatformAnthropic})
-	resolver := agentBillingResolverWithPlatformRate(t, channelService, agentGroupID, PlatformAnthropic, platformMultiplier)
+	resolver := agentBillingResolverWithModelRate(t, channelService, agentGroupID, PlatformAnthropic, "claude-priced", platformMultiplier)
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	rateRepo := &openAIUserGroupRateRepoStub{rate: &userMultiplier}
 	svc := newGatewayRecordUsageServiceForTest(
@@ -64,7 +64,7 @@ func TestGatewayServiceRecordUsage_AgentUsesSelectedAccountChannelAndPlatformMul
 	require.InDelta(t, platformMultiplier, usageRepo.lastLog.RateMultiplier, 1e-12)
 }
 
-func TestOpenAIGatewayServiceRecordUsage_AgentUsesSelectedAccountChannelAndPlatformMultiplier(t *testing.T) {
+func TestOpenAIGatewayServiceRecordUsage_AgentUsesSelectedAccountChannelAndModelMultiplier(t *testing.T) {
 	agentGroupID := int64(7201)
 	sourceGroupID := int64(7202)
 	channelID := int64(7203)
@@ -81,7 +81,7 @@ func TestOpenAIGatewayServiceRecordUsage_AgentUsesSelectedAccountChannelAndPlatf
 			BillingMode: BillingModeToken, InputPrice: &inputPrice, OutputPrice: &outputPrice,
 		}},
 	}}, map[int64]string{agentGroupID: "agent", sourceGroupID: PlatformOpenAI})
-	resolver := agentBillingResolverWithPlatformRate(t, channelService, agentGroupID, PlatformOpenAI, platformMultiplier)
+	resolver := agentBillingResolverWithModelRate(t, channelService, agentGroupID, PlatformOpenAI, "gpt-priced", platformMultiplier)
 	usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 	rateRepo := &openAIUserGroupRateRepoStub{rate: &userMultiplier}
 	svc := newOpenAIRecordUsageServiceForTest(
@@ -114,16 +114,21 @@ func TestOpenAIGatewayServiceRecordUsage_AgentUsesSelectedAccountChannelAndPlatf
 	require.InDelta(t, platformMultiplier, usageRepo.lastLog.RateMultiplier, 1e-12)
 }
 
-func agentBillingResolverWithPlatformRate(
+// agentBillingResolverWithModelRate 装配一个 Agent 目录：目标文本模型以给定倍率启用。
+func agentBillingResolverWithModelRate(
 	t *testing.T,
 	channelService *ChannelService,
 	groupID int64,
 	platform string,
+	modelCode string,
 	multiplier float64,
 ) *ModelPricingResolver {
 	t.Helper()
 	models := newAgentModelMemoryRepo()
-	require.NoError(t, models.UpsertPlatformRate(context.Background(), groupID, platform, multiplier))
+	require.NoError(t, models.SyncDiscovered(context.Background(), groupID, []AgentModelDiscovery{
+		{Platform: platform, ModelCode: modelCode, MediaType: AgentMediaTypeText},
+	}, time.Now().UTC()))
+	setAgentTextModelRate(t, models, groupID, platform, modelCode, multiplier)
 	resolver := NewModelPricingResolver(channelService, NewBillingService(nil, nil))
 	resolver.SetAgentModelCatalog(NewAgentModelCatalogService(nil, nil, models))
 	return resolver

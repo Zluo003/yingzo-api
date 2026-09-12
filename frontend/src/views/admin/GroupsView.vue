@@ -387,7 +387,7 @@
                 <span class="text-xs">{{ t("common.edit") }}</span>
               </button>
               <button
-                v-if="!authStore.isSimpleMode"
+                v-if="!authStore.isSimpleMode && !isSystemAgentGroup(row)"
                 data-testid="group-duplicate"
                 :title="
                   duplicatingGroupIds.has(row.id)
@@ -441,12 +441,22 @@
                 }}</span>
               </button>
               <button
+                v-if="!isSystemAgentGroup(row)"
                 @click="handleDelete(row)"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
               >
                 <Icon name="trash" size="sm" />
                 <span class="text-xs">{{ t("common.delete") }}</span>
               </button>
+              <span
+                v-else
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-400"
+                :title="t('admin.yingzoAgent.systemGroupNotDeletable')"
+                data-testid="group-system-locked"
+              >
+                <Icon name="lock" size="sm" />
+                <span class="text-xs">{{ t("admin.yingzoAgent.systemBadge") }}</span>
+              </span>
             </div>
           </template>
 
@@ -6828,9 +6838,18 @@ const previewCompositeRoute = async () => {
 };
 
 const handleDelete = (group: AdminGroup) => {
+  // 系统内置聚合分组（Yingzo Agent）后端会拒绝删除，这里也不给入口。
+  if (isSystemAgentGroup(group)) {
+    appStore.showError(t("admin.yingzoAgent.systemGroupNotDeletable"));
+    return;
+  }
   deletingGroup.value = group;
   showDeleteDialog.value = true;
 };
+
+function isSystemAgentGroup(group: AdminGroup | null | undefined): boolean {
+  return group?.kind === 'agent' && group?.system_code === 'yingzo';
+}
 
 const confirmDelete = async () => {
   if (!deletingGroup.value) return;

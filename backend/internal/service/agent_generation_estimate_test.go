@@ -111,13 +111,13 @@ func TestAgentImageBillingUsesPerModelPriceForGatewayPaths(t *testing.T) {
 		"model_mapping": map[string]any{"shared-image": "shared-image"},
 	}}
 	geminiGateway := &GatewayService{billingService: billingService, resolver: resolver}
-	geminiCost, err := geminiGateway.calculateAgentRecordUsageCost(
+	geminiCost, _, err := geminiGateway.calculateAgentRecordUsageCost(
 		context.Background(),
 		&ForwardResult{Model: "shared-image", ImageCount: 2, ImageSize: ImageBillingSize1K},
 		group,
 		account,
 		[]string{"shared-image"},
-		99,
+		time.Now(),
 	)
 	require.NoError(t, err)
 	require.InDelta(t, 0.8, geminiCost.TotalCost, 1e-12)

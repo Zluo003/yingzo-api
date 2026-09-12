@@ -462,6 +462,18 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/yingzo-agent',
+    name: 'AdminYingzoAgent',
+    component: () => import('@/views/admin/YingzoAgentView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Yingzo Agent',
+      titleKey: 'admin.yingzoAgent.title',
+      descriptionKey: 'admin.yingzoAgent.description'
+    }
+  },
+  {
     path: '/admin/channels',
     redirect: '/admin/channels/pricing'
   },

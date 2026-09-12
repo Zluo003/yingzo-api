@@ -750,7 +750,10 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	if s.cfg != nil {
 		multiplier = s.cfg.Default.RateMultiplier
 	}
-	if apiKey.GroupID != nil && apiKey.Group != nil {
+	// Agent 分组的价格完全由 Yingzo Agent 模型目录决定（源渠道价 × 该模型配置的
+	// 下游倍率），既不读用户专属倍率，也不用分组 rate_multiplier 兜底。
+	agentGroup := apiKey.Group != nil && apiKey.Group.IsAgent()
+	if apiKey.GroupID != nil && apiKey.Group != nil && !agentGroup {
 		groupDefault := apiKey.Group.RateMultiplier
 		multiplier = s.ResolveUserGroupRateMultiplier(ctx, user.ID, *apiKey.GroupID, groupDefault)
 	}
@@ -789,7 +792,20 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 	}
 
 	// 计算费用
-	cost := s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, pricingAt)
+	var cost *CostBreakdown
+	if agentGroup {
+		agentCost, agentMultiplier, agentErr := s.calculateAgentRecordUsageCost(ctx, result, apiKey.Group, account,
+			usageBillingModelCandidates(billingModel, result.UpstreamModel, result.Model, requestedModel), pricingAt)
+		if agentErr != nil {
+			logger.LegacyPrintf("service.gateway", "[Billing] Agent pricing failed: group_id=%d model=%s request_id=%s err=%v",
+				apiKey.Group.ID, billingModel, result.RequestID, agentErr)
+			return agentErr
+		}
+		cost = agentCost
+		multiplier = agentMultiplier
+	} else {
+		cost = s.calculateRecordUsageCost(ctx, result, apiKey, billingModel, multiplier, imageMultiplier, pricingAt)
+	}
 	// response_model：按上游成功响应自报的模型计费（渠道显式开启才生效）。
 	// 采纳条件见 responseModelBillingDeclaration + hasIdentifiedResponseModelPricing
 	// + responseModelBillingAdoptable。任一条件不满足都静默回落基线，即开启本模式前的
@@ -938,41 +954,62 @@ func (s *GatewayService) calculateRecordUsageCost(
 }
 
 // calculateAgentRecordUsageCost applies Agent catalogue prices to generated
-// media and token usage instead of falling back to standard group pricing.
+// media and token usage instead of falling back to standard group pricing. The
+// returned multiplier is the one actually applied on top of the catalogue price:
+// the model's own rate for text, and 1 for media (unit prices are already final,
+// matching the video path which also records 1 for Agent groups).
 func (s *GatewayService) calculateAgentRecordUsageCost(
 	ctx context.Context,
 	result *ForwardResult,
 	group *Group,
 	account *Account,
 	billingModels []string,
-	multiplier float64,
-) (*CostBreakdown, error) {
+	pricingAt time.Time,
+) (*CostBreakdown, float64, error) {
+	if group == nil || s.resolver == nil {
+		return nil, 0, ErrAgentChannelPricingUnavailable
+	}
 	if result.ImageCount > 0 {
-		if s.resolver == nil {
-			return nil, ErrAgentImagePricingUnavailable
-		}
-		unitPrice, _, err := s.resolver.ResolveAgentMediaUnitPrice(ctx, group.ID, account.Platform, AgentMediaTypeImage, result.ImageSize, billingModels...)
+		unitPrice, _, err := s.resolver.ResolveAgentMediaUnitPrice(
+			ctx, group.ID, agentPricingAccountPlatform(group, account), AgentMediaTypeImage, result.ImageSize, billingModels...,
+		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		return s.billingService.CalculateConfiguredAgentImageCost(unitPrice, result.ImageCount)
+		cost, err := s.billingService.CalculateConfiguredAgentImageCost(unitPrice, result.ImageCount)
+		return cost, 1, err
 	}
-	if s.resolver == nil {
-		return nil, ErrAgentChannelPricingUnavailable
-	}
-	resolved, billingModel, err := s.resolver.ResolveAgentAccountCandidates(ctx, group.ID, account, billingModels...)
+	pricing, err := s.resolver.ResolveAgentTextPricing(ctx, group.ID, account, billingModels...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return s.billingService.CalculateCostUnified(CostInput{
-		Ctx: ctx, Model: billingModel,
+	cost, err := s.billingService.CalculateCostUnified(CostInput{
+		Ctx: ctx, Model: pricing.BillingModel,
 		GroupID: &group.ID, Group: group,
 		Tokens: UsageTokens{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens,
 			CacheCreationTokens: result.Usage.CacheCreationInputTokens, CacheReadTokens: result.Usage.CacheReadInputTokens,
 			CacheCreation5mTokens: result.Usage.CacheCreation5mTokens, CacheCreation1hTokens: result.Usage.CacheCreation1hTokens,
 			ImageOutputTokens: result.Usage.ImageOutputTokens},
-		RequestCount: 1, RateMultiplier: multiplier, Resolver: s.resolver, Resolved: resolved,
+		RequestCount: 1, RateMultiplier: pricing.RateMultiplier, PricingAt: pricingAt,
+		Resolver: s.resolver, Resolved: pricing.Resolved,
 	})
+	if err != nil {
+		return nil, 0, err
+	}
+	return cost, pricing.RateMultiplier, nil
+}
+
+// agentPricingAccountPlatform prefers the concrete serving account's platform:
+// an Agent group aggregates accounts across providers, so the group's own
+// platform says nothing about which provider catalogue entry applies.
+func agentPricingAccountPlatform(group *Group, account *Account) string {
+	if account != nil && strings.TrimSpace(account.Platform) != "" {
+		return account.Platform
+	}
+	if group != nil {
+		return group.Platform
+	}
+	return ""
 }
 
 // compositeBillableModel 决定 composite 分组请求的计费模型：来源覆盖把计费模型

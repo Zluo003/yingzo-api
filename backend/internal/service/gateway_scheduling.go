@@ -1012,7 +1012,9 @@ func (s *GatewayService) resolvePlatform(ctx context.Context, groupID *int64, gr
 }
 
 func (s *GatewayService) listSchedulableAccounts(ctx context.Context, groupID *int64, platform string, hasForcePlatform bool) ([]Account, bool, error) {
-	if s.schedulerSnapshot != nil {
+	// 聚合分组按请求 provider 直接查账号：全局调度快照按分组分桶，对混合 provider
+	// 的聚合分组既不完整也可能根本没预热。
+	if !isAgentGroupContext(ctx) && s.schedulerSnapshot != nil {
 		accounts, useMixed, err := s.schedulerSnapshot.ListSchedulableAccounts(ctx, groupID, platform, hasForcePlatform)
 		if err == nil {
 			accounts = s.filterAccountsBySchedulingThreshold(ctx, accounts)
@@ -1038,6 +1040,20 @@ func (s *GatewayService) listSchedulableAccounts(ctx context.Context, groupID *i
 		}
 		return accounts, useMixed, err
 	}
+	// 聚合分组把多个 provider 的账号放在同一个分组里，一次请求只服务一个 provider
+	// （由入口协议强制指定），因此既不混入 antigravity，也不按分组分桶查账号。
+	if isAgentGroupContext(ctx) && groupID != nil {
+		accounts, err := s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, *groupID, platform)
+		if err != nil {
+			slog.Debug("account_scheduling_list_failed",
+				"group_id", derefGroupID(groupID),
+				"platform", platform,
+				"error", err)
+			return nil, false, err
+		}
+		return s.filterAccountsBySchedulingThreshold(ctx, accounts), false, nil
+	}
+
 	useMixed := (platform == PlatformAnthropic || platform == PlatformGemini) && !hasForcePlatform
 	if useMixed {
 		platforms := []string{platform, PlatformAntigravity}

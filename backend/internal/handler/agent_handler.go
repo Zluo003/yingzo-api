@@ -76,6 +76,15 @@ func NewAgentHandler(
 	return h
 }
 
+// ModelCatalog 暴露 Yingzo Agent 的模型目录服务，供网关入口中间件按请求模型
+// 解析实际平台（聚合分组一个凭证要服务多个 provider）。
+func (h *AgentHandler) ModelCatalog() *service.AgentModelCatalogService {
+	if h == nil {
+		return nil
+	}
+	return h.agentModels
+}
+
 func (h *AgentHandler) StartCleanupWorker(interval time.Duration) {
 	if h == nil || h.db == nil || interval <= 0 {
 		return

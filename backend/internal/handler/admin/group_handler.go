@@ -93,15 +93,19 @@ func (f optionalLimitField) ToServiceInput() *float64 {
 
 // NewGroupHandler creates a new admin group handler
 func NewGroupHandler(adminService service.AdminService, dashboardService *service.DashboardService, groupCapacityService *service.GroupCapacityService) *GroupHandler {
-	return NewGroupHandlerWithConfig(adminService, dashboardService, groupCapacityService, nil)
+	return NewGroupHandlerWithConfig(adminService, dashboardService, groupCapacityService, nil, nil)
 }
 
-func NewGroupHandlerWithConfig(adminService service.AdminService, dashboardService *service.DashboardService, groupCapacityService *service.GroupCapacityService, cfg *config.Config) *GroupHandler {
+// NewGroupHandlerWithConfig 装配管理端分组接口。agentModels 承载 Yingzo Agent 的
+// 模型目录/计价配置接口（/admin/groups/:id/agent-models*）：传 nil 时这些接口会
+// 直接返回 400，因此 wire 必须真的把它注进来（见 wire_provide_test.go 的守卫）。
+func NewGroupHandlerWithConfig(adminService service.AdminService, dashboardService *service.DashboardService, groupCapacityService *service.GroupCapacityService, cfg *config.Config, agentModels *service.AgentModelCatalogService) *GroupHandler {
 	return &GroupHandler{
 		adminService:         adminService,
 		dashboardService:     dashboardService,
 		groupCapacityService: groupCapacityService,
 		cfg:                  cfg,
+		agentModels:          agentModels,
 	}
 }
 
@@ -1199,32 +1203,12 @@ func (h *GroupHandler) SyncAgentModels(c *gin.Context) {
 	response.Success(c, cfg)
 }
 
-type setAgentPlatformRateRequest struct {
-	RateMultiplier *float64 `json:"rate_multiplier" binding:"required"`
-}
-
-func (h *GroupHandler) SetAgentPlatformRate(c *gin.Context) {
-	groupID, ok := parseAdminGroupID(c)
-	if !ok || !h.requireAgentModels(c) {
-		return
-	}
-	var req setAgentPlatformRateRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.RateMultiplier == nil || *req.RateMultiplier < 0 {
-		response.BadRequest(c, "rate_multiplier must be a non-negative number")
-		return
-	}
-	cfg, err := h.agentModels.SetPlatformRate(c.Request.Context(), groupID, c.Param("platform"), *req.RateMultiplier)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, cfg)
-}
-
 type updateAgentModelRequest struct {
 	MediaType string                    `json:"media_type"`
 	Enabled   *bool                     `json:"enabled"`
 	Prices    []service.AgentModelPrice `json:"prices"`
+	// RateMultiplier 仅文本模型使用：源渠道价之上的下游倍率。
+	RateMultiplier *float64 `json:"rate_multiplier"`
 }
 
 func (h *GroupHandler) UpdateAgentModel(c *gin.Context) {
@@ -1246,7 +1230,12 @@ func (h *GroupHandler) UpdateAgentModel(c *gin.Context) {
 	if req.Enabled != nil {
 		enabled = *req.Enabled
 	}
-	cfg, err := h.agentModels.UpdateModel(c.Request.Context(), groupID, modelID, service.AgentModelConfigInput{MediaType: req.MediaType, Enabled: enabled, Prices: req.Prices})
+	cfg, err := h.agentModels.UpdateModel(c.Request.Context(), groupID, modelID, service.AgentModelConfigInput{
+		MediaType:      req.MediaType,
+		Enabled:        enabled,
+		Prices:         req.Prices,
+		RateMultiplier: req.RateMultiplier,
+	})
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

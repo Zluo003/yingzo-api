@@ -54,7 +54,8 @@ SET available = CASE WHEN agent_group_models.excluded THEN FALSE ELSE TRUE END,
 func (r *agentModelRepository) ListModels(ctx context.Context, groupID int64, includeExcluded bool) ([]service.AgentGroupModel, error) {
 	query := `
 SELECT id, group_id, platform, model_code, media_type, enabled, available,
-       excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at
+       excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at,
+       rate_multiplier
 FROM agent_group_models
 WHERE group_id = $1`
 	if !includeExcluded {
@@ -88,7 +89,8 @@ WHERE group_id = $1`
 func (r *agentModelRepository) GetModelByID(ctx context.Context, groupID, modelID int64) (*service.AgentGroupModel, error) {
 	row := r.db.QueryRowContext(ctx, `
 SELECT id, group_id, platform, model_code, media_type, enabled, available,
-       excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at
+       excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at,
+       rate_multiplier
 FROM agent_group_models
 WHERE group_id = $1 AND id = $2
 `, groupID, modelID)
@@ -107,7 +109,8 @@ WHERE group_id = $1 AND id = $2
 func (r *agentModelRepository) GetEnabledModel(ctx context.Context, groupID int64, platform, modelCode string) (*service.AgentGroupModel, error) {
 	row := r.db.QueryRowContext(ctx, `
 SELECT id, group_id, platform, model_code, media_type, enabled, available,
-       excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at
+       excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at,
+       rate_multiplier
 FROM agent_group_models
 WHERE group_id = $1 AND platform = $2 AND model_code = $3
   AND enabled = TRUE AND available = TRUE AND excluded = FALSE
@@ -124,7 +127,7 @@ WHERE group_id = $1 AND platform = $2 AND model_code = $3
 	return model, nil
 }
 
-func (r *agentModelRepository) UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, prices []service.AgentModelPrice) error {
+func (r *agentModelRepository) UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, prices []service.AgentModelPrice) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -133,9 +136,9 @@ func (r *agentModelRepository) UpdateModelConfig(ctx context.Context, groupID, m
 
 	result, err := tx.ExecContext(ctx, `
 UPDATE agent_group_models
-SET media_type = $3, enabled = $4, updated_at = NOW()
+SET media_type = $3, enabled = $4, rate_multiplier = $5, updated_at = NOW()
 WHERE group_id = $1 AND id = $2 AND excluded = FALSE
-`, groupID, modelID, mediaType, enabled)
+`, groupID, modelID, mediaType, enabled, rateMultiplier)
 	if err != nil {
 		return err
 	}
@@ -190,51 +193,6 @@ WHERE group_id = $1 AND id = $2 AND excluded = FALSE
 	return tx.Commit()
 }
 
-func (r *agentModelRepository) ListPlatformRates(ctx context.Context, groupID int64) ([]service.AgentPlatformRate, error) {
-	rows, err := r.db.QueryContext(ctx, `
-SELECT group_id, platform, rate_multiplier, created_at, updated_at
-FROM agent_platform_rates
-WHERE group_id = $1
-ORDER BY platform
-`, groupID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	rates := make([]service.AgentPlatformRate, 0)
-	for rows.Next() {
-		var rate service.AgentPlatformRate
-		if err := rows.Scan(&rate.GroupID, &rate.Platform, &rate.RateMultiplier, &rate.CreatedAt, &rate.UpdatedAt); err != nil {
-			return nil, err
-		}
-		rates = append(rates, rate)
-	}
-	return rates, rows.Err()
-}
-
-func (r *agentModelRepository) UpsertPlatformRate(ctx context.Context, groupID int64, platform string, multiplier float64) error {
-	_, err := r.db.ExecContext(ctx, `
-INSERT INTO agent_platform_rates (group_id, platform, rate_multiplier)
-VALUES ($1, $2, $3)
-ON CONFLICT (group_id, platform) DO UPDATE
-SET rate_multiplier = EXCLUDED.rate_multiplier, updated_at = NOW()
-`, groupID, platform, multiplier)
-	return err
-}
-
-func (r *agentModelRepository) GetPlatformRate(ctx context.Context, groupID int64, platform string) (*service.AgentPlatformRate, error) {
-	var rate service.AgentPlatformRate
-	err := r.db.QueryRowContext(ctx, `
-SELECT group_id, platform, rate_multiplier, created_at, updated_at
-FROM agent_platform_rates
-WHERE group_id = $1 AND platform = $2
-`, groupID, platform).Scan(&rate.GroupID, &rate.Platform, &rate.RateMultiplier, &rate.CreatedAt, &rate.UpdatedAt)
-	if err != nil {
-		return nil, err
-	}
-	return &rate, nil
-}
-
 type agentModelScanner interface {
 	Scan(dest ...any) error
 }
@@ -242,6 +200,7 @@ type agentModelScanner interface {
 func scanAgentGroupModel(scanner agentModelScanner) (*service.AgentGroupModel, error) {
 	var model service.AgentGroupModel
 	var excludedAt sql.NullTime
+	var rateMultiplier sql.NullFloat64
 	if err := scanner.Scan(
 		&model.ID,
 		&model.GroupID,
@@ -256,11 +215,16 @@ func scanAgentGroupModel(scanner agentModelScanner) (*service.AgentGroupModel, e
 		&model.LastSeenAt,
 		&model.CreatedAt,
 		&model.UpdatedAt,
+		&rateMultiplier,
 	); err != nil {
 		return nil, err
 	}
 	if excludedAt.Valid {
 		model.ExcludedAt = &excludedAt.Time
+	}
+	if rateMultiplier.Valid {
+		rate := rateMultiplier.Float64
+		model.RateMultiplier = &rate
 	}
 	model.Prices = []service.AgentModelPrice{}
 	return &model, nil

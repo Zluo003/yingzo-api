@@ -6,6 +6,7 @@ export default {
     fileService: '文件服务',
     modelPlaza: '模型广场',
     apiDocs: '接口文档',
+    yingzoAgent: 'Yingzo Agent',
   },
   apiDocs: {
     title: '接口文档',
@@ -61,6 +62,67 @@ export default {
     },
   },
   admin: {
+    yingzoAgent: {
+      title: 'Yingzo Agent',
+      description:
+        '系统内置的多模型聚合分组：把账号归属到该分组即可让 Yingzo Agent 调用这些账号提供的模型，再按文本/图片/视频分别配置计价。该分组不可删除。',
+      systemBadge: '系统内置',
+      systemGroupNotDeletable: '系统内置聚合分组，不可删除',
+      sync: '同步模型目录',
+      syncing: '同步中…',
+      saveChanges: '保存修改',
+      reset: '放弃修改',
+      empty: '该分区暂无模型。先给 Yingzo Agent 分组绑定账号，然后点「同步模型目录」。',
+      ratePlaceholder: '倍率',
+      pricePlaceholder: '单价',
+      aggregationHint:
+        '在「账号管理」里把账号的分组改为 Yingzo Agent，即可把它提供的模型聚合进来（OpenAI / Anthropic / Gemini / Grok / DeepSeek / GLM / Kimi / MiniMax / 视频）。移出分组后对应模型会标记为不可用（配置与价格会保留，重新加入即恢复）。',
+      manageAccounts: '去账号管理设置归属 →',
+      sourceUnavailableHint: '分组内已没有可用账号提供该模型；重新加入账号后会自动恢复。',
+      loadFailed: '加载 Yingzo Agent 配置失败',
+      groupMissing: '未找到系统内置的 Yingzo Agent 分组（应有迁移种入，kind=agent / system_code=yingzo）',
+      syncSuccess: '已同步，共 {count} 个模型',
+      syncFailed: '同步模型目录失败',
+      saveSuccess: '已保存',
+      saveFailed: '保存失败',
+      deleteSuccess: '已排除模型 {model}',
+      deleteFailed: '排除模型失败',
+      summary: {
+        group: '分组',
+        status: '状态',
+        accounts: '可用账号 / 全部账号',
+        models: '已启用模型 / 全部模型',
+        aggregation: '聚合方式',
+      },
+      columns: {
+        model: '模型',
+        platform: '平台',
+        source: '来源',
+        enabled: '启用',
+        rateMultiplier: '倍率（源渠道价 × 倍率）',
+        pricePerImage: '{resolution} 每张单价',
+        pricePerSecond: '{resolution} 每秒单价',
+        actions: '操作',
+      },
+      source: {
+        available: '账号可用',
+        unavailable: '账号已移出',
+      },
+      tabs: {
+        text: {
+          title: '文本模型',
+          hint: '文本按「账号所属源分组的渠道价 × 该模型倍率」计费；倍率留空表示未定价，该模型不可被调用。',
+        },
+        image: {
+          title: '图片模型',
+          hint: '图片按张计费：为每个模型填写 1K/2K/4K 每张单价，留空的档位视为未定价。',
+        },
+        video: {
+          title: '视频模型',
+          hint: '视频按「生成秒数 × 每秒单价」计费：为每个模型填写各分辨率的每秒单价；参考视频秒数不计费。',
+        },
+      },
+    },
     groups: {
       description: '管理标准分组、系统 Agent 路由和费率配置',
       columns: {

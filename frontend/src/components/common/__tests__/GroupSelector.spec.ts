@@ -20,6 +20,35 @@ const mountSelector = (modelValue: number[] = []) => mount(GroupSelector, {
   global: { stubs: { GroupBadge: { props: ['name'], template: '<span>{{ name }}</span>' }, Icon: true } }
 })
 
+describe('GroupSelector platform binding policy', () => {
+  beforeEach(() => { authState.isSimpleMode = false })
+
+  const platformGroups = [
+    { id: 1, name: 'OpenAI 分组', platform: 'openai', status: 'active' },
+    { id: 2, name: 'Yingzo Agent', platform: 'openai', status: 'active', kind: 'agent', system_code: 'yingzo' },
+    { id: 3, name: 'Deepseek 分组', platform: 'deepseek', status: 'active' }
+  ] as any
+
+  const mountFor = (platform: string) => mount(GroupSelector, {
+    props: { modelValue: [], groups: platformGroups, platform },
+    global: { stubs: { GroupBadge: { props: ['name'], template: '<span>{{ name }}</span>' }, Icon: true } }
+  })
+
+  it('offers the built-in aggregate group to every platform', () => {
+    // 聚合分组的 platform 只是占位：任何平台的账号都应该能绑进来，
+    // 否则不同 provider 的账号根本进不了这个分组。
+    for (const platform of ['openai', 'anthropic', 'gemini', 'video', 'deepseek']) {
+      expect(mountFor(platform).text()).toContain('Yingzo Agent')
+    }
+  })
+
+  it('still hides unrelated platform groups', () => {
+    const wrapper = mountFor('deepseek')
+    expect(wrapper.text()).toContain('Deepseek 分组')
+    expect(wrapper.text()).not.toContain('OpenAI 分组')
+  })
+})
+
 describe('GroupSelector simple-mode binding policy', () => {
   beforeEach(() => { authState.isSimpleMode = false })
 

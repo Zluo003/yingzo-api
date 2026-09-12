@@ -69,7 +69,7 @@ const authStore = useAuthStore()
 
 interface Props {
   modelValue: number[]
-  groups: (Group & { account_count?: number })[]
+  groups: (Group & { account_count?: number; kind?: string; system_code?: string })[]
   platform?: GroupPlatform // Optional platform filter
   mixedScheduling?: boolean // For antigravity accounts: allow anthropic/gemini groups
   searchable?: boolean | 'auto'
@@ -84,6 +84,11 @@ const emit = defineEmits<{
 
 const searchText = ref('')
 
+/** 系统内置聚合分组：kind=agent 且带 system_code（后端拒绝删除）。 */
+function isSystemAgentGroup(group: { kind?: string; system_code?: string }): boolean {
+  return group.kind === 'agent' && Boolean(group.system_code)
+}
+
 const isSearchable = computed(() => {
   if (props.searchable === 'auto') return props.groups.length > 5
   return props.searchable
@@ -95,14 +100,18 @@ const filteredGroups = computed(() => {
     ? props.groups.filter((g) => g.platform !== 'composite')
     : props.groups
   if (props.platform) {
+    // 系统内置聚合分组（Yingzo Agent）的 platform 只是占位：它按入口协议聚合
+    // openai/anthropic/gemini/video 多个 provider 的账号，平台匹配规则不适用，
+    // 必须始终可选，否则不同平台的账号根本绑不进这个分组。
+    const bindable = (g: (typeof result)[number]) =>
+      isSystemAgentGroup(g) || g.platform === props.platform || g.platform === 'composite'
     // antigravity 账户启用混合调度后，可选择 anthropic/gemini 分组
     if (props.platform === 'antigravity' && props.mixedScheduling) {
       result = result.filter(
-        (g) => g.platform === 'antigravity' || g.platform === 'anthropic' || g.platform === 'gemini' || g.platform === 'composite'
+        (g) => isSystemAgentGroup(g) || g.platform === 'antigravity' || g.platform === 'anthropic' || g.platform === 'gemini' || g.platform === 'composite'
       )
     } else {
-      // 默认：只能选择同 platform 的分组；composite 分组可接收任意具体平台账号
-      result = result.filter((g) => g.platform === props.platform || g.platform === 'composite')
+      result = result.filter(bindable)
     }
   }
   if (isSearchable.value && searchText.value) {

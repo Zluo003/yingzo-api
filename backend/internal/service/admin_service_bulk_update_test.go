@@ -595,3 +595,26 @@ func TestAdminServiceBulkUpdateAccounts_ValidatesFilterResolvedOpenAITargets(t *
 	require.Equal(t, []int64{7}, repo.getByIDsIDs)
 	require.Zero(t, repo.bulkUpdateCalls)
 }
+
+// 系统内置聚合分组（Yingzo Agent）本来就要混合 Anthropic / Antigravity 账号，
+// 混渠道检查必须跳过它，否则第二个渠道的账号根本加不进这个分组。
+func TestAdminService_CheckMixedChannelRiskSkipsSystemAgentGroup(t *testing.T) {
+	const agentGroupID = int64(77)
+	repo := &accountRepoStubForBulkUpdate{listByGroupData: map[int64][]Account{
+		agentGroupID: {{ID: 5, Platform: PlatformAntigravity}},
+	}}
+	svc := &adminServiceImpl{
+		accountRepo: repo,
+		groupRepo: &groupRepoStub{getByID: &Group{
+			ID: agentGroupID, Name: "Yingzo Agent", Platform: PlatformOpenAI,
+			Kind: "agent", SystemCode: "yingzo",
+		}},
+	}
+
+	require.NoError(t, svc.checkMixedChannelRisk(context.Background(), 0, PlatformAnthropic, []int64{agentGroupID}))
+
+	// 对照组：同样的账号组合落在普通分组上仍按原规则报混渠道。
+	svc.groupRepo = &groupRepoStub{getByID: &Group{ID: agentGroupID, Name: "anthropic-group", Platform: PlatformAnthropic}}
+	var mixed *MixedChannelError
+	require.ErrorAs(t, svc.checkMixedChannelRisk(context.Background(), 0, PlatformAnthropic, []int64{agentGroupID}), &mixed)
+}

@@ -57,9 +57,13 @@ type APIKeyAuthUserSnapshot struct {
 
 // APIKeyAuthGroupSnapshot 分组快照
 type APIKeyAuthGroupSnapshot struct {
-	ID                              int64                         `json:"id"`
-	Name                            string                        `json:"name"`
-	Platform                        string                        `json:"platform"`
+	ID       int64  `json:"id"`
+	Name     string `json:"name"`
+	Platform string `json:"platform"`
+	// Kind/SystemCode 标记系统内置 Agent 分组；必须随快照缓存，否则命中认证
+	// 缓存的请求拿到的 Group 不是 Agent 分组，Agent 计价与路由全部失效。
+	Kind                            string                        `json:"kind,omitempty"`
+	SystemCode                      string                        `json:"system_code,omitempty"`
 	IsExclusive                     bool                          `json:"is_exclusive"`
 	Status                          string                        `json:"status"`
 	SubscriptionType                string                        `json:"subscription_type"`

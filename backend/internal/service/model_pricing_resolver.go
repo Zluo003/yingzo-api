@@ -61,13 +61,6 @@ func (r *ModelPricingResolver) SetAgentModelCatalog(catalog *AgentModelCatalogSe
 	}
 }
 
-func (r *ModelPricingResolver) ResolveAgentPlatformRate(ctx context.Context, groupID int64, platform string) (float64, error) {
-	if r == nil || r.agentModelCatalog == nil {
-		return 0, ErrAgentPlatformRateUnavailable
-	}
-	return r.agentModelCatalog.ResolvePlatformRate(ctx, groupID, platform)
-}
-
 func (r *ModelPricingResolver) ResolveAgentMediaUnitPrice(ctx context.Context, groupID int64, platform, mediaType, resolution string, models ...string) (float64, string, error) {
 	if r == nil || r.agentModelCatalog == nil {
 		return 0, "", ErrAgentModelCatalogUnavailable

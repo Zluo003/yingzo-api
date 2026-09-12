@@ -51,15 +51,20 @@ func (h *AgentHandler) GetAgentPricingSnapshot(c *gin.Context) {
 		return
 	}
 	rules := make([]agentPricingSnapshotRule, 0)
-	for _, rate := range config.PlatformRates {
-		rules = append(rules, agentPricingSnapshotRule{
-			Model: "*", Platform: rate.Platform, MediaType: service.AgentMediaTypeText,
-			UnitKind: "channel_price_multiplier", UnitPrice: 1,
-			BillingMultiplier: rate.RateMultiplier, EffectiveUnitPrice: rate.RateMultiplier,
-		})
-	}
 	for _, model := range config.Models {
-		if !model.Enabled || !model.Available || model.Excluded || model.MediaType == service.AgentMediaTypeText {
+		if !model.Enabled || !model.Available || model.Excluded {
+			continue
+		}
+		// 文本模型：每模型一个倍率，作用在该账号所属源分组的渠道价之上。
+		if model.MediaType == service.AgentMediaTypeText {
+			if model.RateMultiplier == nil {
+				continue
+			}
+			rules = append(rules, agentPricingSnapshotRule{
+				Model: model.ModelCode, Platform: model.Platform, MediaType: service.AgentMediaTypeText,
+				UnitKind: "channel_price_multiplier", UnitPrice: 1,
+				BillingMultiplier: *model.RateMultiplier, EffectiveUnitPrice: *model.RateMultiplier,
+			})
 			continue
 		}
 		for _, price := range model.Prices {

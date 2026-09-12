@@ -13,7 +13,6 @@ import (
 // pulling the full database repository into unit tests.
 type gatewayAgentModelRepoStub struct {
 	models []service.AgentGroupModel
-	rates  []service.AgentPlatformRate
 }
 
 func (r *gatewayAgentModelRepoStub) SyncDiscovered(context.Context, int64, []service.AgentModelDiscovery, time.Time) error {
@@ -35,22 +34,12 @@ func (r *gatewayAgentModelRepoStub) GetEnabledModel(_ context.Context, groupID i
 	}
 	return nil, sql.ErrNoRows
 }
-func (r *gatewayAgentModelRepoStub) UpdateModelConfig(context.Context, int64, int64, string, bool, []service.AgentModelPrice) error {
+func (r *gatewayAgentModelRepoStub) UpdateModelConfig(context.Context, int64, int64, string, bool, *float64, []service.AgentModelPrice) error {
 	return nil
 }
 func (r *gatewayAgentModelRepoStub) ExcludeModel(context.Context, int64, int64, time.Time) error {
 	return nil
 }
-func (r *gatewayAgentModelRepoStub) ListPlatformRates(context.Context, int64) ([]service.AgentPlatformRate, error) {
-	return append([]service.AgentPlatformRate(nil), r.rates...), nil
-}
-func (r *gatewayAgentModelRepoStub) UpsertPlatformRate(context.Context, int64, string, float64) error {
-	return nil
-}
-func (r *gatewayAgentModelRepoStub) GetPlatformRate(context.Context, int64, string) (*service.AgentPlatformRate, error) {
-	return nil, sql.ErrNoRows
-}
-
 func enabledGatewayAgentModel(platform, modelCode, mediaType string) service.AgentGroupModel {
 	return service.AgentGroupModel{
 		Platform: platform, ModelCode: modelCode, MediaType: mediaType,

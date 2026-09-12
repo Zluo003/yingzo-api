@@ -444,12 +444,13 @@ func (s *GeminiMessagesCompatService) hydrateSelectedAccount(ctx context.Context
 }
 
 func (s *GeminiMessagesCompatService) listSchedulableAccountsOnce(ctx context.Context, groupID *int64, platform string, hasForcePlatform bool) ([]Account, error) {
-	if s.schedulerSnapshot != nil {
+	if !isAgentGroupContext(ctx) && s.schedulerSnapshot != nil {
 		accounts, _, err := s.schedulerSnapshot.ListSchedulableAccounts(ctx, groupID, platform, hasForcePlatform)
 		return accounts, err
 	}
 
-	useMixedScheduling := platform == PlatformGemini && !hasForcePlatform
+	// 聚合分组不混入 antigravity：本次请求的 provider 已由入口协议确定。
+	useMixedScheduling := platform == PlatformGemini && !hasForcePlatform && !isAgentGroupContext(ctx)
 	queryPlatforms := []string{platform}
 	if useMixedScheduling {
 		queryPlatforms = []string{platform, PlatformAntigravity}

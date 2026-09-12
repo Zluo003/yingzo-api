@@ -24,12 +24,14 @@ func (s *agentPricingGroupRepoStub) GetByIDLite(context.Context, int64) (*servic
 	return &copy, nil
 }
 
-func newAgentPricingHandlerForTest(groupID int64, rates []service.AgentPlatformRate, models []service.AgentGroupModel) *AgentHandler {
+func newAgentPricingHandlerForTest(groupID int64, models []service.AgentGroupModel) *AgentHandler {
 	accounts := &gatewayModelsAccountRepoStub{byGroup: map[int64][]service.Account{}}
 	groups := &agentPricingGroupRepoStub{group: &service.Group{ID: groupID, Kind: "agent", SystemCode: "yingzo"}}
-	repo := &gatewayAgentModelRepoStub{models: models, rates: rates}
+	repo := &gatewayAgentModelRepoStub{models: models}
 	return &AgentHandler{agentModels: service.NewAgentModelCatalogService(accounts, groups, repo)}
 }
+
+func agentTextModelRate(rate float64) *float64 { return &rate }
 
 func agentPricingRequestContext(groupID int64) (*gin.Context, *httptest.ResponseRecorder) {
 	recorder := httptest.NewRecorder()
@@ -42,12 +44,16 @@ func agentPricingRequestContext(groupID int64) (*gin.Context, *httptest.Response
 	return c, recorder
 }
 
-func TestGetAgentPricingSnapshotUsesPlatformRatesAndPerModelMediaPrices(t *testing.T) {
+func TestGetAgentPricingSnapshotUsesPerModelTextRateAndMediaPrices(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	groupID := int64(9)
 	h := newAgentPricingHandlerForTest(groupID,
-		[]service.AgentPlatformRate{{GroupID: groupID, Platform: service.PlatformOpenAI, RateMultiplier: 2}},
 		[]service.AgentGroupModel{
+			{
+				ID: 3, GroupID: groupID, Platform: service.PlatformOpenAI, ModelCode: "gpt-text",
+				MediaType: service.AgentMediaTypeText, Enabled: true, Available: true,
+				RateMultiplier: agentTextModelRate(2), Prices: []service.AgentModelPrice{},
+			},
 			{
 				ID: 1, GroupID: groupID, Platform: service.PlatformOpenAI, ModelCode: "image-custom",
 				MediaType: service.AgentMediaTypeImage, Enabled: true, Available: true,
@@ -78,6 +84,7 @@ func TestGetAgentPricingSnapshotUsesPlatformRatesAndPerModelMediaPrices(t *testi
 	require.Len(t, snapshot.Rules, 5)
 
 	language := snapshot.Rules[0]
+	require.Equal(t, "gpt-text", language.Model)
 	require.Equal(t, service.PlatformOpenAI, language.Platform)
 	require.Equal(t, service.AgentMediaTypeText, language.MediaType)
 	require.Equal(t, "channel_price_multiplier", language.UnitKind)
@@ -99,7 +106,7 @@ func TestGetAgentPricingSnapshotUsesPlatformRatesAndPerModelMediaPrices(t *testi
 func TestGetAgentPricingSnapshotReturnsOnlyConfiguredPrices(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	groupID := int64(19)
-	h := newAgentPricingHandlerForTest(groupID, nil, []service.AgentGroupModel{{
+	h := newAgentPricingHandlerForTest(groupID, []service.AgentGroupModel{{
 		ID: 1, GroupID: groupID, Platform: service.PlatformOpenAI, ModelCode: "image-custom",
 		MediaType: service.AgentMediaTypeImage, Enabled: true, Available: true,
 		Prices: []service.AgentModelPrice{{Resolution: service.ImageBillingSize1K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0.1}},
@@ -118,12 +125,18 @@ func TestGetAgentPricingSnapshotAcceptsExplicitZeroPrices(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	groupID := int64(20)
 	h := newAgentPricingHandlerForTest(groupID,
-		[]service.AgentPlatformRate{{GroupID: groupID, Platform: service.PlatformGemini, RateMultiplier: 0}},
-		[]service.AgentGroupModel{{
-			ID: 1, GroupID: groupID, Platform: service.PlatformGemini, ModelCode: "image-free",
-			MediaType: service.AgentMediaTypeImage, Enabled: true, Available: true,
-			Prices: []service.AgentModelPrice{{Resolution: service.ImageBillingSize2K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0}},
-		}},
+		[]service.AgentGroupModel{
+			{
+				ID: 2, GroupID: groupID, Platform: service.PlatformGemini, ModelCode: "gemini-free-text",
+				MediaType: service.AgentMediaTypeText, Enabled: true, Available: true,
+				RateMultiplier: agentTextModelRate(0), Prices: []service.AgentModelPrice{},
+			},
+			{
+				ID: 1, GroupID: groupID, Platform: service.PlatformGemini, ModelCode: "image-free",
+				MediaType: service.AgentMediaTypeImage, Enabled: true, Available: true,
+				Prices: []service.AgentModelPrice{{Resolution: service.ImageBillingSize2K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0}},
+			},
+		},
 	)
 	c, recorder := agentPricingRequestContext(groupID)
 

@@ -166,6 +166,10 @@ type Group struct {
 // 注意：普通用户接口不得返回 model_routing/account_count/account_groups 等内部信息。
 type AdminGroup struct {
 	Group
+	// Kind/SystemCode 标识系统内置分组（kind=agent + system_code=yingzo）。
+	// 仅供管理端识别"哪个分组是系统内置、不可删除"，用户侧 DTO 不暴露。
+	Kind       string `json:"kind"`
+	SystemCode string `json:"system_code"`
 	// ForceOpenAIFast 是管理端请求策略，用户侧分组 DTO 无需暴露。
 	ForceOpenAIFast bool `json:"force_openai_fast"`
 	// FreeOpenAIFast 是管理端计费策略，用户侧分组 DTO 无需暴露。

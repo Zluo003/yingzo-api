@@ -1663,6 +1663,12 @@ func (s *adminServiceImpl) checkMixedChannelRisk(ctx context.Context, currentAcc
 
 	// 检查每个分组中的其他账号
 	for _, groupID := range groupIDs {
+		group, groupErr := s.groupRepo.GetByIDLite(ctx, groupID)
+		if groupErr == nil && group != nil && group.IsAgent() {
+			// 系统内置聚合分组（Yingzo Agent）的存在意义就是混合多个 provider 的
+			// 账号，Antigravity + Anthropic 混用在这里是预期状态，不是风险。
+			continue
+		}
 		accounts, err := s.accountRepo.ListByGroup(ctx, groupID)
 		if err != nil {
 			return fmt.Errorf("get accounts in group %d: %w", groupID, err)
@@ -1681,9 +1687,8 @@ func (s *adminServiceImpl) checkMixedChannelRisk(ctx context.Context, currentAcc
 
 			// 检测混合渠道
 			if currentPlatform != otherPlatform {
-				group, _ := s.groupRepo.GetByID(ctx, groupID)
 				groupName := fmt.Sprintf("Group %d", groupID)
-				if group != nil {
+				if groupErr == nil && group != nil {
 					groupName = group.Name
 				}
 

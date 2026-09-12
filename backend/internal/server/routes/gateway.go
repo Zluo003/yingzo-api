@@ -36,6 +36,7 @@ func RegisterGatewayRoutes(
 	endpointNorm := handler.InboundEndpointMiddleware()
 	compositeTarget := compositeTargetPlatformMiddleware(compositeResolver)
 	compositeGeminiTarget := compositeGeminiTargetPlatformMiddleware(compositeResolver)
+	agentModelPlatform := agentModelPlatformMiddleware(h.Agent.ModelCatalog())
 
 	// 未分组 Key 拦截中间件（按协议格式区分错误响应）
 	requireGroupAnthropic := middleware.RequireGroupAssignment(settingService, middleware.AnthropicErrorWriter)
@@ -43,9 +44,11 @@ func RegisterGatewayRoutes(
 	requireGroupGoogle := middleware.RequireGroupAssignment(settingService, middleware.GoogleErrorWriter)
 	groupModelAllowlist := middleware.GroupModelAllowlist()
 
+	// 聚合分组按"请求模型所属平台"分发，行为与该平台的独立分组保持一致：
+	// openai/grok 走 OpenAI 兼容链路，其余（含国产供应商）走 Gateway 链路。
 	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
-		if setAgentRequestPlatform(c, service.PlatformOpenAI) {
-			return true
+		if platform, ok := agentDispatchPlatform(c, service.PlatformOpenAI); ok {
+			return platform == service.PlatformOpenAI || platform == service.PlatformGrok
 		}
 		switch getGroupPlatform(c) {
 		case service.PlatformOpenAI, service.PlatformGrok:
@@ -55,15 +58,21 @@ func RegisterGatewayRoutes(
 		}
 	}
 	isOpenAIGatewayPlatform := func(c *gin.Context) bool {
-		if setAgentRequestPlatform(c, service.PlatformOpenAI) {
-			return true
+		if platform, ok := agentDispatchPlatform(c, service.PlatformOpenAI); ok {
+			return platform == service.PlatformOpenAI
 		}
 		return getGroupPlatform(c) == service.PlatformOpenAI
 	}
 	countTokensHandler := func(c *gin.Context) {
-		// 系统 Agent 分组固定走 Anthropic 计数路径。
-		if setAgentRequestPlatform(c, service.PlatformAnthropic) {
-			h.Gateway.CountTokens(c)
+		if platform, ok := agentDispatchPlatform(c, service.PlatformAnthropic); ok {
+			switch platform {
+			case service.PlatformOpenAI:
+				h.OpenAIGateway.CountTokens(c)
+			case service.PlatformGrok:
+				h.OpenAIGateway.GrokCountTokens(c)
+			default:
+				h.Gateway.CountTokens(c)
+			}
 			return
 		}
 		switch getGroupPlatform(c) {
@@ -83,10 +92,13 @@ func RegisterGatewayRoutes(
 		h.Gateway.Models(c)
 	}
 	isOpenAIOnlyEndpointGatewayPlatform := func(c *gin.Context) bool {
+		if platform, ok := agentDispatchPlatform(c, service.PlatformOpenAI); ok {
+			return platform == service.PlatformOpenAI
+		}
 		return getGroupPlatform(c) == service.PlatformOpenAI
 	}
 	imagesHandler := func(c *gin.Context) {
-		switch getGroupPlatform(c) {
+		switch agentOrGroupPlatform(c) {
 		case service.PlatformOpenAI:
 			h.OpenAIGateway.Images(c)
 		case service.PlatformGrok:
@@ -237,11 +249,16 @@ func RegisterGatewayRoutes(
 	gateway.GET("/sub2api/billing", h.Gateway.KeyBillingInfo)
 	gateway.Use(groupModelAllowlist)
 	gateway.Use(compositeTarget)
+	gateway.Use(agentModelPlatform)
 	gateway.Use(requireGroupAnthropic)
 	{
 		// /v1/messages: auto-route based on group platform
 		gateway.POST("/messages", func(c *gin.Context) {
-			if setAgentRequestPlatform(c, service.PlatformAnthropic) {
+			if platform, ok := agentDispatchPlatform(c, service.PlatformAnthropic); ok {
+				if service.IsOpenAICompatibleAgentPlatform(platform) {
+					h.OpenAIGateway.Messages(c)
+					return
+				}
 				h.Gateway.Messages(c)
 				return
 			}
@@ -398,6 +415,9 @@ func RegisterGatewayRoutes(
 	gemini.Use(endpointNorm)
 	gemini.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
 	gemini.Use(groupModelAllowlist)
+	// agentModelPlatform 必须早于 forceAgentPlatform：后者写入的强制平台取自
+	// agentDispatchPlatform，先解析出模型所属平台才能生效。
+	gemini.Use(agentModelPlatform)
 	gemini.Use(forceAgentPlatform(service.PlatformGemini))
 	gemini.Use(compositeGeminiTarget)
 	gemini.Use(requireGroupGoogle)
@@ -417,7 +437,7 @@ func RegisterGatewayRoutes(
 		h.Gateway.Responses(c)
 	}
 	rootRoute := func(method, path string, limit gin.HandlerFunc, handler gin.HandlerFunc) {
-		r.Handle(method, path, limit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, compositeTarget, requireGroupAnthropic, handler)
+		r.Handle(method, path, limit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), groupModelAllowlist, compositeTarget, agentModelPlatform, requireGroupAnthropic, handler)
 	}
 	rootRoute(http.MethodPost, "/responses", bodyLimit, responsesHandler)
 	rootRoute(http.MethodPost, "/responses/*subpath", bodyLimit, guardResponsesSubpath(responsesHandler))
@@ -588,17 +608,105 @@ func grokCustomVoiceEndpoint(c *gin.Context) string {
 	}
 	return endpoint
 }
+
+// agentOrGroupPlatform 返回分发用的平台：聚合分组取按模型解析出的平台，
+// 其余分组取分组自身的平台。
+func agentOrGroupPlatform(c *gin.Context) string {
+	if platform, ok := agentDispatchPlatform(c, service.PlatformOpenAI); ok {
+		return platform
+	}
+	return getGroupPlatform(c)
+}
+
 func isAgentGroup(c *gin.Context) bool {
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
 	return ok && apiKey.Group != nil && apiKey.Group.IsAgent()
 }
 
-func setAgentRequestPlatform(c *gin.Context, platform string) bool {
+// agentResolvedPlatformKey 保存入口中间件按请求模型解析出的平台。
+const agentResolvedPlatformKey = "agent_resolved_platform"
+
+// agentModelPlatformMiddleware 在聚合分组上按"请求模型所属平台"细化入口平台。
+//
+// 聚合分组用同一个凭证服务多个 provider，而协议只能给出一个默认平台
+// （/v1/chat/completions 默认 openai）。若不放宽到模型维度，绑定进来的
+// grok/国产账号永远不会被选中。模型未配置或查不到时保持协议默认行为，
+// 由后续的目录校验给出明确报错。
+func agentModelPlatformMiddleware(catalog *service.AgentModelCatalogService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		apiKey, ok := middleware.GetAPIKeyFromContext(c)
+		if !ok || apiKey == nil || apiKey.Group == nil || !apiKey.Group.IsAgent() || catalog == nil {
+			c.Next()
+			return
+		}
+		if model := agentRequestModel(c); model != "" && !c.IsAborted() {
+			if platform, found, err := catalog.ResolveModelPlatform(c.Request.Context(), apiKey.Group.ID, model); err == nil && found {
+				c.Set(agentResolvedPlatformKey, platform)
+			}
+		}
+		if c.IsAborted() {
+			return
+		}
+		c.Next()
+	}
+}
+
+// agentRequestModel 提取本次请求的目标模型：Gemini 走路径参数，其余读请求体
+// （含 multipart，视频请求的 model 在表单字段里）。读完必须把 body 还原给下游
+// handler；读失败则直接以 4xx 结束，绝不能把截断的 body 交给下游——
+// multipart 拿到半个 body 会变成"文件损坏"这类误导性报错。
+func agentRequestModel(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	if model := compositeGeminiModelFromParams(c); model != "" {
+		return model
+	}
+	if c.Request.Body == nil || c.Request.Method == http.MethodGet || c.Request.Method == http.MethodHead {
+		return ""
+	}
+	if strings.Contains(strings.ToLower(c.GetHeader("Upgrade")), "websocket") {
+		return ""
+	}
+	body, err := pkghttputil.ReadRequestBodyWithPrealloc(c.Request)
+	if err != nil {
+		status := http.StatusBadRequest
+		message := "Failed to read request body"
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			status = http.StatusRequestEntityTooLarge
+			message = "Request body is too large"
+		}
+		c.JSON(status, gin.H{"error": gin.H{"type": "invalid_request_error", "message": message}})
+		c.Abort()
+		return ""
+	}
+	model := strings.TrimSpace(requestmodel.FromBodyForRoute(c.FullPath(), c.GetHeader("Content-Type"), body))
+	requestmodel.ResetRequestBody(c.Request, body)
+	return model
+}
+
+// agentDispatchPlatform 解析聚合分组本次请求应当按哪个平台分发，并把结果同时写入
+// 强制平台与"已解析目标平台"：前者供调度选号（ForcePlatform 优先级最高），后者供
+// handler 判断上游协议形态（与 composite 分组同一套语义）。
+func agentDispatchPlatform(c *gin.Context, fallback string) (string, bool) {
 	if !isAgentGroup(c) {
-		return false
+		return "", false
+	}
+	platform := fallback
+	if resolved, ok := c.Get(agentResolvedPlatformKey); ok {
+		if value, ok := resolved.(string); ok && value != "" {
+			platform = value
+		}
 	}
 	middleware.SetForcePlatform(c, platform)
-	return true
+	c.Request = c.Request.WithContext(service.WithResolvedTargetPlatform(c.Request.Context(), platform))
+	return platform, true
+}
+
+func setAgentRequestPlatform(c *gin.Context, platform string) bool {
+	_, ok := agentDispatchPlatform(c, platform)
+	return ok
 }
 
 func forceAgentPlatform(platform string) gin.HandlerFunc {

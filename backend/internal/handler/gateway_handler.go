@@ -466,6 +466,20 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			// 账号槽位/等待计数需要在超时或断开时安全回收
 			accountReleaseFunc = wrapReleaseOnDone(c.Request.Context(), accountReleaseFunc)
 
+			// Agent 分组：价格 = 选中账号的源渠道价 × 该模型配置的倍率，缺一不可。
+			// 必须在转发前失败，避免这单既收不到钱又要付上游成本。
+			if apiKey.Group.IsAgent() {
+				if err := h.gatewayService.ValidateAgentLanguagePricing(c.Request.Context(), apiKey.Group, account, reqModel); err != nil {
+					if accountReleaseFunc != nil {
+						accountReleaseFunc()
+					}
+					reqLog.Warn("gateway.agent_pricing_unavailable",
+						zap.Int64("account_id", account.ID), zap.String("model", reqModel), zap.Error(err))
+					writeAgentPricingError(c, err)
+					return
+				}
+			}
+
 			// 转发请求 - 根据账号平台分流
 			var result *service.ForwardResult
 			requestCtx := c.Request.Context()
@@ -811,6 +825,20 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			// 账号槽位/等待计数需要在超时或断开时安全回收
 			accountReleaseFunc = wrapReleaseOnDone(c.Request.Context(), accountReleaseFunc)
+
+			// Agent 分组：价格 = 选中账号的源渠道价 × 该模型配置的倍率，缺一不可。
+			// 必须在转发前失败，避免这单既收不到钱又要付上游成本。
+			if currentAPIKey.Group.IsAgent() {
+				if err := h.gatewayService.ValidateAgentLanguagePricing(c.Request.Context(), currentAPIKey.Group, account, reqModel); err != nil {
+					if accountReleaseFunc != nil {
+						accountReleaseFunc()
+					}
+					reqLog.Warn("gateway.agent_pricing_unavailable",
+						zap.Int64("account_id", account.ID), zap.String("model", reqModel), zap.Error(err))
+					writeAgentPricingError(c, err)
+					return
+				}
+			}
 
 			// ===== 用户消息串行队列 START =====
 			var queueRelease func()
