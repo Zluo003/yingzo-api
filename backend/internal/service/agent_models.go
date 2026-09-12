@@ -531,7 +531,12 @@ func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
 			continue
 		}
 		mapping := account.GetModelMapping()
+		// 图片账号（账号管理里显式声明的）没有映射时不做内置清单兜底：它的模型清单
+		// 就是管理员勾选的那些图片模型，灌入平台默认文本模型毫无意义。
 		if len(mapping) == 0 {
+			if account.IsImageAccount() {
+				continue
+			}
 			for modelCode, descriptor := range defaults {
 				addAgentDiscovery(discovered, platform, modelCode, descriptor.mediaType)
 			}
@@ -540,6 +545,11 @@ func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
 		for requestedModel, upstreamModel := range mapping {
 			requestedModel = strings.TrimSpace(requestedModel)
 			if requestedModel == "" {
+				continue
+			}
+			// 图片账号声明的一切模型都是图片模型：不靠关键词猜类型。
+			if account.IsImageAccount() {
+				addAgentDiscovery(discovered, platform, requestedModel, AgentMediaTypeImage)
 				continue
 			}
 			if strings.Contains(requestedModel, "*") {

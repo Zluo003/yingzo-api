@@ -106,48 +106,96 @@
           </p>
         </div>
 
-        <!-- 图片模型：一行一个，公开名 → 上游模型名（留空表示同名） -->
+        <!-- 图片模型：直接从上游拉取模型清单勾选，勾中的就是这个账号提供的图片模型 -->
         <div class="mt-4">
-          <label class="input-label">{{ t('admin.accounts.image.models') }}</label>
-          <div class="mt-2 space-y-2">
-            <div
-              v-for="(mapping, index) in imageModelRows"
-              :key="index"
-              class="flex items-center gap-2"
+          <div class="flex items-center justify-between gap-2">
+            <label class="input-label">{{ t('admin.accounts.image.models') }}</label>
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              :disabled="imageModelsSyncing"
+              data-testid="image-model-fetch"
+              @click="fetchUpstreamImageModels"
             >
+              {{ imageModelsSyncing ? t('admin.accounts.image.fetching') : t('admin.accounts.image.fetchModels') }}
+            </button>
+          </div>
+
+          <p
+            v-if="imageModelsError"
+            class="mt-2 rounded-lg bg-amber-50 p-3 text-xs text-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+            data-testid="image-model-fetch-error"
+          >
+            {{ imageModelsError }}
+          </p>
+
+          <template v-if="upstreamImageModels.length > 0">
+            <div class="mt-2 flex items-center gap-2">
               <input
-                v-model="mapping.from"
+                v-model="imageModelFilter"
                 type="text"
                 class="input flex-1"
-                :data-testid="`image-model-name-${index}`"
-                :placeholder="t('admin.accounts.image.modelPlaceholder')"
-              />
-              <span class="text-gray-400">→</span>
-              <input
-                v-model="mapping.to"
-                type="text"
-                class="input flex-1"
-                :data-testid="`image-model-upstream-${index}`"
-                :placeholder="t('admin.accounts.image.upstreamPlaceholder')"
+                :placeholder="t('admin.accounts.image.filterPlaceholder')"
+                data-testid="image-model-filter"
               />
               <button
                 type="button"
-                class="text-red-500 hover:text-red-700"
-                :data-testid="`image-model-remove-${index}`"
-                @click="imageModelRows.splice(index, 1)"
+                class="text-xs text-primary-600 hover:underline dark:text-primary-400"
+                data-testid="image-model-select-all"
+                @click="selectAllUpstreamImageModels"
               >
-                <Icon name="trash" size="sm" />
+                {{ t('admin.accounts.image.selectAll') }}
+              </button>
+              <button
+                type="button"
+                class="text-xs text-gray-500 hover:underline dark:text-gray-400"
+                data-testid="image-model-clear-all"
+                @click="selectedImageModels = []"
+              >
+                {{ t('admin.accounts.image.clearAll') }}
               </button>
             </div>
+            <div
+              class="mt-2 max-h-64 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-dark-600"
+            >
+              <label
+                v-for="model in filteredUpstreamImageModels"
+                :key="model"
+                class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-dark-700"
+                :data-testid="`image-model-option-${model}`"
+              >
+                <input
+                  type="checkbox"
+                  :checked="selectedImageModels.includes(model)"
+                  @change="toggleImageModel(model)"
+                />
+                <span>{{ model }}</span>
+              </label>
+            </div>
+            <p class="input-hint">
+              {{ t('admin.accounts.image.selectedCount', { count: selectedImageModels.length }) }}
+            </p>
+          </template>
+
+          <!-- 兜底：上游没有模型清单接口时手动补一个模型名 -->
+          <div class="mt-2 flex items-center gap-2">
+            <input
+              v-model="manualImageModel"
+              type="text"
+              class="input flex-1"
+              :placeholder="t('admin.accounts.image.manualPlaceholder')"
+              data-testid="image-model-manual"
+              @keyup.enter="addManualImageModel"
+            />
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              data-testid="image-model-manual-add"
+              @click="addManualImageModel"
+            >
+              {{ t('admin.accounts.image.addModel') }}
+            </button>
           </div>
-          <button
-            type="button"
-            class="btn btn-secondary mt-2 text-sm"
-            data-testid="image-model-add-row"
-            @click="imageModelRows.push({ from: '', to: '' })"
-          >
-            + {{ t('admin.accounts.image.addModel') }}
-          </button>
           <p class="input-hint">{{ t('admin.accounts.image.modelsHint') }}</p>
         </div>
       </div>
@@ -4244,21 +4292,96 @@ const imagePlatformBaseUrls: Record<string, string> = {
   openai: 'https://api.openai.com',
   gemini: 'https://generativelanguage.googleapis.com',
 }
-/** 图片模型行：公开模型名 → 上游模型名（留空表示同名透传）。 */
-const imageModelRows = ref<{ from: string; to: string }[]>([{ from: '', to: '' }])
+/** 图片账号：上游模型清单（拉取结果）、勾选集合与过滤词。 */
+const upstreamImageModels = ref<string[]>([])
+const selectedImageModels = ref<string[]>([])
+const imageModelFilter = ref('')
+const manualImageModel = ref('')
+const imageModelsSyncing = ref(false)
+const imageModelsError = ref('')
+
+const filteredUpstreamImageModels = computed(() => {
+  const keyword = imageModelFilter.value.trim().toLowerCase()
+  if (!keyword) {
+    return upstreamImageModels.value
+  }
+  return upstreamImageModels.value.filter((model) => model.toLowerCase().includes(keyword))
+})
+
+/** 拉取上游模型清单：用表单里已填的连接信息预览，不必先建账号。 */
+async function fetchUpstreamImageModels(): Promise<void> {
+  if (imageModelsSyncing.value) {
+    return
+  }
+  const apiKey = apiKeyValue.value.trim()
+  if (!apiKey) {
+    imageModelsError.value = t('admin.accounts.pleaseEnterApiKey')
+    return
+  }
+  imageModelsSyncing.value = true
+  imageModelsError.value = ''
+  try {
+    const result = await adminAPI.accounts.syncUpstreamModelsPreview({
+      platform: form.platform,
+      type: 'apikey',
+      base_url: apiKeyBaseUrl.value.trim() || imagePlatformBaseUrls[form.platform],
+      api_key: apiKey,
+    })
+    const models = (result.models ?? []).map((model) => model.trim()).filter(Boolean)
+    if (models.length === 0) {
+      imageModelsError.value = t('admin.accounts.image.fetchEmpty')
+      return
+    }
+    upstreamImageModels.value = models
+  } catch (error: any) {
+    // 上游不提供模型清单接口时的兜底：提示管理员手动补模型名。
+    imageModelsError.value =
+      error?.message ?? error?.response?.data?.message ?? t('admin.accounts.image.fetchFailed')
+  } finally {
+    imageModelsSyncing.value = false
+  }
+}
+
+function toggleImageModel(model: string): void {
+  if (selectedImageModels.value.includes(model)) {
+    selectedImageModels.value = selectedImageModels.value.filter((item) => item !== model)
+    return
+  }
+  selectedImageModels.value = [...selectedImageModels.value, model]
+}
+
+function selectAllUpstreamImageModels(): void {
+  const merged = new Set([...selectedImageModels.value, ...filteredUpstreamImageModels.value])
+  selectedImageModels.value = [...merged]
+}
+
+function addManualImageModel(): void {
+  const name = manualImageModel.value.trim()
+  if (!name || selectedImageModels.value.includes(name)) {
+    manualImageModel.value = ''
+    return
+  }
+  selectedImageModels.value = [...selectedImageModels.value, name]
+  if (!upstreamImageModels.value.includes(name)) {
+    upstreamImageModels.value = [...upstreamImageModels.value, name].sort()
+  }
+  manualImageModel.value = ''
+}
 
 /**
- * 把"图片模型"输入区转成 credentials.model_mapping：
- * 公开名 → 上游模型名（上游名留空表示同名透传，中转站大多如此）。
+ * 图片账号的模型清单：从上游拉取后勾选（拉不到时支持手动补名字）。
+ *
+ * 勾选结果写成 credentials.model_mapping 的同名映射——下游名 = 上游名。需要改名的
+ * 场景（中转站把 gemini-3-pro-image 映射成 nano-banana-pro 之类）走账号编辑里的
+ * 映射表，不在建号这一步强制填。
  */
 function buildImageModelMapping(): Record<string, string> | null {
   const mapping: Record<string, string> = {}
-  for (const row of imageModelRows.value) {
-    const from = row.from.trim()
-    if (!from) {
-      continue
+  for (const model of selectedImageModels.value) {
+    const name = model.trim()
+    if (name) {
+      mapping[name] = name
     }
-    mapping[from] = row.to.trim() || from
   }
   return Object.keys(mapping).length > 0 ? mapping : null
 }
@@ -5109,9 +5232,11 @@ watch(
         if (!apiKeyBaseUrl.value.trim()) {
           apiKeyBaseUrl.value = imagePlatformBaseUrls.gemini
         }
-        if (imageModelRows.value.length === 0) {
-          imageModelRows.value = [{ from: '', to: '' }]
-        }
+        upstreamImageModels.value = []
+        selectedImageModels.value = []
+        imageModelFilter.value = ''
+        manualImageModel.value = ''
+        imageModelsError.value = ''
         // 默认绑定系统内置聚合分组：图片模型要进 Yingzo Agent 目录才能定价与分发。
         const agentGroup = props.groups.find(
           (group) => group.kind === 'agent' && group.system_code === 'yingzo'
@@ -5741,7 +5866,11 @@ const resetForm = () => {
   modelMappings.value = []
   openAICompactModelMappings.value = []
   modelRestrictionMode.value = isImageMode.value ? 'mapping' : 'whitelist'
-  imageModelRows.value = [{ from: '', to: '' }]
+  upstreamImageModels.value = []
+  selectedImageModels.value = []
+  imageModelFilter.value = ''
+  manualImageModel.value = ''
+  imageModelsError.value = ''
   // Default fill related models（视频模式用 Seedance 三档，避免灌入 Claude 模型）
   allowedModels.value = isVideoMode.value
     ? [...videoDefaultModels]
@@ -6306,7 +6435,11 @@ const handleSubmit = async () => {
         connect_timeout_ms: Number(videoConnectTimeoutMs.value) || videoProviderDefaults.value.connectTimeoutMs,
         ...(videoResolutionsExtra ? { video_model_resolutions: videoResolutionsExtra } : {}),
       }
-    : buildAnthropicExtra(buildOpenAIExtra())
+    : {
+        ...buildAnthropicExtra(buildOpenAIExtra()),
+        // 图片账号：目录发现时把这些账号的模型一律登记为图片类型（不靠模型名猜）。
+        ...(isImageMode.value ? { image_account: true } : {}),
+      }
 
   await doCreateAccount({
     ...form,

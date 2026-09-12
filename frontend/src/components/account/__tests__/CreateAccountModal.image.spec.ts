@@ -2,9 +2,10 @@ import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { createAccountMock, showErrorMock } = vi.hoisted(() => ({
+const { createAccountMock, showErrorMock, syncUpstreamPreviewMock } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
   showErrorMock: vi.fn(),
+  syncUpstreamPreviewMock: vi.fn(),
 }))
 
 vi.mock('@/stores/app', () => ({
@@ -23,6 +24,7 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       create: createAccountMock,
+      syncUpstreamModelsPreview: syncUpstreamPreviewMock,
       probeUpstreamBilling: vi.fn(),
       syncUpstreamModels: vi.fn(),
       checkMixedChannelRisk: vi.fn().mockResolvedValue({ has_risk: false }),
@@ -94,6 +96,9 @@ describe('CreateAccountModal image mode', () => {
   beforeEach(() => {
     createAccountMock.mockReset().mockResolvedValue({ id: 77 })
     showErrorMock.mockReset()
+    syncUpstreamPreviewMock.mockReset().mockResolvedValue({
+      models: ['gemini-3-pro-image', 'gemini-3.1-flash-image-preview', 'gemini-3-pro'],
+    })
   })
 
   it('only offers the two platforms that have standard image interfaces', async () => {
@@ -111,28 +116,76 @@ describe('CreateAccountModal image mode', () => {
     )
   })
 
-  it('writes the declared image models into the account model mapping', async () => {
+  it('fetches upstream models and writes the checked ones into the model mapping', async () => {
     const wrapper = await mountImageModal([agentGroup])
 
     await wrapper.get('form#create-account-form input[type="text"]').setValue('gemini image')
     await wrapper.get('form#create-account-form input[type="password"]').setValue('sk-image')
-    await wrapper.get('[data-testid="image-model-name-0"]').setValue('gemini-3-pro-image')
-    // 上游改名时，右边填真实上游模型名。
-    await wrapper.get('[data-testid="image-model-upstream-0"]').setValue('nano-banana-pro')
-    await wrapper.get('[data-testid="image-model-add-row"]').trigger('click')
-    await wrapper.get('[data-testid="image-model-name-1"]').setValue('gemini-3.1-flash-image-preview')
+    await wrapper.get('[data-testid="image-model-fetch"]').trigger('click')
+    await flushPromises()
+
+    // 拉取用的是表单里填的连接信息，不必先建账号。
+    expect(syncUpstreamPreviewMock).toHaveBeenCalledWith(
+      expect.objectContaining({ platform: 'gemini', type: 'apikey', api_key: 'sk-image' })
+    )
+
+    await wrapper.get('[data-testid="image-model-option-gemini-3-pro-image"] input').setValue(true)
+    await wrapper
+      .get('[data-testid="image-model-option-gemini-3.1-flash-image-preview"] input')
+      .setValue(true)
     await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()
 
     const payload = createAccountMock.mock.calls[0]?.[0]
     expect(payload.platform).toBe('gemini')
     expect(payload.type).toBe('apikey')
+    // 勾选即同名映射（下游名 = 上游名），图片账号不靠模型名猜类型。
     expect(payload.credentials.model_mapping).toEqual({
-      'gemini-3-pro-image': 'nano-banana-pro',
+      'gemini-3-pro-image': 'gemini-3-pro-image',
       'gemini-3.1-flash-image-preview': 'gemini-3.1-flash-image-preview',
     })
+    expect(payload.extra.image_account).toBe(true)
     // 默认绑定系统内置聚合分组：模型要进 Yingzo Agent 目录才能定价与分发。
     expect(payload.group_ids).toEqual([2])
+  })
+
+  it('allows selecting every fetched model at once', async () => {
+    const wrapper = await mountImageModal([agentGroup])
+
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('gemini image')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('sk-image')
+    await wrapper.get('[data-testid="image-model-fetch"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="image-model-select-all"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(Object.keys(createAccountMock.mock.calls[0]?.[0].credentials.model_mapping ?? {})).toEqual([
+      'gemini-3-pro-image',
+      'gemini-3.1-flash-image-preview',
+      'gemini-3-pro',
+    ])
+  })
+
+  it('falls back to a manually typed model when the upstream has no model list', async () => {
+    syncUpstreamPreviewMock.mockRejectedValueOnce(new Error('upstream failed'))
+    const wrapper = await mountImageModal([agentGroup])
+
+    await wrapper.get('form#create-account-form input[type="text"]').setValue('relay image')
+    await wrapper.get('form#create-account-form input[type="password"]').setValue('sk-relay')
+    await wrapper.get('[data-testid="image-model-fetch"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="image-model-fetch-error"]').text()).toBe('upstream failed')
+
+    await wrapper.get('[data-testid="image-model-manual"]').setValue('nano-banana-pro')
+    await wrapper.get('[data-testid="image-model-manual-add"]').trigger('click')
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+
+    expect(createAccountMock.mock.calls[0]?.[0].credentials.model_mapping).toEqual({
+      'nano-banana-pro': 'nano-banana-pro',
+    })
   })
 
   it('reports the declared models back to the caller for catalog sync', async () => {
@@ -141,7 +194,8 @@ describe('CreateAccountModal image mode', () => {
     await wrapper.get('form#create-account-form input[type="text"]').setValue('openai image')
     await wrapper.get('form#create-account-form input[type="password"]').setValue('sk-image')
     await wrapper.get('[data-testid="image-platform-openai"]').trigger('click')
-    await wrapper.get('[data-testid="image-model-name-0"]').setValue('gpt-image-2')
+    await wrapper.get('[data-testid="image-model-manual"]').setValue('gpt-image-2')
+    await wrapper.get('[data-testid="image-model-manual-add"]').trigger('click')
     await wrapper.get('form#create-account-form').trigger('submit.prevent')
     await flushPromises()
 

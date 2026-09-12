@@ -645,3 +645,50 @@ func TestAgentCatalogDiscoversImageModelsFromAccountMapping(t *testing.T) {
 	require.False(t, accounts.accounts[1].IsModelSupported("gemini-3-pro-image"))
 	require.True(t, accounts.accounts[0].IsModelSupported("gemini-3-pro-image"))
 }
+
+// 图片账号（账号管理「添加图片账号」）声明的模型一律按图片登记：模型名可能完全不带
+// image 关键词（中转站改名），靠关键词猜会猜成文本，价格口径就错了。
+func TestAgentCatalogTreatsImageAccountModelsAsImages(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{
+		{
+			ID: 1, Platform: PlatformGemini,
+			Extra: map[string]any{"image_account": true},
+			Credentials: map[string]any{"model_mapping": map[string]any{
+				"nano-banana-pro":  "nano-banana-pro",
+				"gemini-new-thing": "gemini-new-thing",
+			}},
+		},
+	}}
+	catalogService, _ := newAgentCatalogForTest(accounts)
+	config, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+
+	byCode := map[string]AgentGroupModel{}
+	for _, model := range config.Models {
+		byCode[model.ModelCode] = model
+	}
+	require.Len(t, byCode, 2)
+	for code, model := range byCode {
+		require.Equal(t, AgentMediaTypeImage, model.MediaType, "图片账号的 %s 必须是图片类型", code)
+	}
+
+	// 没有声明成图片账号的同一批模型仍按关键词判定，避免把普通账号误判成图片账号。
+	plain := &agentCatalogAccountRepoStub{accounts: []Account{{
+		ID: 2, Platform: PlatformGemini,
+		Credentials: map[string]any{"model_mapping": map[string]any{"gemini-new-thing": "gemini-new-thing"}},
+	}}}
+	plainCatalog, _ := newAgentCatalogForTest(plain)
+	plainConfig, err := plainCatalog.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	require.Len(t, plainConfig.Models, 1)
+	require.Equal(t, AgentMediaTypeText, plainConfig.Models[0].MediaType)
+
+	// 图片账号没有映射时不灌入平台默认文本清单。
+	empty := &agentCatalogAccountRepoStub{accounts: []Account{{
+		ID: 3, Platform: PlatformGemini, Extra: map[string]any{"image_account": true},
+	}}}
+	emptyCatalog, _ := newAgentCatalogForTest(empty)
+	emptyConfig, err := emptyCatalog.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	require.Empty(t, emptyConfig.Models)
+}

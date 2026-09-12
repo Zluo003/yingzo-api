@@ -2047,6 +2047,20 @@ func (a *Account) IsOveragesEnabled() bool {
 	return false
 }
 
+// IsImageAccount 返回该账号是否被声明为"图片账号"（账号管理的「添加图片账号」写入
+// extra.image_account）。
+//
+// 图片账号的模型清单全部按图片类型登记进聚合目录：这类账号本来就是为图片模型建的，
+// 模型名不一定带 -image 之类的关键词（中转站改名、新命名），靠关键词猜类型会猜错。
+// 它只影响聚合目录的媒体类型判定，不改动计费口径（图片仍按每张单价）。
+func (a *Account) IsImageAccount() bool {
+	if a == nil || a.Extra == nil {
+		return false
+	}
+	imageAccount, _ := a.Extra["image_account"].(bool)
+	return imageAccount
+}
+
 // IsOpenAIPassthroughEnabled 返回 OpenAI 账号是否启用"自动透传（仅替换认证）"。
 //
 // 新字段：accounts.extra.openai_passthrough。

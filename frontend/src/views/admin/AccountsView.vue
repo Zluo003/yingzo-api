@@ -2272,11 +2272,10 @@ const handleProbeUpstreamBilling = async (account: Account) => {
   }
 }
 /**
- * 图片账号创建成功后的收尾：把账号里声明的图片模型同步进 Yingzo Agent 目录。
+ * 图片账号创建成功后的收尾：同步一次 Yingzo Agent 目录，让刚声明的图片模型立刻出现。
  *
- * 目录只认"分组内账号的 model_mapping"，所以新建账号必须同步一次才会出现；
- * 目录里的媒体类型按模型名关键词推断，推断成文本的（自定义名字）在这里显式改成
- * 图片并保持未启用 —— 单价要管理员在 Yingzo Agent 页填，启用也是那一步的事。
+ * 媒体类型不用在这里纠正：账号带了 extra.image_account，目录发现时就直接登记为图片。
+ * 单价与启用仍然在 Yingzo Agent 页做（图片模型没有单价不允许启用）。
  */
 const handleImageAccountCreated = async (payload?: { imageModels?: string[] }) => {
   await reload()
@@ -2284,31 +2283,14 @@ const handleImageAccountCreated = async (payload?: { imageModels?: string[] }) =
   const agentGroup = groups.value.find(
     (group) => group.kind === 'agent' && group.system_code === 'yingzo'
   )
-  if (!agentGroup || declared.length === 0) {
+  if (!agentGroup) {
     return
   }
   try {
-    const config = await agentModelsAPI.syncAgentModels(agentGroup.id)
-    const byCode = new Map(config.models.map((model) => [model.model_code, model]))
-    let moved = 0
-    for (const modelCode of declared) {
-      const model = byCode.get(modelCode)
-      if (!model || model.media_type === 'image') {
-        continue
-      }
-      await agentModelsAPI.updateAgentModel(agentGroup.id, model.id, {
-        media_type: 'image',
-        enabled: false,
-      })
-      moved += 1
-    }
-    appStore.showSuccess(
-      t('admin.accounts.image.syncedToAgent', { count: declared.length, moved })
-    )
+    await agentModelsAPI.syncAgentModels(agentGroup.id)
+    appStore.showSuccess(t('admin.accounts.image.syncedToAgent', { count: declared.length }))
   } catch (error: any) {
-    appStore.showWarning(
-      error?.message ?? t('admin.accounts.image.syncToAgentFailed')
-    )
+    appStore.showWarning(error?.message ?? t('admin.accounts.image.syncToAgentFailed'))
   }
 }
 
