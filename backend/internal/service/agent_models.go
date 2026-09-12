@@ -517,9 +517,11 @@ func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
 				continue
 			}
 			if strings.Contains(requestedModel, "*") {
-				for modelCode, descriptor := range defaults {
+				// 通配符只能在本平台已知的模型清单里展开（无法凭空知道上游新模型），
+				// 展开时按族名重新判定类型，避免清单里的描述过时。
+				for modelCode := range defaults {
 					if matchWildcard(requestedModel, modelCode) {
-						addAgentDiscovery(discovered, platform, modelCode, descriptor.mediaType)
+						addAgentDiscovery(discovered, platform, modelCode, agentModelDescriptorForMapping(platform, modelCode, upstreamModel).mediaType)
 					}
 				}
 				continue
@@ -529,7 +531,8 @@ func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
 				descriptor, ok = defaults[strings.TrimSpace(upstreamModel)]
 			}
 			if !ok {
-				descriptor = defaultAgentModelDescriptorForID(platform, firstNonEmptyAgentModel(upstreamModel, requestedModel))
+				// 目录里没有的名字按族名猜类型：下游名与上游名都要看（上游常是别名）。
+				descriptor = agentModelDescriptorForMapping(platform, requestedModel, upstreamModel)
 			}
 			addAgentDiscovery(discovered, platform, requestedModel, descriptor.mediaType)
 		}
@@ -682,34 +685,83 @@ func defaultAgentModels(platform string) (map[string]agentModelDescriptor, bool)
 	return models, true
 }
 
-func defaultAgentModelDescriptorForID(platform, model string) agentModelDescriptor {
-	mediaType := AgentMediaTypeText
-	lower := strings.ToLower(strings.TrimSpace(model))
-	switch platform {
-	case PlatformOpenAI:
-		if strings.Contains(lower, "image") {
-			mediaType = AgentMediaTypeImage
-		}
-	case PlatformGemini:
-		if strings.Contains(lower, "image") || strings.Contains(lower, "imagen") {
-			mediaType = AgentMediaTypeImage
-		}
-	case PlatformZhipu:
-		// 智谱的图像模型叫 cogview 系列，名字里没有 "image"。
-		if strings.Contains(lower, "image") || strings.Contains(lower, "cogview") {
-			mediaType = AgentMediaTypeImage
-		}
-	case PlatformGrok:
-		if strings.Contains(lower, "image") {
-			mediaType = AgentMediaTypeImage
-		}
-		if strings.Contains(lower, "imagine") || strings.Contains(lower, "video") {
-			mediaType = AgentMediaTypeVideo
-		}
-	case PlatformVideo:
-		mediaType = AgentMediaTypeVideo
+// agentImageModelFamilies / agentVideoModelFamilies 是"模型族"关键词表：只写族名，
+// 不写版本号。上游出新版本（gemini-3.7-*-image、seedream-5、veo-4 …）时无需改代码，
+// 名字里带族名就会被归类。
+//
+// 这张表只用于**猜**媒体类型，猜错不会造成不可恢复的后果：管理端「Yingzo Agent」
+// 页可以逐模型改媒体类型（media_type 是目录里的字段），改完立即生效。
+var (
+	agentImageModelFamilies = []string{
+		"image",                 // gpt-image-*, gemini-*-image*, qwen-image*
+		"imagen",                // google imagen-*
+		"nano-banana", "banana", // Gemini 图像模型的社区叫法
+		"cogview", // 智谱
+		"dall-e", "dalle",
+		"flux",
+		"seedream", // 字节图像
+		"stable-diffusion", "sdxl",
+		"kolors", // 快手图像
+		"ideogram", "midjourney", "recraft",
 	}
-	return agentModelDescriptor{mediaType: mediaType}
+	agentVideoModelFamilies = []string{
+		"video",
+		"veo",                 // google
+		"sora",                // openai
+		"kling",               // 快手
+		"seedance",            // 字节
+		"hailuo", "minimax-h", // MiniMax
+		"wan-",    // 阿里通义万相视频
+		"imagine", // grok-imagine
+		"pika", "runway", "luma", "vidu",
+	}
+)
+
+// classifyAgentModelFamily 按族名关键词判断媒体类型，识别不出时返回空串。
+// 先看视频关键词：视频族里存在同时含 image 的名字（grok-imagine-video 之类），
+// 顺序反了会被误判成图片。
+func classifyAgentModelFamily(model string) string {
+	lower := strings.ToLower(strings.TrimSpace(model))
+	if lower == "" {
+		return ""
+	}
+	for _, keyword := range agentVideoModelFamilies {
+		if strings.Contains(lower, keyword) {
+			return AgentMediaTypeVideo
+		}
+	}
+	for _, keyword := range agentImageModelFamilies {
+		if strings.Contains(lower, keyword) {
+			return AgentMediaTypeImage
+		}
+	}
+	return ""
+}
+
+func defaultAgentModelDescriptorForID(platform, model string) agentModelDescriptor {
+	// 视频平台上的模型一律是视频模型（该平台的账号只提供视频能力）。
+	if normalizeAgentPlatform(platform) == PlatformVideo {
+		return agentModelDescriptor{mediaType: AgentMediaTypeVideo}
+	}
+	if family := classifyAgentModelFamily(model); family != "" {
+		return agentModelDescriptor{mediaType: family}
+	}
+	return agentModelDescriptor{mediaType: AgentMediaTypeText}
+}
+
+// agentModelDescriptorForMapping 判断一条账号映射该归到哪类模型。
+//
+// 两个名字都要看：下游名（requested，客户端看到的名字）与上游名（upstream，
+// 实际转发名）经常不一致——运营会把 gemini-3.1-flash-image-preview 映射到上游别名
+// （例如 nano-banana-pro），只看上游名就会把图片模型当成文本模型。任一侧命中族名
+// 即采纳该类型，两侧都没命中才按文本处理。
+func agentModelDescriptorForMapping(platform, requestedModel, upstreamModel string) agentModelDescriptor {
+	for _, candidate := range []string{requestedModel, upstreamModel} {
+		if family := classifyAgentModelFamily(candidate); family != "" {
+			return agentModelDescriptor{mediaType: family}
+		}
+	}
+	return defaultAgentModelDescriptorForID(platform, firstNonEmptyAgentModel(requestedModel, upstreamModel))
 }
 
 func addConfiguredAgentCatalogEntry(entries map[string]*agentModelCatalogAccumulator, model AgentGroupModel) {

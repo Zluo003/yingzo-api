@@ -191,6 +191,30 @@ describe('admin YingzoAgentView', () => {
     })
   })
 
+  it('lets the admin correct a mis-detected media type', async () => {
+    // 新模型（尤其带上游别名的 Gemini 图像模型）可能被识别成文本，页面必须能手工改。
+    getAgentModels.mockResolvedValue({
+      models: [
+        model({ id: 1, model_code: 'gemini-3-pro-image-preview', media_type: 'text', rate_multiplier: 1 }),
+      ],
+    })
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="yingzo-agent-media-type-1"]').setValue('image')
+    // 切成图片后立刻出现按张计价的档位输入，不必先保存再切页签。
+    expect(wrapper.find('[data-testid="yingzo-agent-price-1-1K"]').exists()).toBe(true)
+
+    await wrapper.get('[data-testid="yingzo-agent-price-1-1K"]').setValue('0.1')
+    await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
+    await flushPromises()
+
+    expect(updateAgentModel).toHaveBeenCalledWith(7, 1, {
+      media_type: 'image',
+      enabled: true,
+      prices: [{ resolution: '1K', unit_price: 0.1 }],
+    })
+  })
+
   it('offers the official resolutions for a known video model', async () => {
     const wrapper = await mountView()
 

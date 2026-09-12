@@ -97,6 +97,7 @@ export default {
       columns: {
         model: '模型',
         platform: '平台',
+        mediaType: '媒体类型',
         source: '来源',
         enabled: '启用',
         rateMultiplier: '倍率（源渠道价 × 倍率）',
@@ -108,6 +109,8 @@ export default {
         available: '账号可用',
         unavailable: '账号已移出',
       },
+      mediaType: { text: '文本', image: '图片', video: '视频' },
+      mediaTypeHint: '自动识别不准时可以在这里改，保存后立即生效（例如 Gemini 图像模型的别名映射）。',
       tabs: {
         text: {
           title: '文本模型',

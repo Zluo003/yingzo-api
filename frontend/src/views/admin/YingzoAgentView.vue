@@ -168,6 +168,7 @@
             <tr class="border-b border-gray-200 text-left text-xs text-gray-500 dark:border-dark-600 dark:text-gray-400">
               <th class="py-2 pr-3">{{ t('admin.yingzoAgent.columns.model') }}</th>
               <th class="py-2 pr-3">{{ t('admin.yingzoAgent.columns.platform') }}</th>
+              <th class="py-2 pr-3">{{ t('admin.yingzoAgent.columns.mediaType') }}</th>
               <th class="py-2 pr-3">{{ t('admin.yingzoAgent.columns.source') }}</th>
               <th class="py-2 pr-3">{{ t('admin.yingzoAgent.columns.enabled') }}</th>
               <template v-if="activeTab === 'text'">
@@ -201,6 +202,17 @@
               </td>
               <td class="py-2 pr-3 text-gray-500 dark:text-gray-400">{{ model.platform }}</td>
               <td class="py-2 pr-3">
+                <select
+                  v-model="drafts[model.id].mediaType"
+                  class="input w-24"
+                  :data-testid="`yingzo-agent-media-type-${model.id}`"
+                >
+                  <option value="text">{{ t('admin.yingzoAgent.mediaType.text') }}</option>
+                  <option value="image">{{ t('admin.yingzoAgent.mediaType.image') }}</option>
+                  <option value="video">{{ t('admin.yingzoAgent.mediaType.video') }}</option>
+                </select>
+              </td>
+              <td class="py-2 pr-3">
                 <span
                   v-if="model.available"
                   class="rounded bg-green-50 px-2 py-0.5 text-xs text-green-600 dark:bg-green-900/20 dark:text-green-400"
@@ -222,7 +234,7 @@
                   :data-testid="`yingzo-agent-enabled-${model.id}`"
                 />
               </td>
-              <template v-if="activeTab === 'text'">
+              <template v-if="drafts[model.id].mediaType === 'text'">
                 <td class="py-2 pr-3">
                   <input
                     v-model="drafts[model.id].rateMultiplier"
@@ -237,7 +249,7 @@
               </template>
               <template v-else>
                 <td
-                  v-for="resolution in resolutionColumnsFor(model)"
+                  v-for="resolution in resolutionColumnsForDraft(model)"
                   :key="resolution"
                   class="py-2 pr-3"
                 >
@@ -289,6 +301,8 @@ const IMAGE_RESOLUTIONS = ['1K', '2K', '4K']
 
 interface ModelDraft {
   enabled: boolean
+  /** 草稿里的媒体类型：目录识别不准时管理员可以在这里改，保存后立即生效。 */
+  mediaType: AgentMediaType
   rateMultiplier: string
   prices: Record<string, string>
 }
@@ -335,18 +349,22 @@ const resolutionColumns = computed(() => {
   }
   const union = new Set<string>()
   for (const model of modelsByTab.value.video) {
-    for (const resolution of resolutionColumnsFor(model)) {
+    for (const resolution of resolutionColumnsForType('video', model.model_code)) {
       union.add(resolution)
     }
   }
   return [...union]
 })
 
-function resolutionColumnsFor(model: AgentGroupModel): string[] {
-  if (model.media_type === 'image') {
+function resolutionColumnsForDraft(model: AgentGroupModel): string[] {
+  return resolutionColumnsForType(drafts[model.id]?.mediaType ?? model.media_type, model.model_code)
+}
+
+function resolutionColumnsForType(mediaType: AgentMediaType, modelCode: string): string[] {
+  if (mediaType === 'image') {
     return IMAGE_RESOLUTIONS
   }
-  const spec = VIDEO_MODEL_RESOLUTIONS.find((entry) => entry.model === model.model_code)
+  const spec = VIDEO_MODEL_RESOLUTIONS.find((entry) => entry.model === modelCode)
   // 账号 model_mapping 里自定义的视频模型不在官方清单里，回退到通用档位，
   // 否则这类模型永远配不出价格（启用后必然在请求时失败）。
   return spec ? spec.resolutions : ['480p', '720p', '1080p']
@@ -359,10 +377,10 @@ function isDirty(model: AgentGroupModel): boolean {
   if (!draft) {
     return false
   }
-  if (draft.enabled !== model.enabled) {
+  if (draft.enabled !== model.enabled || draft.mediaType !== model.media_type) {
     return true
   }
-  if (model.media_type === 'text') {
+  if (draft.mediaType === 'text') {
     return normalizeNumber(draft.rateMultiplier) !== (model.rate_multiplier ?? null)
   }
   const stored = new Map(model.prices.map((price) => [price.resolution, price.unit_price]))
@@ -397,7 +415,7 @@ function buildDrafts(): void {
   }
   for (const model of models.value) {
     const prices: Record<string, string> = {}
-    for (const resolution of resolutionColumnsFor(model)) {
+    for (const resolution of resolutionColumnsForType(model.media_type, model.model_code)) {
       prices[resolution] = ''
     }
     for (const price of model.prices) {
@@ -405,6 +423,7 @@ function buildDrafts(): void {
     }
     drafts[model.id] = {
       enabled: model.enabled,
+      mediaType: model.media_type,
       rateMultiplier: model.rate_multiplier === null ? '' : String(model.rate_multiplier),
       prices,
     }
@@ -461,7 +480,7 @@ async function syncModels(): Promise<void> {
 function buildPrices(model: AgentGroupModel): AgentModelPrice[] {
   const draft = drafts[model.id]
   const prices: AgentModelPrice[] = []
-  for (const resolution of resolutionColumnsFor(model)) {
+  for (const resolution of resolutionColumnsForDraft(model)) {
     const value = normalizeNumber(draft.prices[resolution])
     if (value === null) {
       continue
@@ -485,15 +504,16 @@ async function saveChanges(): Promise<void> {
         continue
       }
       const draft = drafts[model.id]
+      // 提交草稿里的媒体类型：管理员在页面上改过类型时，这一次保存就把它落库。
       const payload =
-        model.media_type === 'text'
+        draft.mediaType === 'text'
           ? {
-              media_type: model.media_type,
+              media_type: draft.mediaType,
               enabled: draft.enabled,
               rate_multiplier: normalizeNumber(draft.rateMultiplier),
             }
           : {
-              media_type: model.media_type,
+              media_type: draft.mediaType,
               enabled: draft.enabled,
               prices: buildPrices(model),
             }

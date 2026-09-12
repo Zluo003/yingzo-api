@@ -97,6 +97,7 @@ export default {
       columns: {
         model: 'Model',
         platform: 'Platform',
+        mediaType: 'Media type',
         source: 'Source',
         enabled: 'Enabled',
         rateMultiplier: 'Multiplier (channel price × multiplier)',
@@ -108,6 +109,8 @@ export default {
         available: 'Account available',
         unavailable: 'Account removed',
       },
+      mediaType: { text: 'Text', image: 'Image', video: 'Video' },
+      mediaTypeHint: 'Fix a wrong auto-detection here; it takes effect on save (e.g. Gemini image models behind an upstream alias).',
       tabs: {
         text: {
           title: 'Text models',

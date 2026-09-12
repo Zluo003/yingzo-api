@@ -508,3 +508,40 @@ func TestAgentTextModelRateIsNotResolvedForVideoOrUnknownPlatforms(t *testing.T)
 	_, _, err := catalogService.ResolveTextModelRate(context.Background(), 9, PlatformVideo, "seedance-2.5")
 	require.ErrorIs(t, err, ErrAgentModelRateUnavailable)
 }
+
+// 媒体类型识别按"模型族关键词 + 下游/上游两个名字"来判，既不写死版本号，也不被
+// 上游别名骗过去：Gemini 图像模型常被映射到 nano-banana-* 这类别名。
+func TestAgentModelMediaTypeClassificationUsesFamiliesAndBothNames(t *testing.T) {
+	cases := []struct {
+		name      string
+		requested string
+		upstream  string
+		want      string
+	}{
+		{name: "gemini 图片模型（显式名字）", requested: "gemini-3-pro-image", upstream: "gemini-3-pro-image", want: AgentMediaTypeImage},
+		{name: "gemini 图片模型 preview", requested: "gemini-3-pro-image-preview", upstream: "gemini-3-pro-image-preview", want: AgentMediaTypeImage},
+		{name: "gemini 图片模型 3.1", requested: "gemini-3.1-flash-image-preview", upstream: "gemini-3.1-flash-image-preview", want: AgentMediaTypeImage},
+		{name: "上游别名 nano-banana", requested: "gemini-3.1-flash-image-preview", upstream: "nano-banana-pro", want: AgentMediaTypeImage},
+		{name: "别名只看上游名也不误判", requested: "nano-banana-pro", upstream: "nano-banana-pro", want: AgentMediaTypeImage},
+		{name: "未来版本无需改代码", requested: "gemini-4.2-flash-image-preview", upstream: "gemini-4.2-flash-image-preview", want: AgentMediaTypeImage},
+		{name: "seedream 图像族", requested: "seedream-5", upstream: "seedream-5", want: AgentMediaTypeImage},
+		{name: "imagen 族", requested: "imagen-5", upstream: "imagen-5", want: AgentMediaTypeImage},
+		{name: "gpt-image 族仍是图片", requested: "gpt-image-3", upstream: "gpt-image-3", want: AgentMediaTypeImage},
+		{name: "veo 视频族", requested: "veo-4", upstream: "veo-4", want: AgentMediaTypeVideo},
+		{name: "grok imagine 视频族", requested: "grok-imagine-video-2", upstream: "grok-imagine-video-2", want: AgentMediaTypeVideo},
+		{name: "纯文本模型不受影响", requested: "gpt-5.4", upstream: "gpt-5.4", want: AgentMediaTypeText},
+		{name: "claude 文本模型不受影响", requested: "claude-sonnet-4-6", upstream: "claude-sonnet-4-6", want: AgentMediaTypeText},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := agentModelDescriptorForMapping(PlatformGemini, tc.requested, tc.upstream)
+			require.Equal(t, tc.want, got.mediaType)
+		})
+	}
+}
+
+// 视频平台的账号只提供视频能力，名字里没有 video 也一律按视频处理。
+func TestAgentVideoPlatformAlwaysClassifiesVideo(t *testing.T) {
+	require.Equal(t, AgentMediaTypeVideo,
+		defaultAgentModelDescriptorForID(PlatformVideo, "some-new-model").mediaType)
+}
