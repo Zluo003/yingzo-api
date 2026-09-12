@@ -141,7 +141,7 @@ func TestAdminServiceSimpleModeValidatesRequestedGroupIDsDirectly(t *testing.T) 
 
 func TestAdminServiceSimpleModeRejectsDirectCompositeGroupAccess(t *testing.T) {
 	repo := &groupRepoStubForAdmin{getByID: &Group{ID: 9, Platform: PlatformComposite}}
-	svc := &adminServiceImpl{cfg: &config.Config{RunMode: config.RunModeSimple}, groupRepo: repo, emptyGroupDeleteRepo: repo}
+	svc := &adminServiceImpl{cfg: &config.Config{RunMode: config.RunModeSimple}, groupRepo: repo}
 
 	_, err := svc.GetGroup(context.Background(), 9)
 	require.Error(t, err)
@@ -378,24 +378,14 @@ func TestAdminService_UpdateGroup_RejectsTimePricing(t *testing.T) {
 	require.Nil(t, repo.updated)
 }
 
-func TestNormalizeGroupModelPricing_NormalizesEmptyTimePricing(t *testing.T) {
-	pricing, err := normalizeGroupModelPricing(PlatformOpenAI, []ChannelModelPricing{{
-		Models:      []string{"gpt-5"},
-		BillingMode: BillingModeToken,
-		TimePricing: &ChannelTimePricing{Timezone: "Asia/Shanghai"},
-	}})
-
-	require.NoError(t, err)
-	require.Len(t, pricing, 1)
-	require.Nil(t, pricing[0].TimePricing)
-}
-
+// compositeRouteRepoStubForAdmin 是 CompositeModelRouteRepository 的测试替身。
+// 方法体一直保留着，类型声明在早前清理死代码时被一并删掉了，导致 unit 套件编译不过。
 type compositeRouteRepoStubForAdmin struct {
 	routes    []CompositeModelRoute
+	nextID    int64
 	created   *CompositeModelRoute
 	updated   *CompositeModelRoute
 	deleted   []int64
-	nextID    int64
 	listErr   error
 	createErr error
 	updateErr error

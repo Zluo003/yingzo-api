@@ -254,8 +254,10 @@ func (s *groupRepoStub) Create(ctx context.Context, group *Group) error {
 	panic("unexpected Create call")
 }
 
-func (s *groupRepoStub) GetByID(ctx context.Context, id int64) (*Group, error) {
-	panic("unexpected GetByID call")
+func (s *groupRepoStub) GetByID(_ context.Context, id int64) (*Group, error) {
+	// 删除流程会先读一次分组（用于校验与缓存失效）；返回一个最小可用的分组即可，
+	// 不再 panic——否则这些用例会以 panic 而不是断言失败的形式挂掉。
+	return &Group{ID: id, Name: "g", Platform: PlatformOpenAI}, nil
 }
 
 func (s *groupRepoStub) GetByIDLite(ctx context.Context, id int64) (*Group, error) {
@@ -711,7 +713,7 @@ func TestAdminService_DeleteGroup_Error(t *testing.T) {
 
 func TestAdminService_DeleteGroupIfEmpty_UsesGuardedCascade(t *testing.T) {
 	repo := &groupRepoStub{deleteErr: ErrGroupNotEmpty}
-	svc := &adminServiceImpl{groupRepo: repo, emptyGroupDeleteRepo: repo}
+	svc := &adminServiceImpl{groupRepo: repo}
 
 	err := svc.DeleteGroupIfEmpty(context.Background(), 42)
 	require.ErrorIs(t, err, ErrGroupNotEmpty)

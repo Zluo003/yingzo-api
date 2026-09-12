@@ -24,6 +24,24 @@ type agentPricingHandlerAccountRepo struct {
 	accounts []*service.Account
 }
 
+// ListModelAvailabilityCandidates 让无账号诊断器（classifyNoAccountError →
+// DiagnoseModelAvailabilityForPlatform）能在测试里正常工作。此前该方法靠内嵌的 nil
+// 接口占位，诊断器一调用就 panic。
+func (r *agentPricingHandlerAccountRepo) ListModelAvailabilityCandidates(
+	_ context.Context, _ *int64, platforms []string, _ bool,
+) ([]service.Account, error) {
+	out := make([]service.Account, 0, len(r.accounts))
+	for _, account := range r.accounts {
+		for _, platform := range platforms {
+			if account != nil && account.Platform == platform {
+				out = append(out, *account)
+				break
+			}
+		}
+	}
+	return out, nil
+}
+
 func (r *agentPricingHandlerAccountRepo) GetByID(_ context.Context, id int64) (*service.Account, error) {
 	for _, account := range r.accounts {
 		if account != nil && account.ID == id {

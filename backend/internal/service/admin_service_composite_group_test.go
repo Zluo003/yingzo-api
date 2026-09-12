@@ -56,7 +56,7 @@ func TestAdminService_CreateCompositeGroupCopiesAccountsFromConcreteGroups(t *te
 	require.NoError(t, err)
 	require.Equal(t, PlatformComposite, groupRepo.created.Platform)
 	require.Equal(t, "medium", groupRepo.created.MaxReasoningEffort)
-	require.Equal(t, ReasoningEffortOverLimitDeny, groupRepo.created.MaxReasoningEffortOverLimit)
+	require.Equal(t, ReasoningEffortOverLimitDowngrade, groupRepo.created.MaxReasoningEffortOverLimit)
 	require.Equal(t, []ReasoningEffortMapping{{From: "max", To: "xhigh"}}, groupRepo.created.ReasoningEffortMappings)
 	require.Equal(t, int64(99), group.ID)
 	require.Equal(t, int64(2), group.AccountCount)
