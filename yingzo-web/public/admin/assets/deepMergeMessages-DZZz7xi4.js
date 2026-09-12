@@ -1,0 +1,1 @@
+function s(e){return typeof e=="object"&&e!==null&&!Array.isArray(e)}function i(e,c){const n={...e};for(const[r,t]of Object.entries(c)){const o=n[r];if(s(o)&&s(t)){n[r]=i(o,t);continue}n[r]=t}return n}export{i as d};

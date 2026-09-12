@@ -191,6 +191,13 @@ const routes: RouteRecordRaw[] = [
     path: '/',
     redirect: '/home'
   },
+  // Keep the historical /admin/index.html entrypoint compatible with the
+  // base-prefixed Vue router. The static server serves this file directly,
+  // while Vue otherwise sees /index.html and would render its 404 view.
+  {
+    path: '/index.html',
+    redirect: '/admin/dashboard'
+  },
   {
     path: '/dashboard',
     name: 'Dashboard',

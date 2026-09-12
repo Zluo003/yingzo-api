@@ -1,4 +1,4 @@
-.PHONY: build build-backend build-frontend test test-backend test-frontend test-frontend-critical
+.PHONY: dev build build-backend build-frontend build-web dev-admin test test-backend test-frontend test-frontend-critical
 
 FRONTEND_CRITICAL_VITEST := \
 	src/i18n/__tests__/localeKeyCompleteness.spec.ts \
@@ -15,6 +15,17 @@ FRONTEND_CRITICAL_VITEST := \
 	src/features/channel-monitor-v2/__tests__/designSystem.structure.spec.ts \
 	src/features/channel-monitor-v2/__tests__/monitorFormat.spec.ts \
 	src/features/channel-monitor-v2/__tests__/monitorZoom.spec.ts
+
+# 默认用户前端：Yingzo Web。原 frontend/ 保留给管理端和兼容页面。
+dev:
+	@npm --prefix yingzo-web run dev -- --host 0.0.0.0 --port 4173
+
+build-web:
+	@npm --prefix yingzo-web run build
+
+# 旧管理端开发入口（不改管理页面）
+dev-admin:
+	@pnpm --dir frontend run dev -- --host 0.0.0.0 --port 5174
 
 # 一键编译前后端
 build: build-backend build-frontend

@@ -17,7 +17,16 @@ ARG GOSUMDB=sum.golang.google.cn
 # -----------------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS frontend-builder
 
-WORKDIR /app/frontend
+# Build the unchanged legacy admin frontend into /admin so administrator
+# sessions keep their existing UI while the root user experience uses yingzo-web.
+WORKDIR /app/legacy-frontend
+COPY frontend/package.json frontend/pnpm-lock.yaml ./
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --frozen-lockfile
+COPY frontend/ ./
+COPY docs/legal/ /app/docs/legal/
+RUN pnpm exec vite build --outDir /app/yingzo-web/public/admin --base /admin/
+
+WORKDIR /app/yingzo-web
 ENV NODE_OPTIONS=--max-old-space-size=1536
 
 # Install pnpm. Keep this pinned to the lockfile-compatible major version so
@@ -25,17 +34,16 @@ ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
 
 # Install dependencies first (better caching)
-COPY frontend/package.json frontend/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY yingzo-web/package.json yingzo-web/package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
 # Copy frontend source and build.
 # LegalDocumentView.vue (admin-compliance gate) build-time imports
 # ../../../../docs/legal/*.md?raw, so docs/legal/ must sit beside frontend/
-# in the image (WORKDIR /app/frontend -> resolves to /app/docs/legal/*.md).
+# in the image (WORKDIR /app/yingzo-web -> resolves to /app/docs/legal/*.md).
 # Copy only that subtree to keep the build dependency minimal.
-COPY frontend/ ./
-COPY docs/legal/ /app/docs/legal/
-RUN pnpm run build
+COPY yingzo-web/ ./
+RUN npm run build
 
 # -----------------------------------------------------------------------------
 # Stage 2: Backend Builder
@@ -65,7 +73,7 @@ RUN go mod download
 COPY backend/ ./
 
 # Copy frontend dist from previous stage (must be after backend copy to avoid being overwritten)
-COPY --from=frontend-builder /app/backend/internal/web/dist ./internal/web/dist
+COPY --from=frontend-builder /app/yingzo-web/dist/client ./internal/web/dist
 
 # Build the binary (BuildType=release for CI builds, embed frontend)
 # Version precedence: build arg VERSION > exact git tag > cmd/server/VERSION

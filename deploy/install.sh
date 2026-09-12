@@ -1,7 +1,8 @@
 #!/bin/bash
 #
-# Sub2API Installation Script
-# Sub2API 安装脚本
+# Yingzo API Installation Script
+# Yingzo API 安装脚本
+# The packaged server embeds yingzo-web as the default user frontend; the legacy frontend remains admin-only.
 # Usage: curl -sSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/install.sh | bash
 #
 
@@ -97,7 +98,7 @@ declare -A MSG_ZH=(
     ["step1_check_services"]="确保 PostgreSQL 和 Redis 正在运行："
     ["step2_start_service"]="启动 Sub2API 服务："
     ["step3_enable_autostart"]="设置开机自启："
-    ["step4_open_wizard"]="在浏览器中打开设置向导："
+    ["step4_open_wizard"]="在浏览器中打开 Yingzo Web 设置向导："
     ["wizard_guide"]="设置向导将引导您完成："
     ["wizard_db"]="数据库配置"
     ["wizard_redis"]="Redis 配置"
@@ -222,7 +223,7 @@ declare -A MSG_EN=(
     ["step1_check_services"]="Make sure PostgreSQL and Redis are running:"
     ["step2_start_service"]="Start Sub2API service:"
     ["step3_enable_autostart"]="Enable auto-start on boot:"
-    ["step4_open_wizard"]="Open the Setup Wizard in your browser:"
+    ["step4_open_wizard"]="Open the Yingzo Web setup wizard in your browser:"
     ["wizard_guide"]="The Setup Wizard will guide you through:"
     ["wizard_db"]="Database configuration"
     ["wizard_redis"]="Redis configuration"

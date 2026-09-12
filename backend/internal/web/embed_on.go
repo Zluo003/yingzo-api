@@ -99,6 +99,19 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 			cleanPath = "index.html"
 		}
 
+		// The legacy admin app uses history-mode routes such as
+		// /admin/dashboard. Those URLs do not exist as physical files, so
+		// return the admin entrypoint instead of falling through to Yingzo's
+		// root SPA. This also keeps an authenticated admin session intact on
+		// browser refreshes and direct navigation.
+		if strings.HasPrefix(cleanPath, "admin/") && !s.fileExists(cleanPath) {
+			if adminIndex, err := fs.ReadFile(s.distFS, "admin/index.html"); err == nil {
+				c.Data(http.StatusOK, "text/html; charset=utf-8", adminIndex)
+				c.Abort()
+				return
+			}
+		}
+
 		// For index.html or SPA routes, serve with injected settings
 		if cleanPath == "index.html" || !s.fileExists(cleanPath) {
 			s.serveIndexHTML(c)
@@ -112,6 +125,18 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 
 		// Serve static files normally (hashed assets get long-lived cache headers)
 		applyStaticAssetCacheHeaders(c.Writer.Header(), cleanPath)
+		// net/http.FileServer redirects paths ending in /index.html to ./.
+		// Keep the legacy admin entrypoint addressable directly so users and
+		// existing login redirects can use /admin/index.html without falling
+		// through to the new root SPA.
+		if strings.HasSuffix(cleanPath, "/index.html") {
+			content, err := fs.ReadFile(s.distFS, cleanPath)
+			if err == nil {
+				c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+				c.Abort()
+				return
+			}
+		}
 		s.fileServer.ServeHTTP(c.Writer, c.Request)
 		c.Abort()
 	}
