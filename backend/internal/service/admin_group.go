@@ -59,6 +59,17 @@ func (s *adminServiceImpl) GetAllGroupsIncludingInactive(ctx context.Context) ([
 	return groups, err
 }
 
+// sanitizeGroupOpenAIFast 在不支持的平台上强制关闭 fast 相关开关，避免分组换了平台
+// 之后还留着只有 OpenAI 才认识的配置。
+func sanitizeGroupOpenAIFast(group *Group) {
+	if group == nil || !groupSupportsOpenAIFast(group.Platform) {
+		if group != nil {
+			group.ForceOpenAIFast = false
+			group.FreeOpenAIFast = false
+		}
+	}
+}
+
 // validateSimpleModeGroupAccess 在 simple 模式下拒绝访问组合分组：simple 模式只服务
 // 基础分组，组合分组属于高级形态，列表里也不应出现。
 func (s *adminServiceImpl) validateSimpleModeGroupAccess(group *Group) error {
@@ -573,13 +584,14 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		WebSearchPricePerCall:           webSearchPricePerCall,
 		ClaudeCodeOnly:                  input.ClaudeCodeOnly,
 		ModelAllowlist:                  modelAllowlist,
+		ForceOpenAIFast:                 input.ForceOpenAIFast,
+		AllowLive:                       input.AllowLive,
 		FallbackGroupID:                 input.FallbackGroupID,
 		FallbackGroupIDOnInvalidRequest: fallbackOnInvalidRequest,
 		ModelRouting:                    input.ModelRouting,
 		MCPXMLInject:                    mcpXMLInject,
 		SupportedModelScopes:            input.SupportedModelScopes,
 		AllowMessagesDispatch:           input.AllowMessagesDispatch,
-		AllowLive:                       input.AllowLive,
 		RequireOAuthOnly:                input.RequireOAuthOnly,
 		RequirePrivacySet:               input.RequirePrivacySet,
 		DefaultMappedModel:              input.DefaultMappedModel,
@@ -593,6 +605,9 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		group.AllowLive = false
 	}
 	sanitizeGroupReasoningEffortPolicy(group)
+	// fast 模式开关按平台收口：anthropic/gemini 等平台不支持 fast。
+	sanitizeGroupOpenAIFast(group)
+
 	if err := s.groupRepo.Create(ctx, group); err != nil {
 		return nil, err
 	}
@@ -731,6 +746,17 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if err != nil {
 		return nil, err
 	}
+	if err := s.validateSimpleModeGroupAccess(group); err != nil {
+		return nil, err
+	}
+	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple && NormalizeGroupPlatform(input.Platform) == PlatformComposite {
+		return nil, infraerrors.BadRequest("SIMPLE_MODE_GROUP_NOT_BINDABLE", "composite groups are not supported in simple mode")
+	}
+	// 归一化必须早于任何字段校验：simple 模式会把高级字段整体丢弃，
+	// 若跑在校验之后，被丢弃字段的校验会先报错（peak_rate 就是这么暴露的）。
+	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
+		normalizeUpdateGroupInputForSimpleMode(input)
+	}
 	if group.IsAgent() {
 		if input.Platform != "" && input.Platform != group.Platform {
 			return nil, errors.New("system Agent group platform cannot be changed")
@@ -780,11 +806,18 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.SubscriptionType != "" {
 		group.SubscriptionType = input.SubscriptionType
 	}
-	// 限额字段：nil/负数 表示"无限制"，0 表示"不允许用量"，正数表示具体限额
-	// 前端始终发送这三个字段，无需 nil 守卫
-	group.DailyLimitUSD = normalizeLimit(input.DailyLimitUSD)
-	group.WeeklyLimitUSD = normalizeLimit(input.WeeklyLimitUSD)
-	group.MonthlyLimitUSD = normalizeLimit(input.MonthlyLimitUSD)
+	// 限额字段：负数表示"清除限额（无限制）"，0 表示"不允许用量"，正数表示具体限额。
+	// 只有显式传了才改：省略某个字段必须保持原值，否则"只改描述"这种部分更新会把
+	// 三个限额一起清空（管理端始终发送全部字段，因此对界面行为无影响）。
+	if input.DailyLimitUSD != nil {
+		group.DailyLimitUSD = normalizeLimit(input.DailyLimitUSD)
+	}
+	if input.WeeklyLimitUSD != nil {
+		group.WeeklyLimitUSD = normalizeLimit(input.WeeklyLimitUSD)
+	}
+	if input.MonthlyLimitUSD != nil {
+		group.MonthlyLimitUSD = normalizeLimit(input.MonthlyLimitUSD)
+	}
 	// 图片生成计费配置：负数表示清除（使用默认价格）
 	if input.AllowImageGeneration != nil {
 		group.AllowImageGeneration = *input.AllowImageGeneration
@@ -956,14 +989,14 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.DefaultMappedModel != nil {
 		group.DefaultMappedModel = *input.DefaultMappedModel
 	}
-	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple && NormalizeGroupPlatform(input.Platform) == PlatformComposite {
-		return nil, infraerrors.BadRequest("SIMPLE_MODE_GROUP_NOT_BINDABLE", "composite groups are not supported in simple mode")
-	}
-	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {
-		normalizeUpdateGroupInputForSimpleMode(input)
-	}
 	if input.MessagesDispatchModelConfig != nil {
 		group.MessagesDispatchModelConfig = normalizeOpenAIMessagesDispatchModelConfig(*input.MessagesDispatchModelConfig)
+	}
+	if input.ForceOpenAIFast != nil {
+		group.ForceOpenAIFast = *input.ForceOpenAIFast
+	}
+	if input.AllowLive != nil {
+		group.AllowLive = *input.AllowLive
 	}
 	if input.ModelAllowlist != nil {
 		modelAllowlist, err := normalizeGroupModelAllowlist(*input.ModelAllowlist)
