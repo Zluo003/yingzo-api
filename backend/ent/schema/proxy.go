@@ -73,9 +73,13 @@ func (Proxy) Edges() []ent.Edge {
 		// accounts: 使用此代理的账户（反向边）
 		edge.From("accounts", Account.Type).
 			Ref("proxy"),
-		edge.To("backup_proxy", Proxy.Type).
-			Field("backup_proxy_id").
-			Unique(),
+		// backup_proxy_id 刻意只作为普通字段（不建 edge）：
+		//   * edge.To(...).Unique() 是 O2O 语义，会拒绝第二个主代理引用同一备份
+		//     （ent: "one of [...] is already connected to a different backup_proxy_id"）；
+		//   * 自引用又没法建成 O2M（ent 要求外键落在"多"的那一侧）。
+		// 产品语义是"有向且可共享"的引用：多个主代理指向同一备份、主代理还能串成链，
+		// 这与迁移 149 建的非唯一索引一致，也由 repository 的 proxy backup reference
+		// 集成测试钉住。仓库只用字段读写（SetBackupProxyID / ClearBackupProxyID）。
 	}
 }
 

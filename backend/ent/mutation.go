@@ -37845,14 +37845,14 @@ type ProxyMutation struct {
 	status              *string
 	expires_at          *time.Time
 	fallback_mode       *string
+	backup_proxy_id     *int64
+	addbackup_proxy_id  *int64
 	expiry_warn_days    *int
 	addexpiry_warn_days *int
 	clearedFields       map[string]struct{}
 	accounts            map[int64]struct{}
 	removedaccounts     map[int64]struct{}
 	clearedaccounts     bool
-	backup_proxy        *int64
-	clearedbackup_proxy bool
 	done                bool
 	oldValue            func(context.Context) (*Proxy, error)
 	predicates          []predicate.Proxy
@@ -38462,12 +38462,13 @@ func (m *ProxyMutation) ResetFallbackMode() {
 
 // SetBackupProxyID sets the "backup_proxy_id" field.
 func (m *ProxyMutation) SetBackupProxyID(i int64) {
-	m.backup_proxy = &i
+	m.backup_proxy_id = &i
+	m.addbackup_proxy_id = nil
 }
 
 // BackupProxyID returns the value of the "backup_proxy_id" field in the mutation.
 func (m *ProxyMutation) BackupProxyID() (r int64, exists bool) {
-	v := m.backup_proxy
+	v := m.backup_proxy_id
 	if v == nil {
 		return
 	}
@@ -38491,9 +38492,28 @@ func (m *ProxyMutation) OldBackupProxyID(ctx context.Context) (v *int64, err err
 	return oldValue.BackupProxyID, nil
 }
 
+// AddBackupProxyID adds i to the "backup_proxy_id" field.
+func (m *ProxyMutation) AddBackupProxyID(i int64) {
+	if m.addbackup_proxy_id != nil {
+		*m.addbackup_proxy_id += i
+	} else {
+		m.addbackup_proxy_id = &i
+	}
+}
+
+// AddedBackupProxyID returns the value that was added to the "backup_proxy_id" field in this mutation.
+func (m *ProxyMutation) AddedBackupProxyID() (r int64, exists bool) {
+	v := m.addbackup_proxy_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
 // ClearBackupProxyID clears the value of the "backup_proxy_id" field.
 func (m *ProxyMutation) ClearBackupProxyID() {
-	m.backup_proxy = nil
+	m.backup_proxy_id = nil
+	m.addbackup_proxy_id = nil
 	m.clearedFields[proxy.FieldBackupProxyID] = struct{}{}
 }
 
@@ -38505,7 +38525,8 @@ func (m *ProxyMutation) BackupProxyIDCleared() bool {
 
 // ResetBackupProxyID resets all changes to the "backup_proxy_id" field.
 func (m *ProxyMutation) ResetBackupProxyID() {
-	m.backup_proxy = nil
+	m.backup_proxy_id = nil
+	m.addbackup_proxy_id = nil
 	delete(m.clearedFields, proxy.FieldBackupProxyID)
 }
 
@@ -38619,33 +38640,6 @@ func (m *ProxyMutation) ResetAccounts() {
 	m.removedaccounts = nil
 }
 
-// ClearBackupProxy clears the "backup_proxy" edge to the Proxy entity.
-func (m *ProxyMutation) ClearBackupProxy() {
-	m.clearedbackup_proxy = true
-	m.clearedFields[proxy.FieldBackupProxyID] = struct{}{}
-}
-
-// BackupProxyCleared reports if the "backup_proxy" edge to the Proxy entity was cleared.
-func (m *ProxyMutation) BackupProxyCleared() bool {
-	return m.BackupProxyIDCleared() || m.clearedbackup_proxy
-}
-
-// BackupProxyIDs returns the "backup_proxy" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// BackupProxyID instead. It exists only for internal usage by the builders.
-func (m *ProxyMutation) BackupProxyIDs() (ids []int64) {
-	if id := m.backup_proxy; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetBackupProxy resets all changes to the "backup_proxy" edge.
-func (m *ProxyMutation) ResetBackupProxy() {
-	m.backup_proxy = nil
-	m.clearedbackup_proxy = false
-}
-
 // Where appends a list predicates to the ProxyMutation builder.
 func (m *ProxyMutation) Where(ps ...predicate.Proxy) {
 	m.predicates = append(m.predicates, ps...)
@@ -38717,7 +38711,7 @@ func (m *ProxyMutation) Fields() []string {
 	if m.fallback_mode != nil {
 		fields = append(fields, proxy.FieldFallbackMode)
 	}
-	if m.backup_proxy != nil {
+	if m.backup_proxy_id != nil {
 		fields = append(fields, proxy.FieldBackupProxyID)
 	}
 	if m.expiry_warn_days != nil {
@@ -38914,6 +38908,9 @@ func (m *ProxyMutation) AddedFields() []string {
 	if m.addport != nil {
 		fields = append(fields, proxy.FieldPort)
 	}
+	if m.addbackup_proxy_id != nil {
+		fields = append(fields, proxy.FieldBackupProxyID)
+	}
 	if m.addexpiry_warn_days != nil {
 		fields = append(fields, proxy.FieldExpiryWarnDays)
 	}
@@ -38927,6 +38924,8 @@ func (m *ProxyMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
 	case proxy.FieldPort:
 		return m.AddedPort()
+	case proxy.FieldBackupProxyID:
+		return m.AddedBackupProxyID()
 	case proxy.FieldExpiryWarnDays:
 		return m.AddedExpiryWarnDays()
 	}
@@ -38944,6 +38943,13 @@ func (m *ProxyMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddPort(v)
+		return nil
+	case proxy.FieldBackupProxyID:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddBackupProxyID(v)
 		return nil
 	case proxy.FieldExpiryWarnDays:
 		v, ok := value.(int)
@@ -39060,12 +39066,9 @@ func (m *ProxyMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ProxyMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 1)
 	if m.accounts != nil {
 		edges = append(edges, proxy.EdgeAccounts)
-	}
-	if m.backup_proxy != nil {
-		edges = append(edges, proxy.EdgeBackupProxy)
 	}
 	return edges
 }
@@ -39080,17 +39083,13 @@ func (m *ProxyMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case proxy.EdgeBackupProxy:
-		if id := m.backup_proxy; id != nil {
-			return []ent.Value{*id}
-		}
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ProxyMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 1)
 	if m.removedaccounts != nil {
 		edges = append(edges, proxy.EdgeAccounts)
 	}
@@ -39113,12 +39112,9 @@ func (m *ProxyMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ProxyMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 1)
 	if m.clearedaccounts {
 		edges = append(edges, proxy.EdgeAccounts)
-	}
-	if m.clearedbackup_proxy {
-		edges = append(edges, proxy.EdgeBackupProxy)
 	}
 	return edges
 }
@@ -39129,8 +39125,6 @@ func (m *ProxyMutation) EdgeCleared(name string) bool {
 	switch name {
 	case proxy.EdgeAccounts:
 		return m.clearedaccounts
-	case proxy.EdgeBackupProxy:
-		return m.clearedbackup_proxy
 	}
 	return false
 }
@@ -39139,9 +39133,6 @@ func (m *ProxyMutation) EdgeCleared(name string) bool {
 // if that edge is not defined in the schema.
 func (m *ProxyMutation) ClearEdge(name string) error {
 	switch name {
-	case proxy.EdgeBackupProxy:
-		m.ClearBackupProxy()
-		return nil
 	}
 	return fmt.Errorf("unknown Proxy unique edge %s", name)
 }
@@ -39152,9 +39143,6 @@ func (m *ProxyMutation) ResetEdge(name string) error {
 	switch name {
 	case proxy.EdgeAccounts:
 		m.ResetAccounts()
-		return nil
-	case proxy.EdgeBackupProxy:
-		m.ResetBackupProxy()
 		return nil
 	}
 	return fmt.Errorf("unknown Proxy edge %s", name)

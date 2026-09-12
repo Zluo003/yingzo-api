@@ -840,6 +840,26 @@ func BackupProxyIDNotIn(vs ...int64) predicate.Proxy {
 	return predicate.Proxy(sql.FieldNotIn(FieldBackupProxyID, vs...))
 }
 
+// BackupProxyIDGT applies the GT predicate on the "backup_proxy_id" field.
+func BackupProxyIDGT(v int64) predicate.Proxy {
+	return predicate.Proxy(sql.FieldGT(FieldBackupProxyID, v))
+}
+
+// BackupProxyIDGTE applies the GTE predicate on the "backup_proxy_id" field.
+func BackupProxyIDGTE(v int64) predicate.Proxy {
+	return predicate.Proxy(sql.FieldGTE(FieldBackupProxyID, v))
+}
+
+// BackupProxyIDLT applies the LT predicate on the "backup_proxy_id" field.
+func BackupProxyIDLT(v int64) predicate.Proxy {
+	return predicate.Proxy(sql.FieldLT(FieldBackupProxyID, v))
+}
+
+// BackupProxyIDLTE applies the LTE predicate on the "backup_proxy_id" field.
+func BackupProxyIDLTE(v int64) predicate.Proxy {
+	return predicate.Proxy(sql.FieldLTE(FieldBackupProxyID, v))
+}
+
 // BackupProxyIDIsNil applies the IsNil predicate on the "backup_proxy_id" field.
 func BackupProxyIDIsNil() predicate.Proxy {
 	return predicate.Proxy(sql.FieldIsNull(FieldBackupProxyID))
@@ -905,29 +925,6 @@ func HasAccounts() predicate.Proxy {
 func HasAccountsWith(preds ...predicate.Account) predicate.Proxy {
 	return predicate.Proxy(func(s *sql.Selector) {
 		step := newAccountsStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
-// HasBackupProxy applies the HasEdge predicate on the "backup_proxy" edge.
-func HasBackupProxy() predicate.Proxy {
-	return predicate.Proxy(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2O, false, BackupProxyTable, BackupProxyColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasBackupProxyWith applies the HasEdge predicate on the "backup_proxy" edge with a given conditions (other predicates).
-func HasBackupProxyWith(preds ...predicate.Proxy) predicate.Proxy {
-	return predicate.Proxy(func(s *sql.Selector) {
-		step := newBackupProxyStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

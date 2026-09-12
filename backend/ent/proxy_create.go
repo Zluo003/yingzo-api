@@ -202,11 +202,6 @@ func (_c *ProxyCreate) AddAccounts(v ...*Account) *ProxyCreate {
 	return _c.AddAccountIDs(ids...)
 }
 
-// SetBackupProxy sets the "backup_proxy" edge to the Proxy entity.
-func (_c *ProxyCreate) SetBackupProxy(v *Proxy) *ProxyCreate {
-	return _c.SetBackupProxyID(v.ID)
-}
-
 // Mutation returns the ProxyMutation object of the builder.
 func (_c *ProxyCreate) Mutation() *ProxyMutation {
 	return _c.mutation
@@ -412,6 +407,10 @@ func (_c *ProxyCreate) createSpec() (*Proxy, *sqlgraph.CreateSpec) {
 		_spec.SetField(proxy.FieldFallbackMode, field.TypeString, value)
 		_node.FallbackMode = value
 	}
+	if value, ok := _c.mutation.BackupProxyID(); ok {
+		_spec.SetField(proxy.FieldBackupProxyID, field.TypeInt64, value)
+		_node.BackupProxyID = &value
+	}
 	if value, ok := _c.mutation.ExpiryWarnDays(); ok {
 		_spec.SetField(proxy.FieldExpiryWarnDays, field.TypeInt, value)
 		_node.ExpiryWarnDays = value
@@ -430,23 +429,6 @@ func (_c *ProxyCreate) createSpec() (*Proxy, *sqlgraph.CreateSpec) {
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.BackupProxyIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   proxy.BackupProxyTable,
-			Columns: []string{proxy.BackupProxyColumn},
-			Bidi:    true,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(proxy.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_node.BackupProxyID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec
@@ -672,6 +654,12 @@ func (u *ProxyUpsert) SetBackupProxyID(v int64) *ProxyUpsert {
 // UpdateBackupProxyID sets the "backup_proxy_id" field to the value that was provided on create.
 func (u *ProxyUpsert) UpdateBackupProxyID() *ProxyUpsert {
 	u.SetExcluded(proxy.FieldBackupProxyID)
+	return u
+}
+
+// AddBackupProxyID adds v to the "backup_proxy_id" field.
+func (u *ProxyUpsert) AddBackupProxyID(v int64) *ProxyUpsert {
+	u.Add(proxy.FieldBackupProxyID, v)
 	return u
 }
 
@@ -937,6 +925,13 @@ func (u *ProxyUpsertOne) UpdateFallbackMode() *ProxyUpsertOne {
 func (u *ProxyUpsertOne) SetBackupProxyID(v int64) *ProxyUpsertOne {
 	return u.Update(func(s *ProxyUpsert) {
 		s.SetBackupProxyID(v)
+	})
+}
+
+// AddBackupProxyID adds v to the "backup_proxy_id" field.
+func (u *ProxyUpsertOne) AddBackupProxyID(v int64) *ProxyUpsertOne {
+	return u.Update(func(s *ProxyUpsert) {
+		s.AddBackupProxyID(v)
 	})
 }
 
@@ -1379,6 +1374,13 @@ func (u *ProxyUpsertBulk) UpdateFallbackMode() *ProxyUpsertBulk {
 func (u *ProxyUpsertBulk) SetBackupProxyID(v int64) *ProxyUpsertBulk {
 	return u.Update(func(s *ProxyUpsert) {
 		s.SetBackupProxyID(v)
+	})
+}
+
+// AddBackupProxyID adds v to the "backup_proxy_id" field.
+func (u *ProxyUpsertBulk) AddBackupProxyID(v int64) *ProxyUpsertBulk {
+	return u.Update(func(s *ProxyUpsert) {
+		s.AddBackupProxyID(v)
 	})
 }
 

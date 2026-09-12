@@ -208,6 +208,7 @@ func (_u *ProxyUpdate) SetNillableFallbackMode(v *string) *ProxyUpdate {
 
 // SetBackupProxyID sets the "backup_proxy_id" field.
 func (_u *ProxyUpdate) SetBackupProxyID(v int64) *ProxyUpdate {
+	_u.mutation.ResetBackupProxyID()
 	_u.mutation.SetBackupProxyID(v)
 	return _u
 }
@@ -217,6 +218,12 @@ func (_u *ProxyUpdate) SetNillableBackupProxyID(v *int64) *ProxyUpdate {
 	if v != nil {
 		_u.SetBackupProxyID(*v)
 	}
+	return _u
+}
+
+// AddBackupProxyID adds value to the "backup_proxy_id" field.
+func (_u *ProxyUpdate) AddBackupProxyID(v int64) *ProxyUpdate {
+	_u.mutation.AddBackupProxyID(v)
 	return _u
 }
 
@@ -262,11 +269,6 @@ func (_u *ProxyUpdate) AddAccounts(v ...*Account) *ProxyUpdate {
 	return _u.AddAccountIDs(ids...)
 }
 
-// SetBackupProxy sets the "backup_proxy" edge to the Proxy entity.
-func (_u *ProxyUpdate) SetBackupProxy(v *Proxy) *ProxyUpdate {
-	return _u.SetBackupProxyID(v.ID)
-}
-
 // Mutation returns the ProxyMutation object of the builder.
 func (_u *ProxyUpdate) Mutation() *ProxyMutation {
 	return _u.mutation
@@ -291,12 +293,6 @@ func (_u *ProxyUpdate) RemoveAccounts(v ...*Account) *ProxyUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAccountIDs(ids...)
-}
-
-// ClearBackupProxy clears the "backup_proxy" edge to the Proxy entity.
-func (_u *ProxyUpdate) ClearBackupProxy() *ProxyUpdate {
-	_u.mutation.ClearBackupProxy()
-	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -441,6 +437,15 @@ func (_u *ProxyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.FallbackMode(); ok {
 		_spec.SetField(proxy.FieldFallbackMode, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.BackupProxyID(); ok {
+		_spec.SetField(proxy.FieldBackupProxyID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedBackupProxyID(); ok {
+		_spec.AddField(proxy.FieldBackupProxyID, field.TypeInt64, value)
+	}
+	if _u.mutation.BackupProxyIDCleared() {
+		_spec.ClearField(proxy.FieldBackupProxyID, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.ExpiryWarnDays(); ok {
 		_spec.SetField(proxy.FieldExpiryWarnDays, field.TypeInt, value)
 	}
@@ -485,35 +490,6 @@ func (_u *ProxyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.BackupProxyCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   proxy.BackupProxyTable,
-			Columns: []string{proxy.BackupProxyColumn},
-			Bidi:    true,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(proxy.FieldID, field.TypeInt64),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.BackupProxyIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   proxy.BackupProxyTable,
-			Columns: []string{proxy.BackupProxyColumn},
-			Bidi:    true,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(proxy.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {
@@ -720,6 +696,7 @@ func (_u *ProxyUpdateOne) SetNillableFallbackMode(v *string) *ProxyUpdateOne {
 
 // SetBackupProxyID sets the "backup_proxy_id" field.
 func (_u *ProxyUpdateOne) SetBackupProxyID(v int64) *ProxyUpdateOne {
+	_u.mutation.ResetBackupProxyID()
 	_u.mutation.SetBackupProxyID(v)
 	return _u
 }
@@ -729,6 +706,12 @@ func (_u *ProxyUpdateOne) SetNillableBackupProxyID(v *int64) *ProxyUpdateOne {
 	if v != nil {
 		_u.SetBackupProxyID(*v)
 	}
+	return _u
+}
+
+// AddBackupProxyID adds value to the "backup_proxy_id" field.
+func (_u *ProxyUpdateOne) AddBackupProxyID(v int64) *ProxyUpdateOne {
+	_u.mutation.AddBackupProxyID(v)
 	return _u
 }
 
@@ -774,11 +757,6 @@ func (_u *ProxyUpdateOne) AddAccounts(v ...*Account) *ProxyUpdateOne {
 	return _u.AddAccountIDs(ids...)
 }
 
-// SetBackupProxy sets the "backup_proxy" edge to the Proxy entity.
-func (_u *ProxyUpdateOne) SetBackupProxy(v *Proxy) *ProxyUpdateOne {
-	return _u.SetBackupProxyID(v.ID)
-}
-
 // Mutation returns the ProxyMutation object of the builder.
 func (_u *ProxyUpdateOne) Mutation() *ProxyMutation {
 	return _u.mutation
@@ -803,12 +781,6 @@ func (_u *ProxyUpdateOne) RemoveAccounts(v ...*Account) *ProxyUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveAccountIDs(ids...)
-}
-
-// ClearBackupProxy clears the "backup_proxy" edge to the Proxy entity.
-func (_u *ProxyUpdateOne) ClearBackupProxy() *ProxyUpdateOne {
-	_u.mutation.ClearBackupProxy()
-	return _u
 }
 
 // Where appends a list predicates to the ProxyUpdate builder.
@@ -983,6 +955,15 @@ func (_u *ProxyUpdateOne) sqlSave(ctx context.Context) (_node *Proxy, err error)
 	if value, ok := _u.mutation.FallbackMode(); ok {
 		_spec.SetField(proxy.FieldFallbackMode, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.BackupProxyID(); ok {
+		_spec.SetField(proxy.FieldBackupProxyID, field.TypeInt64, value)
+	}
+	if value, ok := _u.mutation.AddedBackupProxyID(); ok {
+		_spec.AddField(proxy.FieldBackupProxyID, field.TypeInt64, value)
+	}
+	if _u.mutation.BackupProxyIDCleared() {
+		_spec.ClearField(proxy.FieldBackupProxyID, field.TypeInt64)
+	}
 	if value, ok := _u.mutation.ExpiryWarnDays(); ok {
 		_spec.SetField(proxy.FieldExpiryWarnDays, field.TypeInt, value)
 	}
@@ -1027,35 +1008,6 @@ func (_u *ProxyUpdateOne) sqlSave(ctx context.Context) (_node *Proxy, err error)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(account.FieldID, field.TypeInt64),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.BackupProxyCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   proxy.BackupProxyTable,
-			Columns: []string{proxy.BackupProxyColumn},
-			Bidi:    true,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(proxy.FieldID, field.TypeInt64),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.BackupProxyIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2O,
-			Inverse: false,
-			Table:   proxy.BackupProxyTable,
-			Columns: []string{proxy.BackupProxyColumn},
-			Bidi:    true,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(proxy.FieldID, field.TypeInt64),
 			},
 		}
 		for _, k := range nodes {
