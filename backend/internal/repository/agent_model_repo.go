@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,10 +25,11 @@ func (r *agentModelRepository) SyncDiscovered(ctx context.Context, groupID int64
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	// 手工声明的模型不参与"本次同步没看到就置为不可用"：它本来就不来自账号映射。
 	if _, err := tx.ExecContext(ctx, `
 UPDATE agent_group_models
 SET available = FALSE, updated_at = $2
-WHERE group_id = $1 AND excluded = FALSE
+WHERE group_id = $1 AND excluded = FALSE AND manual = FALSE
 `, groupID, seenAt); err != nil {
 		return err
 	}
@@ -55,7 +57,7 @@ func (r *agentModelRepository) ListModels(ctx context.Context, groupID int64, in
 	query := `
 SELECT id, group_id, platform, model_code, media_type, enabled, available,
        excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at,
-       rate_multiplier
+       rate_multiplier, manual
 FROM agent_group_models
 WHERE group_id = $1`
 	if !includeExcluded {
@@ -90,7 +92,7 @@ func (r *agentModelRepository) GetModelByID(ctx context.Context, groupID, modelI
 	row := r.db.QueryRowContext(ctx, `
 SELECT id, group_id, platform, model_code, media_type, enabled, available,
        excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at,
-       rate_multiplier
+       rate_multiplier, manual
 FROM agent_group_models
 WHERE group_id = $1 AND id = $2
 `, groupID, modelID)
@@ -110,7 +112,7 @@ func (r *agentModelRepository) GetEnabledModel(ctx context.Context, groupID int6
 	row := r.db.QueryRowContext(ctx, `
 SELECT id, group_id, platform, model_code, media_type, enabled, available,
        excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at,
-       rate_multiplier
+       rate_multiplier, manual
 FROM agent_group_models
 WHERE group_id = $1 AND platform = $2 AND model_code = $3
   AND enabled = TRUE AND available = TRUE AND excluded = FALSE
@@ -201,6 +203,7 @@ func scanAgentGroupModel(scanner agentModelScanner) (*service.AgentGroupModel, e
 	var model service.AgentGroupModel
 	var excludedAt sql.NullTime
 	var rateMultiplier sql.NullFloat64
+	var manual bool
 	if err := scanner.Scan(
 		&model.ID,
 		&model.GroupID,
@@ -216,6 +219,7 @@ func scanAgentGroupModel(scanner agentModelScanner) (*service.AgentGroupModel, e
 		&model.CreatedAt,
 		&model.UpdatedAt,
 		&rateMultiplier,
+		&manual,
 	); err != nil {
 		return nil, err
 	}
@@ -226,6 +230,7 @@ func scanAgentGroupModel(scanner agentModelScanner) (*service.AgentGroupModel, e
 		rate := rateMultiplier.Float64
 		model.RateMultiplier = &rate
 	}
+	model.Manual = manual
 	model.Prices = []service.AgentModelPrice{}
 	return &model, nil
 }
@@ -282,6 +287,43 @@ ORDER BY resolution
 		prices = append(prices, price)
 	}
 	return prices, rows.Err()
+}
+
+// CreateManual 写入一条管理员手工声明的模型。已存在同 (group, platform, model_code)
+// 的行时返回 ErrAgentModelExists，让调用方给出明确提示（改类型/改价请在列表里编辑）。
+func (r *agentModelRepository) CreateManual(ctx context.Context, model *service.AgentGroupModel, prices []service.AgentModelPrice) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var modelID int64
+	err = tx.QueryRowContext(ctx, `
+INSERT INTO agent_group_models (
+    group_id, platform, model_code, media_type, enabled, available,
+    excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at, manual
+)
+VALUES ($1, $2, $3, $4, $5, TRUE, FALSE, NULL, NOW(), NOW(), NOW(), NOW(), TRUE)
+ON CONFLICT (group_id, platform, model_code) DO NOTHING
+RETURNING id
+`, model.GroupID, model.Platform, model.ModelCode, model.MediaType, model.Enabled).Scan(&modelID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return service.ErrAgentModelExists
+	}
+	if err != nil {
+		return err
+	}
+	for _, price := range prices {
+		if _, err := tx.ExecContext(ctx, `
+INSERT INTO agent_model_prices (agent_model_id, resolution, billing_unit, unit_price)
+VALUES ($1, $2, $3, $4)
+`, modelID, price.Resolution, price.BillingUnit, price.UnitPrice); err != nil {
+			return err
+		}
+	}
+	model.ID = modelID
+	return tx.Commit()
 }
 
 func scanAgentModelPrice(scanner agentModelScanner) (service.AgentModelPrice, error) {

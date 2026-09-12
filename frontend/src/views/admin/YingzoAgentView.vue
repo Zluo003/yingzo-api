@@ -134,6 +134,16 @@
         </button>
         <div class="ml-auto flex items-center gap-2 pb-2">
           <button
+            v-if="activeTab === 'image'"
+            type="button"
+            class="btn btn-secondary btn-sm"
+            :disabled="loading || creating"
+            data-testid="yingzo-agent-add-image-model"
+            @click="openCreateDialog"
+          >
+            {{ t('admin.yingzoAgent.addImageModel.button') }}
+          </button>
+          <button
             type="button"
             class="btn btn-primary btn-sm"
             :disabled="!dirty || saving"
@@ -199,6 +209,14 @@
             >
               <td class="py-2 pr-3 font-medium text-gray-900 dark:text-white">
                 {{ model.model_code }}
+                <span
+                  v-if="model.manual"
+                  class="ml-2 rounded bg-amber-50 px-2 py-0.5 text-xs font-normal text-amber-600 dark:bg-amber-900/20 dark:text-amber-400"
+                  :title="t('admin.yingzoAgent.manualHint')"
+                  :data-testid="`yingzo-agent-manual-${model.id}`"
+                >
+                  {{ t('admin.yingzoAgent.manualBadge') }}
+                </span>
               </td>
               <td class="py-2 pr-3 text-gray-500 dark:text-gray-400">{{ model.platform }}</td>
               <td class="py-2 pr-3">
@@ -279,6 +297,97 @@
         </table>
       </div>
     </div>
+
+    <!-- 手工添加图片模型：上游新模型不在账号 model_mapping 里、也不在内置清单里时使用 -->
+    <BaseDialog
+      :show="createDialogVisible"
+      :title="t('admin.yingzoAgent.addImageModel.title')"
+      width="normal"
+      @close="closeCreateDialog"
+    >
+      <div class="space-y-4">
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          {{ t('admin.yingzoAgent.addImageModel.hint') }}
+        </p>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ t('admin.yingzoAgent.addImageModel.platform') }}
+          </label>
+          <select
+            v-model="createForm.platform"
+            class="input w-full"
+            data-testid="yingzo-agent-create-platform"
+          >
+            <option value="openai">
+              {{ t('admin.yingzoAgent.addImageModel.platformOpenAI') }}
+            </option>
+            <option value="gemini">
+              {{ t('admin.yingzoAgent.addImageModel.platformGemini') }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ t('admin.yingzoAgent.addImageModel.modelCode') }}
+          </label>
+          <input
+            v-model="createForm.modelCode"
+            class="input w-full"
+            type="text"
+            :placeholder="t('admin.yingzoAgent.addImageModel.modelCodePlaceholder')"
+            data-testid="yingzo-agent-create-model-code"
+          />
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ t('admin.yingzoAgent.addImageModel.prices') }}
+          </label>
+          <div class="grid grid-cols-3 gap-3">
+            <div v-for="resolution in IMAGE_RESOLUTIONS" :key="resolution">
+              <div class="mb-1 text-xs text-gray-500 dark:text-gray-400">{{ resolution }}</div>
+              <input
+                v-model="createForm.prices[resolution]"
+                class="input w-full"
+                type="number"
+                min="0"
+                step="0.001"
+                :placeholder="t('admin.yingzoAgent.pricePlaceholder')"
+                :data-testid="`yingzo-agent-create-price-${resolution}`"
+              />
+            </div>
+          </div>
+        </div>
+        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+          <input
+            v-model="createForm.enabled"
+            type="checkbox"
+            data-testid="yingzo-agent-create-enabled"
+          />
+          {{ t('admin.yingzoAgent.addImageModel.enabled') }}
+        </label>
+        <p
+          v-if="createError"
+          class="rounded-lg bg-red-50 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-400"
+          data-testid="yingzo-agent-create-error"
+        >
+          {{ createError }}
+        </p>
+      </div>
+      <template #footer>
+        <button type="button" class="btn btn-secondary" @click="closeCreateDialog">
+          {{ t('common.cancel') }}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          :disabled="creating"
+          data-testid="yingzo-agent-create-submit"
+          @click="submitCreateModel"
+        >
+          {{ creating ? t('common.saving') : t('common.confirm') }}
+        </button>
+      </template>
+    </BaseDialog>
   </div>
 </template>
 
@@ -292,6 +401,7 @@ import {
   type AgentMediaType,
   type AgentModelPrice,
 } from '@/api/admin/agentModels'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import { VIDEO_MODEL_RESOLUTIONS } from '@/views/admin/videoModelResolutions'
 import type { AdminGroup } from '@/types'
 
@@ -316,6 +426,16 @@ const activeTab = ref<AgentMediaType>('text')
 const groups = ref<AdminGroup[]>([])
 const models = ref<AgentGroupModel[]>([])
 const drafts = reactive<Record<number, ModelDraft>>({})
+
+const createDialogVisible = ref(false)
+const creating = ref(false)
+const createError = ref('')
+const createForm = reactive({
+  platform: 'openai' as 'openai' | 'gemini',
+  modelCode: '',
+  enabled: true,
+  prices: {} as Record<string, string>,
+})
 
 const tabs: { key: AgentMediaType; labelKey: string }[] = [
   { key: 'text', labelKey: 'admin.yingzoAgent.tabs.text.title' },
@@ -526,6 +646,71 @@ async function saveChanges(): Promise<void> {
     errorMessage.value = extractError(error, t('admin.yingzoAgent.saveFailed'))
   } finally {
     saving.value = false
+  }
+}
+
+/** 打开手工添加图片模型的弹窗：价格按 1K/2K/4K 每张，与列表里的图片计价口径一致。 */
+function openCreateDialog(): void {
+  createError.value = ''
+  createForm.platform = 'openai'
+  createForm.modelCode = ''
+  createForm.enabled = true
+  createForm.prices = {}
+  for (const resolution of IMAGE_RESOLUTIONS) {
+    createForm.prices[resolution] = ''
+  }
+  createDialogVisible.value = true
+}
+
+function closeCreateDialog(): void {
+  if (creating.value) {
+    return
+  }
+  createDialogVisible.value = false
+  createError.value = ''
+}
+
+async function submitCreateModel(): Promise<void> {
+  if (!agentGroupId.value) {
+    createError.value = t('admin.yingzoAgent.groupMissing')
+    return
+  }
+  const modelCode = createForm.modelCode.trim()
+  if (!modelCode) {
+    createError.value = t('admin.yingzoAgent.addImageModel.modelCodeRequired')
+    return
+  }
+  const prices: AgentModelPrice[] = []
+  for (const resolution of IMAGE_RESOLUTIONS) {
+    const value = normalizeNumber(createForm.prices[resolution])
+    if (value !== null) {
+      prices.push({ resolution, unit_price: value })
+    }
+  }
+  if (createForm.enabled && prices.length === 0) {
+    createError.value = t('admin.yingzoAgent.addImageModel.priceRequired')
+    return
+  }
+  creating.value = true
+  createError.value = ''
+  errorMessage.value = ''
+  successMessage.value = ''
+  try {
+    const config = await agentModelsAPI.createAgentModel(agentGroupId.value, {
+      platform: createForm.platform,
+      model_code: modelCode,
+      enabled: createForm.enabled,
+      prices,
+    })
+    models.value = config.models
+    buildDrafts()
+    activeTab.value = 'image'
+    createDialogVisible.value = false
+    successMessage.value = t('admin.yingzoAgent.addImageModel.success', { model: modelCode })
+  } catch (error) {
+    createError.value = extractError(error, t('admin.yingzoAgent.addImageModel.failed'))
+  } finally {
+    creating.value = false
   }
 }
 

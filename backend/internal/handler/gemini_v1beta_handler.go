@@ -576,10 +576,15 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		// 账号槽位/等待计数需要在超时或断开时安全回收
 		accountReleaseFunc = wrapReleaseOnDone(c.Request.Context(), accountReleaseFunc)
 
-		// Agent 分组：价格 = 选中账号的源渠道价 × 该模型配置的倍率，缺一不可。
-		// 必须在转发前失败，避免这单既收不到钱又要付上游成本。
+		// Agent 分组：文本模型价格 = 选中账号的源渠道价 × 该模型配置的倍率，图片模型
+		// 按目录登记的每张单价。两种情况都必须在转发前失败，避免这单既收不到钱又要
+		// 付上游成本；口径由目录里的媒体类型决定（图片模型没有文本倍率）。
 		if apiKey.Group.IsAgent() {
-			if priceErr := h.gatewayService.ValidateAgentLanguagePricing(c.Request.Context(), apiKey.Group, account, modelName); priceErr != nil {
+			platform := service.PlatformGemini
+			if account.Platform != "" {
+				platform = account.Platform
+			}
+			if priceErr := h.gatewayService.ValidateAgentRequestPricing(c.Request.Context(), apiKey.Group, account, platform, modelName); priceErr != nil {
 				if accountReleaseFunc != nil {
 					accountReleaseFunc()
 				}

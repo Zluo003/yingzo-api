@@ -1203,6 +1203,41 @@ func (h *GroupHandler) SyncAgentModels(c *gin.Context) {
 	response.Success(c, cfg)
 }
 
+type createAgentModelRequest struct {
+	Platform  string                    `json:"platform"`
+	ModelCode string                    `json:"model_code"`
+	Enabled   *bool                     `json:"enabled"`
+	Prices    []service.AgentModelPrice `json:"prices"`
+}
+
+// CreateAgentModel 手工声明一个模型（当前只支持图片模型）。
+func (h *GroupHandler) CreateAgentModel(c *gin.Context) {
+	groupID, ok := parseAdminGroupID(c)
+	if !ok || !h.requireAgentModels(c) {
+		return
+	}
+	var req createAgentModelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.BadRequest(c, err.Error())
+		return
+	}
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	cfg, err := h.agentModels.CreateManualImageModel(c.Request.Context(), groupID, service.ManualImageModelInput{
+		Platform:  req.Platform,
+		ModelCode: req.ModelCode,
+		Enabled:   enabled,
+		Prices:    req.Prices,
+	})
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, cfg)
+}
+
 type updateAgentModelRequest struct {
 	MediaType string                    `json:"media_type"`
 	Enabled   *bool                     `json:"enabled"`

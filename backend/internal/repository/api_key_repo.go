@@ -174,6 +174,11 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 				group.FieldID,
 				group.FieldName,
 				group.FieldPlatform,
+				// 系统内置聚合分组靠 kind/system_code 识别（Group.IsAgent）；认证投影
+				// 漏选这两个字段时，网关请求拿到的分组不是 Agent 分组，聚合路由与
+				// 聚合计价会整体静默失效（只有走快照缓存的请求才碰巧正常）。
+				group.FieldKind,
+				group.FieldSystemCode,
 				group.FieldIsExclusive,
 				group.FieldStatus,
 				group.FieldSubscriptionType,

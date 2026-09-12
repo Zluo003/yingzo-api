@@ -95,13 +95,13 @@ func TestAgentModelRepositoryReadsExplicitZeroPrice(t *testing.T) {
 	modelColumns := []string{
 		"id", "group_id", "platform", "model_code", "media_type", "enabled", "available",
 		"excluded", "excluded_at", "discovered_at", "last_seen_at", "created_at", "updated_at",
-		"rate_multiplier",
+		"rate_multiplier", "manual",
 	}
 	mock.ExpectQuery(`(?s)SELECT id, group_id, platform, model_code, media_type, enabled, available,.*FROM agent_group_models.*WHERE group_id = \$1 AND platform = \$2 AND model_code = \$3`).
 		WithArgs(groupID, service.PlatformOpenAI, "gpt-image-custom").
 		WillReturnRows(sqlmock.NewRows(modelColumns).AddRow(
 			modelID, groupID, service.PlatformOpenAI, "gpt-image-custom", service.AgentMediaTypeImage,
-			true, true, false, nil, now, now, now, now, nil,
+			true, true, false, nil, now, now, now, now, nil, false,
 		))
 	mock.ExpectQuery(`(?s)SELECT id, agent_model_id, resolution, billing_unit, unit_price, created_at, updated_at.*FROM agent_model_prices.*WHERE agent_model_id = \$1`).
 		WithArgs(modelID).
@@ -113,5 +113,40 @@ func TestAgentModelRepositoryReadsExplicitZeroPrice(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, model.Prices, 1)
 	require.Zero(t, model.Prices[0].UnitPrice)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestAgentModelRepositoryCreateManualWritesPricesAndDetectsConflict(t *testing.T) {
+	repo, mock := newAgentModelRepositoryMock(t)
+	model := &service.AgentGroupModel{
+		GroupID: 5, Platform: service.PlatformGemini, ModelCode: "gemini-3-pro-image",
+		MediaType: service.AgentMediaTypeImage, Enabled: true,
+	}
+	prices := []service.AgentModelPrice{{Resolution: service.ImageBillingSize1K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0.3}}
+
+	// 首次声明：插入目录行 + 价格。
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)INSERT INTO agent_group_models .*manual.*ON CONFLICT \(group_id, platform, model_code\) DO NOTHING\s+RETURNING id`).
+		WithArgs(int64(5), service.PlatformGemini, "gemini-3-pro-image", service.AgentMediaTypeImage, true).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(31)))
+	mock.ExpectExec(`(?s)INSERT INTO agent_model_prices .*VALUES \(\$1, \$2, \$3, \$4\)`).
+		WithArgs(int64(31), service.ImageBillingSize1K, service.AgentBillingUnitImage, 0.3).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	require.NoError(t, repo.CreateManual(context.Background(), model, prices))
+	require.Equal(t, int64(31), model.ID)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// 重复声明：DO NOTHING 不返回行 → ErrAgentModelExists，管理员改现有行而不是被静默覆盖。
+	repo, mock = newAgentModelRepositoryMock(t)
+	mock.ExpectBegin()
+	mock.ExpectQuery(`(?s)INSERT INTO agent_group_models .*ON CONFLICT \(group_id, platform, model_code\) DO NOTHING\s+RETURNING id`).
+		WithArgs(int64(5), service.PlatformGemini, "gemini-3-pro-image", service.AgentMediaTypeImage, true).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectRollback()
+
+	err := repo.CreateManual(context.Background(), model, prices)
+	require.ErrorIs(t, err, service.ErrAgentModelExists)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

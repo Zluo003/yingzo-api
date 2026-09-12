@@ -39,6 +39,15 @@ func (r *agentPlatformModelRepoStub) UpdateModelConfig(context.Context, int64, i
 func (r *agentPlatformModelRepoStub) ExcludeModel(context.Context, int64, int64, time.Time) error {
 	return nil
 }
+func (r *agentPlatformModelRepoStub) CreateManual(_ context.Context, model *service.AgentGroupModel, prices []service.AgentModelPrice) error {
+	stored := *model
+	stored.ID = int64(len(r.models) + 1)
+	stored.Manual = true
+	stored.Prices = append([]service.AgentModelPrice(nil), prices...)
+	r.models = append(r.models, stored)
+	model.ID = stored.ID
+	return nil
+}
 
 func agentPlatformCatalogForTest(models ...service.AgentGroupModel) *service.AgentModelCatalogService {
 	for i := range models {

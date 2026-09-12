@@ -58,7 +58,9 @@ func newAgentModelMemoryRepo() *agentModelMemoryRepo {
 
 func (r *agentModelMemoryRepo) SyncDiscovered(_ context.Context, groupID int64, discovered []AgentModelDiscovery, seenAt time.Time) error {
 	for _, model := range r.models {
-		if model.GroupID == groupID && !model.Excluded {
+		// 手工声明（manual）的行不参与"同步没看到就置为不可用"，与真实仓库的
+		// UPDATE ... AND manual = FALSE 保持一致。
+		if model.GroupID == groupID && !model.Excluded && !model.Manual {
 			model.Available = false
 		}
 	}
@@ -147,6 +149,25 @@ func (r *agentModelMemoryRepo) ExcludeModel(_ context.Context, groupID, modelID 
 		}
 	}
 	return sql.ErrNoRows
+}
+
+// CreateManual 镜像真实仓库的语义：唯一键冲突返回 ErrAgentModelExists（手工声明不覆盖已有行）。
+func (r *agentModelMemoryRepo) CreateManual(_ context.Context, model *AgentGroupModel, prices []AgentModelPrice) error {
+	key := agentModelKey(model.Platform, model.ModelCode)
+	if existing := r.models[key]; existing != nil && existing.GroupID == model.GroupID {
+		return ErrAgentModelExists
+	}
+	stored := *model
+	stored.ID = r.nextID
+	stored.Available = true
+	stored.Manual = true
+	stored.Prices = append([]AgentModelPrice(nil), prices...)
+	stored.DiscoveredAt = time.Unix(0, 0).UTC()
+	stored.LastSeenAt = stored.DiscoveredAt
+	r.nextID++
+	r.models[key] = &stored
+	model.ID = stored.ID
+	return nil
 }
 
 func cloneAgentModelForTest(model *AgentGroupModel) AgentGroupModel {
@@ -544,4 +565,142 @@ func TestAgentModelMediaTypeClassificationUsesFamiliesAndBothNames(t *testing.T)
 func TestAgentVideoPlatformAlwaysClassifiesVideo(t *testing.T) {
 	require.Equal(t, AgentMediaTypeVideo,
 		defaultAgentModelDescriptorForID(PlatformVideo, "some-new-model").mediaType)
+}
+
+func manualImageModelPrices(resolutions ...string) []AgentModelPrice {
+	prices := make([]AgentModelPrice, 0, len(resolutions))
+	for _, resolution := range resolutions {
+		prices = append(prices, AgentModelPrice{Resolution: resolution, BillingUnit: "image", UnitPrice: 0.25})
+	}
+	return prices
+}
+
+// 手工声明图片模型是"账号映射里根本没有这个模型"场景的唯一出路：声明后必须立刻
+// 能被下游取到价格、被平台分发识别，并且在同步（看不到任何账号映射）后仍然可用。
+func TestCreateManualImageModelIsCallableWithoutAccountMapping(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{
+		{ID: 1, Platform: PlatformGemini, Credentials: map[string]any{"model_mapping": map[string]any{"gemini-3-pro": "gemini-3-pro"}}},
+	}}
+	catalogService, repo := newAgentCatalogForTest(accounts)
+
+	config, err := catalogService.CreateManualImageModel(context.Background(), 9, ManualImageModelInput{
+		Platform:  PlatformGemini,
+		ModelCode: "gemini-3-pro-image",
+		Enabled:   true,
+		Prices:    manualImageModelPrices("1K", "2K", "4K"),
+	})
+	require.NoError(t, err)
+
+	var created *AgentGroupModel
+	for i := range config.Models {
+		if config.Models[i].ModelCode == "gemini-3-pro-image" {
+			created = &config.Models[i]
+		}
+	}
+	require.NotNil(t, created, "手工声明的模型必须出现在目录里")
+	require.True(t, created.Manual)
+	require.Equal(t, AgentMediaTypeImage, created.MediaType)
+	require.True(t, created.Available)
+
+	// 账号映射里没有它，但取价必须成功（否则请求在入口就会因为"没定价"失败）。
+	price, _, err := catalogService.ResolveMediaUnitPrice(
+		context.Background(), 9, PlatformGemini, AgentMediaTypeImage, "2K", "gemini-3-pro-image")
+	require.NoError(t, err)
+	require.Equal(t, 0.25, price)
+
+	// 同步只认识账号映射里的模型：手工行既不能被标记为不可用，也不能被清掉。
+	require.NoError(t, repo.SyncDiscovered(context.Background(), 9,
+		[]AgentModelDiscovery{{Platform: PlatformGemini, ModelCode: "gemini-3-pro", MediaType: AgentMediaTypeText}},
+		time.Now().UTC()))
+	stillThere, err := repo.GetEnabledModel(context.Background(), 9, PlatformGemini, "gemini-3-pro-image")
+	require.NoError(t, err)
+	require.True(t, stillThere.Available)
+	require.True(t, stillThere.Manual)
+	require.Len(t, stillThere.Prices, 3)
+}
+
+func TestCreateManualImageModelValidatesInput(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{}
+	catalogService, _ := newAgentCatalogForTest(accounts)
+	ctx := context.Background()
+
+	// 没有图片接口的平台不应该被声明成图片模型。
+	_, err := catalogService.CreateManualImageModel(ctx, 9, ManualImageModelInput{
+		Platform: PlatformVideo, ModelCode: "seedance-9", Enabled: true, Prices: manualImageModelPrices("1K"),
+	})
+	require.ErrorContains(t, err, "cannot serve image models")
+
+	_, err = catalogService.CreateManualImageModel(ctx, 9, ManualImageModelInput{
+		Platform: PlatformGemini, ModelCode: "  ", Enabled: true, Prices: manualImageModelPrices("1K"),
+	})
+	require.ErrorContains(t, err, "model_code is required")
+
+	// 启用但没有任何价格 = 请求必然在入口失败，直接在声明阶段挡掉。
+	_, err = catalogService.CreateManualImageModel(ctx, 9, ManualImageModelInput{
+		Platform: PlatformOpenAI, ModelCode: "gpt-image-9", Enabled: true,
+	})
+	require.ErrorContains(t, err, "requires at least one resolution price")
+
+	// 未启用可以先声明后定价。
+	_, err = catalogService.CreateManualImageModel(ctx, 9, ManualImageModelInput{
+		Platform: PlatformOpenAI, ModelCode: "gpt-image-9", Enabled: false,
+	})
+	require.NoError(t, err)
+
+	// 已存在（同平台同模型）时报冲突，而不是静默覆盖管理员已有的价格。
+	_, err = catalogService.CreateManualImageModel(ctx, 9, ManualImageModelInput{
+		Platform: PlatformOpenAI, ModelCode: "gpt-image-9", Enabled: false,
+	})
+	require.ErrorContains(t, err, "already exists")
+}
+
+// Gemini 标准图片接口在请求前只能确定"这是图片模型"：不能再用语言口径（缺文本倍率）
+// 把它拦在入口，也不能放过一个连任何档位价格都没有的图片模型。
+func TestEnsureAgentImageModelPriced(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{
+		{ID: 1, Platform: PlatformGemini, Credentials: map[string]any{"model_mapping": map[string]any{
+			"gemini-3-pro": "gemini-3-pro", "gemini-3-pro-image": "gemini-3-pro-image",
+		}}},
+	}}
+	catalogService, repo := newAgentCatalogForTest(accounts)
+	_, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+
+	isImage, err := catalogService.EnsureAgentImageModelPriced(context.Background(), 9, PlatformGemini, "gemini-3-pro-image")
+	require.True(t, isImage)
+	require.ErrorIs(t, err, ErrAgentImagePricingUnavailable, "没有配价的图片模型必须在入口失败")
+
+	model := repo.models[agentModelKey(PlatformGemini, "gemini-3-pro-image")]
+	require.NotNil(t, model)
+	model.Prices = manualImageModelPrices("2K")
+	isImage, err = catalogService.EnsureAgentImageModelPriced(context.Background(), 9, PlatformGemini, "gemini-3-pro-image")
+	require.True(t, isImage)
+	require.NoError(t, err, "只填了 2K 也不该把 1K/4K 的请求挡在入口（计费按实际档位取价）")
+
+	isImage, err = catalogService.EnsureAgentImageModelPriced(context.Background(), 9, PlatformGemini, "gemini-3-pro")
+	require.False(t, isImage)
+	require.NoError(t, err, "文本模型交回语言口径处理")
+}
+
+func TestValidateAgentRequestPricingUsesImageRulesForImageModels(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{
+		{ID: 1, Platform: PlatformGemini, Credentials: map[string]any{"model_mapping": map[string]any{
+			"gemini-3-pro-image": "gemini-3-pro-image", "gemini-3-pro": "gemini-3-pro",
+		}}},
+	}}
+	catalogService, repo := newAgentCatalogForTest(accounts)
+	_, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	imageModel := repo.models[agentModelKey(PlatformGemini, "gemini-3-pro-image")]
+	require.NotNil(t, imageModel)
+	imageModel.Prices = manualImageModelPrices("1K")
+
+	svc := &GatewayService{resolver: &ModelPricingResolver{agentModelCatalog: catalogService}}
+	group := &Group{ID: 9, Kind: "agent", SystemCode: "yingzo"}
+	account := &Account{ID: 1, Platform: PlatformGemini}
+
+	require.NoError(t, svc.ValidateAgentRequestPricing(context.Background(), group, account, PlatformGemini, "gemini-3-pro-image"))
+
+	// 同一个账号上的文本模型仍然按语言口径失败关闭（没配倍率就不许调用）。
+	require.Error(t, svc.ValidateAgentRequestPricing(context.Background(), group, account, PlatformGemini, "gemini-3-pro"))
 }
