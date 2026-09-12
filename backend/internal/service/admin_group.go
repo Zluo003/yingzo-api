@@ -585,6 +585,7 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		ClaudeCodeOnly:                  input.ClaudeCodeOnly,
 		ModelAllowlist:                  modelAllowlist,
 		ForceOpenAIFast:                 input.ForceOpenAIFast,
+		FreeOpenAIFast:                  input.FreeOpenAIFast,
 		AllowLive:                       input.AllowLive,
 		FallbackGroupID:                 input.FallbackGroupID,
 		FallbackGroupIDOnInvalidRequest: fallbackOnInvalidRequest,
@@ -601,7 +602,8 @@ func (s *adminServiceImpl) CreateGroup(ctx context.Context, input *CreateGroupIn
 		ReasoningEffortMappings:         reasoningEffortMappings,
 	}
 	sanitizeGroupMessagesDispatchFields(group)
-	if group.Platform != PlatformOpenAI {
+	// Live（实时）能力 OpenAI 与组合分组都支持，其余平台一律关闭。
+	if !groupSupportsOpenAIFast(group.Platform) {
 		group.AllowLive = false
 	}
 	sanitizeGroupReasoningEffortPolicy(group)
@@ -781,6 +783,8 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	}
 	if input.Platform != "" {
 		group.Platform = input.Platform
+		// 换到不支持 fast 的平台时必须清掉这些开关，否则会留下只有 OpenAI 才认识的配置。
+		sanitizeGroupOpenAIFast(group)
 	}
 	if input.VideoPricingRules != nil && (group.Platform == PlatformVideo || group.IsAgent()) {
 		normalizedRules, err := normalizeVideoPricingRules(*input.VideoPricingRules)
@@ -995,6 +999,9 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 	if input.ForceOpenAIFast != nil {
 		group.ForceOpenAIFast = *input.ForceOpenAIFast
 	}
+	if input.FreeOpenAIFast != nil {
+		group.FreeOpenAIFast = *input.FreeOpenAIFast
+	}
 	if input.AllowLive != nil {
 		group.AllowLive = *input.AllowLive
 	}
@@ -1023,7 +1030,8 @@ func (s *adminServiceImpl) UpdateGroup(ctx context.Context, id int64, input *Upd
 		group.ReasoningEffortMappings = reasoningEffortMappings
 	}
 	sanitizeGroupMessagesDispatchFields(group)
-	if group.Platform != PlatformOpenAI {
+	// Live（实时）能力 OpenAI 与组合分组都支持，其余平台一律关闭。
+	if !groupSupportsOpenAIFast(group.Platform) {
 		group.AllowLive = false
 	}
 	sanitizeGroupReasoningEffortPolicy(group)
