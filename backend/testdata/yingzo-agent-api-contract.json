@@ -1,0 +1,61 @@
+{
+  "schema_version": "3.0.0",
+  "agent_api_contract_version": "2026-08-11.1",
+  "model_catalog": {
+    "schema_version": 3,
+    "source": "configured_account_synced_catalog",
+    "capability_fields": [
+      "media_types",
+      "platforms",
+      "interfaces",
+      "input_modalities",
+      "output_modalities",
+      "operations",
+      "streaming",
+      "asynchronous",
+      "max_input_images",
+      "supported_aspect_ratios",
+      "supported_image_sizes",
+      "supported_video_resolutions",
+      "supported_video_durations_sec",
+      "supports_video_audio",
+      "cancellation"
+    ],
+    "cache_headers": ["ETag", "X-Model-Catalog-Schema-Version", "X-Gateway-Contract-Version"]
+  },
+  "image_response_format_url": "temporary_http_url_no_data_url_or_b64_json",
+  "endpoints": [
+    "GET /v1/models",
+    "POST /v1/responses",
+    "POST /v1/chat/completions",
+    "POST /v1/embeddings",
+    "POST /v1/messages",
+    "POST /v1/messages/count_tokens",
+    "GET /v1beta/models",
+    "GET /v1beta/models/:model",
+    "POST /v1beta/models/:model:generateContent",
+    "POST /v1beta/models/:model:streamGenerateContent",
+    "GET /api/v1/agent/pricing",
+    "POST /api/v1/agent/generation/estimates",
+    "POST /api/v1/agent/assets",
+    "HEAD /media/:id/:filename",
+    "GET /media/:id/:filename",
+    "POST /v1/images/generations",
+    "POST /v1/images/edits",
+    "POST /v1/videos",
+    "GET /v1/videos/:id"
+  ],
+  "video_response_required_fields": [
+    "id",
+    "object",
+    "model",
+    "status",
+    "refund_status",
+    "created_at"
+  ],
+  "video_refund_status_values": [
+    "not-applicable",
+    "pending",
+    "refunded"
+  ]
+}
