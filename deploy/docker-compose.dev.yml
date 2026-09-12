@@ -9,13 +9,13 @@
 # =============================================================================
 
 services:
-  sub2api:
+  yingzo-api:
     build:
       context: ..
       dockerfile: Dockerfile
       args:
         NPM_CONFIG_REGISTRY: ${NPM_CONFIG_REGISTRY:-https://registry.npmmirror.com}
-    container_name: sub2api-dev
+    container_name: yingzo-api-dev
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
@@ -58,7 +58,7 @@ services:
       - HTTP_PROXY=${SUB2API_DEV_HTTP_PROXY:-http://host.docker.internal:7897}
       - HTTPS_PROXY=${SUB2API_DEV_HTTPS_PROXY:-http://host.docker.internal:7897}
       - ALL_PROXY=${SUB2API_DEV_ALL_PROXY:-socks5://host.docker.internal:7897}
-      - NO_PROXY=${SUB2API_DEV_NO_PROXY:-127.0.0.1,localhost,::1,postgres,redis,sub2api,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,.local}
+      - NO_PROXY=${SUB2API_DEV_NO_PROXY:-127.0.0.1,localhost,::1,postgres,redis,yingzo-api,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,.local}
       # Gateway values come from Compose .env or the shell.
       # Fallbacks mirror Sub2API backend defaults so omitted values preserve behavior.
       - GATEWAY_FORCE_CODEX_CLI=${GATEWAY_FORCE_CODEX_CLI:-false}
@@ -116,7 +116,7 @@ services:
       redis:
         condition: service_healthy
     networks:
-      - sub2api-network
+      - yingzo-api-network
     healthcheck:
       test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://localhost:8080/health"]
       interval: 30s
@@ -126,7 +126,7 @@ services:
 
   postgres:
     image: postgres:18-alpine
-    container_name: sub2api-postgres-dev
+    container_name: yingzo-api-postgres-dev
     restart: unless-stopped
     volumes:
       - ./postgres_data:/var/lib/postgresql/data:Z
@@ -137,7 +137,7 @@ services:
       - PGDATA=/var/lib/postgresql/data
       - TZ=${TZ:-Asia/Shanghai}
     networks:
-      - sub2api-network
+      - yingzo-api-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sub2api} -d ${POSTGRES_DB:-sub2api}"]
       interval: 10s
@@ -147,7 +147,7 @@ services:
 
   redis:
     image: redis:8-alpine
-    container_name: sub2api-redis-dev
+    container_name: yingzo-api-redis-dev
     restart: unless-stopped
     volumes:
       - ./redis_data:/data:Z
@@ -166,7 +166,7 @@ services:
       - TZ=${TZ:-Asia/Shanghai}
       - REDISCLI_AUTH=${REDIS_PASSWORD:-}
     networks:
-      - sub2api-network
+      - yingzo-api-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -175,5 +175,5 @@ services:
       start_period: 5s
 
 networks:
-  sub2api-network:
+  yingzo-api-network:
     driver: bridge
