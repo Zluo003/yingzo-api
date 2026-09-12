@@ -98,6 +98,11 @@ type Group struct {
 	RateMultiplier float64 `json:"rate_multiplier"`
 	IsExclusive    bool    `json:"is_exclusive"`
 	Status         string  `json:"status"`
+	// Kind/SystemCode 标记系统内置分组（kind=agent / system_code=yingzo）。
+	// 用户端要用它识别"Yingzo Agent"分组来默认绑定 API Key，因此必须随普通分组
+	// 列表一起下发，不能只在管理端 DTO 里。
+	Kind       string `json:"kind,omitempty"`
+	SystemCode string `json:"system_code,omitempty"`
 
 	SubscriptionType          string   `json:"subscription_type"`
 	DailyLimitUSD             *float64 `json:"daily_limit_usd"`
