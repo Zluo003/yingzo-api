@@ -551,7 +551,10 @@ func (s *UpdateService) extractBinary(archivePath, destPath string) error {
 			}
 
 			// Only extract the specific binary we need
-			if baseName == "sub2api" || baseName == "sub2api.exe" {
+			// 归档里的主程序：新版本叫 yingzo-api，仍然接受历史名 sub2api，
+			// 否则从旧目录升级上来的实例会因为找不到二进制而失败。
+			if baseName == "yingzo-api" || baseName == "yingzo-api.exe" ||
+				baseName == "sub2api" || baseName == "sub2api.exe" {
 				// Additional security: limit file size (max 500MB)
 				const maxBinarySize = 500 * 1024 * 1024
 				if hdr.Size > maxBinarySize {
