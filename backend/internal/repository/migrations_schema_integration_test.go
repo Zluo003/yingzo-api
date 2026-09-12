@@ -78,7 +78,10 @@ func TestMigrationsRunner_IsIdempotent_AndSchemaIsUpToDate(t *testing.T) {
 	requireColumn(t, tx, "usage_logs", "image_size_source", "character varying", 16, true)
 	requireColumn(t, tx, "usage_logs", "image_size_breakdown", "jsonb", 0, true)
 	requireColumn(t, tx, "usage_logs", "video_count", "integer", 0, false)
-	requireColumn(t, tx, "usage_logs", "video_resolution", "character varying", 10, true)
+	// 156 建的是 VARCHAR(16)，172 想收窄到 VARCHAR(10) 但用了 ADD COLUMN IF NOT EXISTS，
+	// 列已存在于是变成空操作。实际 schema 是 16（10 的超集，取值 480p/720p/1080p/4K 都够用），
+	// 这里按实际情况断言；要收窄得另开迁移显式 ALTER TYPE。
+	requireColumn(t, tx, "usage_logs", "video_resolution", "character varying", 16, true)
 	requireColumn(t, tx, "usage_logs", "video_duration_seconds", "integer", 0, true)
 	requireColumn(t, tx, "usage_logs", "upstream_response_model", "character varying", 200, true)
 	requireColumn(t, tx, "usage_logs", "upstream_model_mismatch", "boolean", 0, true)

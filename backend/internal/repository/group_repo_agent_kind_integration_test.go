@@ -6,7 +6,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,24 +17,14 @@ func TestGroupRepositoryHydratesSystemAgentKindAndCode(t *testing.T) {
 	ctx := context.Background()
 	repo := newGroupRepositoryWithSQL(integrationEntClient, integrationDB)
 
-	// system_code 上有"未删除行唯一"的部分索引，迁移已经种了一个 yingzo 分组，
-	// 这里用带随机后缀的 code，避免与种子数据或并发用例撞车。
-	systemCode := "agent-test-" + uuid.NewString()
-
-	var groupID int64
-	require.NoError(t, integrationDB.QueryRowContext(ctx, `
-		INSERT INTO groups (name, description, platform, status, rate_multiplier, is_exclusive, kind, system_code, allow_image_generation)
-		VALUES ('Agent kind hydration', '', 'openai', 'active', 1, false, 'agent', $1, TRUE)
-		RETURNING id
-	`, systemCode).Scan(&groupID))
-	t.Cleanup(func() {
-		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM groups WHERE id = $1`, groupID)
-	})
+	// 迁移 245 之后全库只允许一条存活 agent 分组，所以直接验证迁移种入的系统分组：
+	// 它必须带着 kind/system_code 从数据库回到 service.Group。
+	groupID := seededSystemAgentGroupID(t)
 
 	group, err := repo.GetByID(ctx, groupID)
 	require.NoError(t, err)
 	require.Equal(t, "agent", group.Kind)
-	require.Equal(t, systemCode, group.SystemCode)
+	require.Equal(t, "yingzo", group.SystemCode)
 	require.True(t, group.IsAgent(), "the whole Agent feature keys off IsAgent()")
 
 	lite, err := repo.GetByIDLite(ctx, groupID)

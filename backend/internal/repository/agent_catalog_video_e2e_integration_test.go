@@ -20,14 +20,11 @@ func TestAgentCatalogDiscoversVideoModelsAndResolvesConfiguredPrice(t *testing.T
 	modelRepo := NewAgentModelRepository(integrationDB)
 	catalog := service.NewAgentModelCatalogService(accountRepo, groupRepo, modelRepo)
 
-	var groupID int64
-	require.NoError(t, integrationDB.QueryRowContext(ctx, `
-		INSERT INTO groups (name, description, platform, status, rate_multiplier, is_exclusive, kind, system_code, allow_image_generation)
-		VALUES ('agent catalog e2e', '', 'openai', 'active', 1, false, 'agent', $1, TRUE)
-		RETURNING id
-	`, "agent-catalog-e2e").Scan(&groupID))
+	// 迁移 245 之后全库只允许一条存活 agent 分组（唯一索引兜底），测试直接复用
+	// 迁移种入的系统分组；本用例创建的模型/价格在结束时清空，保证用例间互不影响。
+	groupID := seededSystemAgentGroupID(t)
 	t.Cleanup(func() {
-		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM groups WHERE id = $1`, groupID)
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM agent_group_models WHERE group_id = $1`, groupID)
 	})
 
 	var accountID int64
@@ -103,14 +100,11 @@ func TestAgentCatalogDiscoversCNProviderModelsAndResolvesTextRate(t *testing.T) 
 	modelRepo := NewAgentModelRepository(integrationDB)
 	catalog := service.NewAgentModelCatalogService(accountRepo, groupRepo, modelRepo)
 
-	var groupID int64
-	require.NoError(t, integrationDB.QueryRowContext(ctx, `
-		INSERT INTO groups (name, description, platform, status, rate_multiplier, is_exclusive, kind, system_code, allow_image_generation)
-		VALUES ('agent cn e2e', '', 'openai', 'active', 1, false, 'agent', 'agent-cn-e2e', TRUE)
-		RETURNING id
-	`).Scan(&groupID))
+	// 迁移 245 之后全库只允许一条存活 agent 分组（唯一索引兜底），测试直接复用
+	// 迁移种入的系统分组；本用例创建的模型/价格在结束时清空，保证用例间互不影响。
+	groupID := seededSystemAgentGroupID(t)
 	t.Cleanup(func() {
-		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM groups WHERE id = $1`, groupID)
+		_, _ = integrationDB.ExecContext(context.Background(), `DELETE FROM agent_group_models WHERE group_id = $1`, groupID)
 	})
 
 	var accountID int64
@@ -156,4 +150,16 @@ func TestAgentCatalogDiscoversCNProviderModelsAndResolvesTextRate(t *testing.T) 
 	require.NoError(t, err)
 	require.InDelta(t, 1.8, resolved, 1e-9)
 	require.Equal(t, "deepseek-v4-pro", modelCode)
+}
+
+// seededSystemAgentGroupID 取迁移种入的系统内置聚合分组：245 的唯一索引保证全库
+// 只有一条存活 agent 分组，测试不能再自己造第二条。
+func seededSystemAgentGroupID(t *testing.T) int64 {
+	t.Helper()
+	var groupID int64
+	require.NoError(t, integrationDB.QueryRowContext(context.Background(), `
+		SELECT id FROM groups
+		WHERE kind = 'agent' AND system_code = 'yingzo' AND deleted_at IS NULL
+	`).Scan(&groupID))
+	return groupID
 }
