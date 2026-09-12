@@ -436,6 +436,36 @@ func (r *channelRepository) SetGroupIDs(ctx context.Context, channelID int64, gr
 	return setGroupIDsTx(ctx, r.db, channelID, groupIDs)
 }
 
+// ListAgentGroupIDs 返回给定分组里属于系统聚合分组（kind=agent）的 ID。
+// 这类分组允许被多个渠道关联：它们的模型来自不同 provider 的账号，基准价需要按
+// 账号平台从对应渠道取，因此不能套用"一个分组只归一个渠道"的冲突校验。
+func (r *channelRepository) ListAgentGroupIDs(ctx context.Context, groupIDs []int64) ([]int64, error) {
+	if len(groupIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id FROM groups WHERE id = ANY($1) AND kind = 'agent' AND deleted_at IS NULL`,
+		pq.Array(groupIDs),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list agent group ids: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan agent group id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate agent group ids: %w", err)
+	}
+	return ids, nil
+}
+
 func (r *channelRepository) GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error) {
 	var channelID int64
 	err := r.db.QueryRowContext(ctx,

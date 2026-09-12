@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 )
@@ -21,8 +22,17 @@ type AgentAccountChannelPricing struct {
 	Pricing   *ChannelModelPricing
 }
 
-// ResolveAgentAccountChannelPricing resolves a language-model base price for
-// one concrete account. The Agent group itself is never a pricing source.
+// ResolveAgentAccountChannelPricing resolves a language-model base price for one
+// concrete account.
+//
+// 取价顺序（两条路径都按账号平台过滤，模型名精确优先、其次通配符）：
+//  1. 系统聚合分组自身关联的渠道。聚合分组把不同 provider 的账号聚在一起，管理员
+//     显式挂上来的渠道就是这些模型的基准价来源；同一 (平台, 模型) 命中多个渠道时取
+//     channel id 最小的一条并 warn —— 多渠道是显式配置出来的正常状态，取价必须确定，
+//     不能让整个模型变成不可用。
+//  2. 账号所属的其它源分组（既有语义）：一个分组只归一个渠道。跨分组命中多个渠道时
+//     仍然判为歧义并失败——那是"这个账号到底按哪个分组计价"没配置清楚，必须显式修，
+//     不能靠猜。
 func (s *ChannelService) ResolveAgentAccountChannelPricing(
 	ctx context.Context,
 	agentGroupID int64,
@@ -41,10 +51,16 @@ func (s *ChannelService) ResolveAgentAccountChannelPricing(
 		return nil, fmt.Errorf("%w: load channel cache: %v", ErrAgentChannelPricingUnavailable, err)
 	}
 
-	groupIDs := agentAccountGroupIDs(account)
-	modelLower := strings.ToLower(strings.TrimSpace(model))
+	modelLower := normalizeChannelPricingModelName(model)
+
+	// 1) 聚合分组自己的渠道优先。
+	if match := matchAgentGroupChannelPricing(cache, agentGroupID, account.Platform, modelLower); match != nil {
+		return match, nil
+	}
+
+	// 2) 账号所属其它源分组的渠道（既有行为）。
 	matchesByChannel := make(map[int64]*AgentAccountChannelPricing)
-	for _, groupID := range groupIDs {
+	for _, groupID := range agentAccountGroupIDs(account) {
 		if groupID == agentGroupID || cache.groupPlatform[groupID] != account.Platform {
 			continue
 		}
@@ -52,11 +68,11 @@ func (s *ChannelService) ResolveAgentAccountChannelPricing(
 		if channel == nil || !channel.IsActive() {
 			continue
 		}
-		pricing := lookupPricingAcrossPlatforms(cache, groupID, account.Platform, modelLower)
-		if pricing == nil || !channelModelPricingHasPrice(pricing) {
+		if _, exists := matchesByChannel[channel.ID]; exists {
 			continue
 		}
-		if _, exists := matchesByChannel[channel.ID]; exists {
+		pricing := lookupPricingAcrossPlatforms(cache, groupID, account.Platform, modelLower)
+		if pricing == nil || !channelModelPricingHasPrice(pricing) {
 			continue
 		}
 		pricingCopy := pricing.Clone()
@@ -68,13 +84,7 @@ func (s *ChannelService) ResolveAgentAccountChannelPricing(
 	}
 
 	if len(matchesByChannel) == 0 {
-		return nil, fmt.Errorf(
-			"%w: account %d platform %s model %s",
-			ErrAgentChannelPricingUnavailable,
-			account.ID,
-			account.Platform,
-			model,
-		)
+		return nil, agentChannelPricingUnavailableError(account, model)
 	}
 	if len(matchesByChannel) > 1 {
 		channelIDs := make([]int64, 0, len(matchesByChannel))
@@ -95,7 +105,102 @@ func (s *ChannelService) ResolveAgentAccountChannelPricing(
 	for _, match := range matchesByChannel {
 		return match, nil
 	}
-	return nil, ErrAgentChannelPricingUnavailable
+	return nil, agentChannelPricingUnavailableError(account, model)
+}
+
+// matchAgentGroupChannelPricing 在聚合分组关联的渠道里取价：命中多个渠道时取
+// channel id 最小的一条（并 warn），保证同一请求多次解析结果一致。
+func matchAgentGroupChannelPricing(cache *channelCache, agentGroupID int64, platform, modelLower string) *AgentAccountChannelPricing {
+	channels := cache.channelsByGroupID[agentGroupID]
+	if len(channels) == 0 {
+		return nil
+	}
+	type candidate struct {
+		channelID int64
+		pricing   *ChannelModelPricing
+	}
+	matches := make([]candidate, 0, len(channels))
+	for _, channel := range channels {
+		if channel == nil || !channel.IsActive() {
+			continue
+		}
+		pricing := channelPricingForAgentModel(channel, platform, modelLower)
+		if pricing == nil || !channelModelPricingHasPrice(pricing) {
+			continue
+		}
+		matches = append(matches, candidate{channelID: channel.ID, pricing: pricing})
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].channelID < matches[j].channelID })
+	if len(matches) > 1 {
+		channelIDs := make([]int64, 0, len(matches))
+		for _, match := range matches {
+			channelIDs = append(channelIDs, match.channelID)
+		}
+		slog.Warn("agent group has multiple channels pricing the same model; using the lowest channel id",
+			"agent_group_id", agentGroupID,
+			"platform", platform,
+			"model", modelLower,
+			"channel_ids", channelIDs,
+			"selected_channel_id", matches[0].channelID)
+	}
+	pricingCopy := matches[0].pricing.Clone()
+	return &AgentAccountChannelPricing{
+		GroupID:   agentGroupID,
+		ChannelID: matches[0].channelID,
+		Pricing:   &pricingCopy,
+	}
+}
+
+func agentChannelPricingUnavailableError(account *Account, model string) error {
+	return fmt.Errorf(
+		"%w: account %d platform %s model %s",
+		ErrAgentChannelPricingUnavailable,
+		account.ID,
+		account.Platform,
+		model,
+	)
+}
+
+// channelPricingForAgentModel 在单个渠道自己的定价条目里找 (平台, 模型) 的价格。
+//
+// 不能复用缓存里的 pricingByGroupModel：那张表是按 groupID 单值索引的，聚合分组挂了
+// 多个渠道时后写入的会覆盖前面的（结果取决于加载顺序）。这里直接读渠道自身的定价，
+// 精确匹配优先，其次按配置顺序取第一个命中的通配符条目。
+func channelPricingForAgentModel(channel *Channel, platform, modelLower string) *ChannelModelPricing {
+	if channel == nil {
+		return nil
+	}
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	var wildcard *ChannelModelPricing
+	for i := range channel.ModelPricing {
+		pricing := &channel.ModelPricing[i]
+		if !strings.EqualFold(strings.TrimSpace(pricing.Platform), platform) {
+			continue
+		}
+		for _, candidate := range pricing.Models {
+			candidate = strings.TrimSpace(candidate)
+			if candidate == "" {
+				continue
+			}
+			if strings.HasSuffix(candidate, "*") {
+				if wildcard != nil {
+					continue
+				}
+				prefix := normalizeChannelPricingModelName(strings.TrimSuffix(candidate, "*"))
+				if prefix != "" && strings.HasPrefix(modelLower, prefix) {
+					wildcard = pricing
+				}
+				continue
+			}
+			if normalizeChannelPricingModelName(candidate) == modelLower {
+				return pricing
+			}
+		}
+	}
+	return wildcard
 }
 
 // AgentTextPricing is the complete answer for one Agent text request: the source

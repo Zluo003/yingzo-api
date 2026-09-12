@@ -805,8 +805,18 @@ function togglePlatform(platform: GroupPlatform) {
 
 function getGroupsForPlatform(platform: GroupPlatform): AdminGroup[] {
   return allGroups.value.filter(
-    g => g.platform === platform || (g.platform === 'composite' && compositePlatforms.includes(platform))
+    g =>
+      g.platform === platform ||
+      (g.platform === 'composite' && compositePlatforms.includes(platform)) ||
+      // 系统内置聚合分组（Yingzo Agent）的 platform 只是占位：它把多个 provider 的账号
+      // 聚在一起，基准价要按账号平台取对应渠道的价格，所以每个平台分区都要能选到它。
+      isSystemAgentGroup(g)
   )
+}
+
+/** 系统内置聚合分组：kind=agent 且带 system_code，允许关联多个渠道。 */
+function isSystemAgentGroup(group: AdminGroup | null | undefined): boolean {
+  return group?.kind === 'agent' && Boolean(group?.system_code)
 }
 
 // ── Group helpers ──
@@ -822,6 +832,11 @@ const groupToChannelMap = computed(() => {
 })
 
 function isGroupInOtherChannel(groupId: number, _platform: string): boolean {
+  // 聚合分组允许同时挂在多个渠道下（每个平台一个），后端也放行了这条路径。
+  const group = allGroups.value.find(g => g.id === groupId)
+  if (isSystemAgentGroup(group)) {
+    return false
+  }
   return groupToChannelMap.value.has(groupId)
 }
 

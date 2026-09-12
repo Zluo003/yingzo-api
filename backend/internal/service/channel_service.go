@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -41,6 +42,9 @@ type ChannelRepository interface {
 	SetGroupIDs(ctx context.Context, channelID int64, groupIDs []int64) error
 	GetChannelIDByGroupID(ctx context.Context, groupID int64) (int64, error)
 	GetGroupsInOtherChannels(ctx context.Context, channelID int64, groupIDs []int64) ([]int64, error)
+	// ListAgentGroupIDs 返回其中属于系统聚合分组（kind=agent）的 ID：这类分组允许
+	// 关联多个渠道，其余分组仍保持"一个分组只归一个渠道"。
+	ListAgentGroupIDs(ctx context.Context, groupIDs []int64) ([]int64, error)
 
 	// 分组平台查询
 	GetGroupPlatforms(ctx context.Context, groupIDs []int64) (map[int64]string, error)
@@ -95,8 +99,11 @@ type channelCache struct {
 	wildcardByGroupPlatform map[channelGroupPlatformKey][]*wildcardPricingEntry // (groupID, platform) → 通配符定价（按配置顺序，先匹配先使用）
 	mappingByGroupModel     map[channelModelKey]string                          // (groupID, platform, model) → 映射目标
 	wildcardMappingByGP     map[channelGroupPlatformKey][]*wildcardMappingEntry // (groupID, platform) → 通配符映射（按配置顺序，先匹配先使用）
-	channelByGroupID        map[int64]*Channel                                  // groupID → 渠道
-	groupPlatform           map[int64]string                                    // groupID → platform
+	channelByGroupID        map[int64]*Channel                                  // groupID → 渠道（普通分组：唯一归属）
+	// channelsByGroupID 是聚合分组用的多值索引：一个分组可以挂多个渠道，
+	// 顺序按 channel id 升序，保证取价结果确定。
+	channelsByGroupID map[int64][]*Channel
+	groupPlatform     map[int64]string // groupID → platform
 
 	// 冷路径（CRUD 操作）
 	byID     map[int64]*Channel
@@ -218,6 +225,7 @@ func newEmptyChannelCache() *channelCache {
 		mappingByGroupModel:     make(map[channelModelKey]string),
 		wildcardMappingByGP:     make(map[channelGroupPlatformKey][]*wildcardMappingEntry),
 		channelByGroupID:        make(map[int64]*Channel),
+		channelsByGroupID:       make(map[int64][]*Channel),
 		groupPlatform:           make(map[int64]string),
 		byID:                    make(map[int64]*Channel),
 	}
@@ -341,10 +349,18 @@ func populateChannelCache(channels []Channel, groupPlatforms map[int64]string) *
 		cache.byID[ch.ID] = ch
 		for _, gid := range ch.GroupIDs {
 			cache.channelByGroupID[gid] = ch
+			cache.channelsByGroupID[gid] = append(cache.channelsByGroupID[gid], ch)
 			platform := groupPlatforms[gid]
 			expandPricingToCache(cache, ch, gid, platform)
 			expandMappingToCache(cache, ch, gid, platform)
 		}
+	}
+
+	// 多值索引按 channel id 升序：同一个聚合分组挂了多个渠道时，取价结果必须确定，
+	// 不能依赖 ListAll 的返回顺序。
+	for gid, channels := range cache.channelsByGroupID {
+		sort.Slice(channels, func(i, j int) bool { return channels[i].ID < channels[j].ID })
+		cache.channelsByGroupID[gid] = channels
 	}
 
 	return cache
@@ -963,11 +979,22 @@ func (s *ChannelService) applyUpdateInput(ctx context.Context, channel *Channel,
 
 // checkGroupConflicts 检查待关联的分组是否已属于其他渠道。
 // channelID 为当前渠道 ID（Create 时传 0）。
+//
+// 系统聚合分组（Yingzo Agent）例外：它把多个 provider 的账号聚在一起，基准价要按
+// 账号平台取对应渠道的价格，因此必须允许一个分组挂多个渠道。普通分组继续保持单一
+// 归属——渠道缓存是 groupID 单值索引的，破坏它会让渠道价计费变得不确定。
 func (s *ChannelService) checkGroupConflicts(ctx context.Context, channelID int64, groupIDs []int64) error {
 	if len(groupIDs) == 0 {
 		return nil
 	}
-	conflicting, err := s.repo.GetGroupsInOtherChannels(ctx, channelID, groupIDs)
+	checked, err := s.excludeMultiChannelGroupIDs(ctx, groupIDs)
+	if err != nil {
+		return err
+	}
+	if len(checked) == 0 {
+		return nil
+	}
+	conflicting, err := s.repo.GetGroupsInOtherChannels(ctx, channelID, checked)
 	if err != nil {
 		return fmt.Errorf("check group conflicts: %w", err)
 	}
@@ -975,6 +1002,32 @@ func (s *ChannelService) checkGroupConflicts(ctx context.Context, channelID int6
 		return ErrGroupAlreadyInChannel
 	}
 	return nil
+}
+
+// excludeMultiChannelGroupIDs 去掉允许关联多个渠道的系统聚合分组，返回其余待校验的 ID。
+func (s *ChannelService) excludeMultiChannelGroupIDs(ctx context.Context, groupIDs []int64) ([]int64, error) {
+	if s == nil || s.repo == nil || len(groupIDs) == 0 {
+		return groupIDs, nil
+	}
+	agentGroupIDs, err := s.repo.ListAgentGroupIDs(ctx, groupIDs)
+	if err != nil {
+		return nil, fmt.Errorf("list agent group ids: %w", err)
+	}
+	if len(agentGroupIDs) == 0 {
+		return groupIDs, nil
+	}
+	agent := make(map[int64]struct{}, len(agentGroupIDs))
+	for _, id := range agentGroupIDs {
+		agent[id] = struct{}{}
+	}
+	remaining := make([]int64, 0, len(groupIDs))
+	for _, id := range groupIDs {
+		if _, isAgent := agent[id]; isAgent {
+			continue
+		}
+		remaining = append(remaining, id)
+	}
+	return remaining, nil
 }
 
 // getOldGroupIDs 获取渠道更新前的关联分组 ID（用于失效 auth 缓存）。

@@ -146,3 +146,80 @@ func agentPricingChannelServiceForTest(channels []Channel, groupPlatforms map[in
 	channelService.cache.Store(populateChannelCache(channels, groupPlatforms))
 	return channelService
 }
+
+// 聚合分组允许多个渠道：按账号平台取价，同一平台多个渠道命中同一模型时取
+// channel id 最小的一条（确定性），而不是判歧义让模型不可用。
+func TestResolveAgentAccountPricingSupportsMultipleChannelsOnAgentGroup(t *testing.T) {
+	agentGroupID := int64(700)
+	openAIPrice, deepseekPrice := 0.01, 0.02
+
+	newService := func(channels []Channel, platforms map[int64]string) *ChannelService {
+		return agentPricingChannelServiceForTest(channels, platforms)
+	}
+
+	t.Run("按账号平台选渠道", func(t *testing.T) {
+		channelService := newService([]Channel{
+			{ID: 71, Status: StatusActive, GroupIDs: []int64{agentGroupID}, ModelPricing: []ChannelModelPricing{
+				{Platform: PlatformOpenAI, Models: []string{"gpt-x"}, InputPrice: &openAIPrice}}},
+			{ID: 72, Status: StatusActive, GroupIDs: []int64{agentGroupID}, ModelPricing: []ChannelModelPricing{
+				{Platform: PlatformDeepseek, Models: []string{"deepseek-x"}, InputPrice: &deepseekPrice}}},
+		}, map[int64]string{agentGroupID: PlatformOpenAI})
+
+		match, err := channelService.ResolveAgentAccountChannelPricing(context.Background(), agentGroupID, &Account{
+			ID: 1, Platform: PlatformDeepseek, GroupIDs: []int64{agentGroupID},
+		}, "deepseek-x")
+		require.NoError(t, err)
+		require.Equal(t, int64(72), match.ChannelID)
+		require.Equal(t, agentGroupID, match.GroupID)
+		require.InDelta(t, deepseekPrice, *match.Pricing.InputPrice, 1e-12)
+	})
+
+	t.Run("同平台多渠道取最小 id", func(t *testing.T) {
+		channelService := newService([]Channel{
+			{ID: 82, Status: StatusActive, GroupIDs: []int64{agentGroupID}, ModelPricing: []ChannelModelPricing{
+				{Platform: PlatformGemini, Models: []string{"gemini-x"}, InputPrice: &openAIPrice}}},
+			{ID: 81, Status: StatusActive, GroupIDs: []int64{agentGroupID}, ModelPricing: []ChannelModelPricing{
+				{Platform: PlatformGemini, Models: []string{"gemini-x"}, InputPrice: &deepseekPrice}}},
+		}, map[int64]string{agentGroupID: PlatformOpenAI})
+
+		match, err := channelService.ResolveAgentAccountChannelPricing(context.Background(), agentGroupID, &Account{
+			ID: 2, Platform: PlatformGemini, GroupIDs: []int64{agentGroupID},
+		}, "gemini-x")
+		require.NoError(t, err)
+		require.Equal(t, int64(81), match.ChannelID, "多渠道是显式配置，取价必须确定")
+	})
+
+	t.Run("聚合分组渠道优先于账号源分组渠道", func(t *testing.T) {
+		sourceGroupID := int64(701)
+		channelService := newService([]Channel{
+			{ID: 91, Status: StatusActive, GroupIDs: []int64{agentGroupID}, ModelPricing: []ChannelModelPricing{
+				{Platform: PlatformKimi, Models: []string{"kimi-x"}, InputPrice: &deepseekPrice}}},
+			{ID: 92, Status: StatusActive, GroupIDs: []int64{sourceGroupID}, ModelPricing: []ChannelModelPricing{
+				{Platform: PlatformKimi, Models: []string{"kimi-x"}, InputPrice: &openAIPrice}}},
+		}, map[int64]string{agentGroupID: PlatformOpenAI, sourceGroupID: PlatformKimi})
+
+		match, err := channelService.ResolveAgentAccountChannelPricing(context.Background(), agentGroupID, &Account{
+			ID: 3, Platform: PlatformKimi, GroupIDs: []int64{agentGroupID, sourceGroupID},
+		}, "kimi-x")
+		require.NoError(t, err)
+		require.Equal(t, int64(91), match.ChannelID, "显式挂在聚合分组上的渠道就是该模型的基准价来源")
+		require.Equal(t, agentGroupID, match.GroupID)
+	})
+
+	t.Run("聚合分组没有该模型时回落账号源分组", func(t *testing.T) {
+		sourceGroupID := int64(702)
+		channelService := newService([]Channel{
+			{ID: 95, Status: StatusActive, GroupIDs: []int64{agentGroupID}, ModelPricing: []ChannelModelPricing{
+				{Platform: PlatformOpenAI, Models: []string{"other-model"}, InputPrice: &openAIPrice}}},
+			{ID: 96, Status: StatusActive, GroupIDs: []int64{sourceGroupID}, ModelPricing: []ChannelModelPricing{
+				{Platform: PlatformZhipu, Models: []string{"glm-x"}, InputPrice: &deepseekPrice}}},
+		}, map[int64]string{agentGroupID: PlatformOpenAI, sourceGroupID: PlatformZhipu})
+
+		match, err := channelService.ResolveAgentAccountChannelPricing(context.Background(), agentGroupID, &Account{
+			ID: 4, Platform: PlatformZhipu, GroupIDs: []int64{agentGroupID, sourceGroupID},
+		}, "glm-x")
+		require.NoError(t, err)
+		require.Equal(t, int64(96), match.ChannelID)
+		require.Equal(t, sourceGroupID, match.GroupID)
+	})
+}
