@@ -85,8 +85,8 @@ func (h *AgentHandler) ModelCatalog() *service.AgentModelCatalogService {
 	return h.agentModels
 }
 
-// Models 返回 Yingzo Agent 当前可用的聚合模型目录。Agent 分组的数据库平台
-// 仍保持 openai 以兼容现有入口，但目录来源是所有已配置 provider 的 Agent 模型。
+// Models 返回 Yingzo Agent 当前可用的聚合模型目录。Agent 分组只保留一个
+// 入口凭证，实际 provider 由模型目录和路由中间件按请求模型解析。
 func (h *AgentHandler) Models(c *gin.Context) {
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
 	if !ok || apiKey == nil || apiKey.Group == nil || !apiKey.Group.IsAgent() {
@@ -102,11 +102,189 @@ func (h *AgentHandler) Models(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "api_error", "message": err.Error()}})
 		return
 	}
+	// The desktop client consumes the model catalogue as a routing contract,
+	// rather than as a plain provider model list. Keep the list envelope for the
+	// existing /v1/models surface, but publish the aggregate Agent capabilities
+	// that let the client select the correct native provider route per model.
+	config, configErr := h.agentModels.GetConfig(c.Request.Context(), apiKey.Group.ID)
+	if configErr != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "api_error", "message": "Agent model catalog is unavailable"}})
+		return
+	}
 	models := make([]gin.H, 0, len(entries))
 	for _, entry := range entries {
-		models = append(models, gin.H{"id": entry.ID, "object": "model", "created": 0, "owned_by": "yingzo-agent", "media_types": entry.MediaTypes, "platforms": entry.Platforms, "interfaces": entry.Interfaces})
+		models = append(models, agentCatalogModel(entry, config))
 	}
-	c.JSON(http.StatusOK, gin.H{"object": "list", "data": models})
+	body := gin.H{
+		"object":                   "list",
+		"catalog_schema_version":   service.AgentModelCatalogSchemaVersion,
+		"gateway_contract_version": service.AgentAPIContractVersion,
+		"provenance": gin.H{
+			"catalog_source":     service.AgentModelCatalogSource,
+			"capability_sources": []string{"gateway"},
+		},
+		"data": models,
+	}
+	raw, _ := json.Marshal(body)
+	digest := sha256.Sum256(raw)
+	etag := `"` + hex.EncodeToString(digest[:]) + `"`
+	c.Header("ETag", etag)
+	c.Header("Cache-Control", "private, max-age=15")
+	c.Header("X-Model-Catalog-Schema-Version", strconv.Itoa(service.AgentModelCatalogSchemaVersion))
+	c.Header("X-Gateway-Contract-Version", service.AgentAPIContractVersion)
+	if strings.TrimSpace(c.GetHeader("If-None-Match")) == etag {
+		c.Status(http.StatusNotModified)
+		return
+	}
+	c.JSON(http.StatusOK, body)
+}
+
+// agentCatalogModel translates the persisted Agent model routing record into
+// the capability vocabulary consumed by the desktop kernel. It intentionally
+// describes only routes that the existing gateway handlers already implement;
+// no upstream protocol handler is changed here.
+func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.AgentModelCatalogConfig) gin.H {
+	input := []string{}
+	output := []string{}
+	operations := []string{}
+	streaming := true
+	asynchronous := false
+	capabilities := gin.H{
+		"input_modalities":  input,
+		"output_modalities": output,
+		"operations":        operations,
+		"media_types":       entry.MediaTypes,
+		"platforms":         entry.Platforms,
+		"interfaces":        entry.Interfaces,
+		"streaming":         streaming,
+		"asynchronous":      asynchronous,
+	}
+
+	if containsAgentMediaType(entry.MediaTypes, service.AgentMediaTypeText) {
+		input = appendUniqueStrings(input, "text")
+		output = appendUniqueStrings(output, "text")
+		operations = appendUniqueStrings(operations, "text.generate")
+	}
+	if containsAgentMediaType(entry.MediaTypes, service.AgentMediaTypeImage) {
+		input = appendUniqueStrings(input, "text", "image")
+		output = appendUniqueStrings(output, "image")
+		operations = appendUniqueStrings(operations, "image.generate", "image.edit")
+		streaming = false
+		capabilities["max_input_images"] = 16
+		capabilities["supported_aspect_ratios"] = []string{"1:1", "16:9", "9:16"}
+		capabilities["supported_image_sizes"] = []string{"1K", "2K", "4K"}
+	}
+	if containsAgentMediaType(entry.MediaTypes, service.AgentMediaTypeVideo) {
+		input = appendUniqueStrings(input, "text", "image", "video", "audio")
+		output = appendUniqueStrings(output, "video")
+		operations = appendUniqueStrings(operations, "video.generate")
+		streaming = false
+		asynchronous = true
+		capabilities["supported_video_resolutions"] = configuredAgentVideoResolutions(entry, config)
+		capabilities["supported_video_durations_sec"] = []int{4, 8, 15}
+		capabilities["supports_video_audio"] = true
+		capabilities["cancellation"] = []string{"remoteJob"}
+	}
+	if containsAgentInterface(entry.Interfaces, service.AgentInterfaceOpenAIEmbeddings) {
+		operations = removeString(operations, "text.generate")
+		input = []string{"text"}
+		output = []string{"text"}
+		streaming = false
+	}
+	if len(input) == 0 {
+		input = []string{"text"}
+	}
+	if len(output) == 0 {
+		output = []string{"text"}
+	}
+	capabilities["input_modalities"] = input
+	capabilities["output_modalities"] = output
+	capabilities["operations"] = operations
+	capabilities["streaming"] = streaming
+	capabilities["asynchronous"] = asynchronous
+
+	return gin.H{
+		"id":                entry.ID,
+		"object":            "model",
+		"created":           0,
+		"owned_by":          "yingzo-agent",
+		"source":            "gateway",
+		"availability":      "advertised",
+		"capability_source": "gateway",
+		"display_name":      entry.ID,
+		"media_types":       entry.MediaTypes,
+		"platforms":         entry.Platforms,
+		"interfaces":        entry.Interfaces,
+		"capabilities":      capabilities,
+	}
+}
+
+func containsAgentMediaType(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAgentInterface(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
+}
+
+func appendUniqueStrings(values []string, additions ...string) []string {
+	seen := make(map[string]struct{}, len(values)+len(additions))
+	for _, value := range values {
+		seen[value] = struct{}{}
+	}
+	for _, value := range additions {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		values = append(values, value)
+	}
+	return values
+}
+
+func removeString(values []string, target string) []string {
+	result := values[:0]
+	for _, value := range values {
+		if value != target {
+			result = append(result, value)
+		}
+	}
+	return result
+}
+
+func configuredAgentVideoResolutions(entry service.AgentModelCatalogEntry, config *service.AgentModelCatalogConfig) []string {
+	// The public aggregate entry intentionally omits pricing internals. When a
+	// configured model record is available, expose its explicitly priced tiers;
+	// the client will consequently never select an unpriced video resolution.
+	seen := map[string]struct{}{}
+	result := make([]string, 0)
+	if config != nil {
+		for _, model := range config.Models {
+			if model.ModelCode != entry.ID || model.MediaType != service.AgentMediaTypeVideo || !model.Enabled || !model.Available || model.Excluded {
+				continue
+			}
+			for _, price := range model.Prices {
+				resolution := strings.TrimSpace(price.Resolution)
+				if resolution != "" {
+					if _, ok := seen[resolution]; !ok {
+						seen[resolution] = struct{}{}
+						result = append(result, resolution)
+					}
+				}
+			}
+		}
+	}
+	return result
 }
 
 func (h *AgentHandler) StartCleanupWorker(interval time.Duration) {
@@ -725,6 +903,17 @@ func (e *temporaryAssetUploadError) Error() string {
 // UploadTemporaryAsset publishes one trusted multipart asset for later use as
 // a public reference URL in a video generation request.
 func (h *AgentHandler) UploadTemporaryAsset(c *gin.Context) {
+	h.uploadTemporaryAsset(c, http.StatusCreated)
+}
+
+// UploadTemporaryAssetCompat is the legacy /v1/files adapter used by older
+// desktop clients. It reuses the Agent asset pipeline verbatim and only
+// changes the successful status code expected by that client.
+func (h *AgentHandler) UploadTemporaryAssetCompat(c *gin.Context) {
+	h.uploadTemporaryAsset(c, http.StatusOK)
+}
+
+func (h *AgentHandler) uploadTemporaryAsset(c *gin.Context, successStatus int) {
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
 	if !ok || apiKey == nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{
@@ -768,7 +957,7 @@ func (h *AgentHandler) UploadTemporaryAsset(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, result)
+	c.JSON(successStatus, result)
 }
 
 // uploadTemporaryAssetPart stores one multipart file for the standalone Agent

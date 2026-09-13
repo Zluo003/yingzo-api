@@ -45,6 +45,10 @@ func TestAgentAssetUploadRouteRequiresAgentCredential(t *testing.T) {
 	ordinary.ServeHTTP(ordinaryResponse, httptest.NewRequest(http.MethodPost, "/api/v1/agent/assets", nil))
 	require.Equal(t, http.StatusForbidden, ordinaryResponse.Code)
 	require.Contains(t, ordinaryResponse.Body.String(), "agent_credential_required")
+	legacyOrdinaryResponse := httptest.NewRecorder()
+	ordinary.ServeHTTP(legacyOrdinaryResponse, httptest.NewRequest(http.MethodPost, "/v1/files", nil))
+	require.Equal(t, http.StatusForbidden, legacyOrdinaryResponse.Code)
+	require.Contains(t, legacyOrdinaryResponse.Body.String(), "agent_credential_required")
 
 	agent := gin.New()
 	agentV1 := agent.Group("/api/v1")
@@ -57,6 +61,10 @@ func TestAgentAssetUploadRouteRequiresAgentCredential(t *testing.T) {
 	missingReadRoute := httptest.NewRecorder()
 	agent.ServeHTTP(missingReadRoute, httptest.NewRequest(http.MethodGet, "/api/v1/agent/assets/not-a-uuid", nil))
 	require.Equal(t, http.StatusNotFound, missingReadRoute.Code)
+
+	pricingResponse := httptest.NewRecorder()
+	agent.ServeHTTP(pricingResponse, httptest.NewRequest(http.MethodGet, "/api/pricing", nil))
+	require.Equal(t, http.StatusServiceUnavailable, pricingResponse.Code)
 }
 
 func TestRetiredYingzoDistributionRoutesAreNotRegistered(t *testing.T) {

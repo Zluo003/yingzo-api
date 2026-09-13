@@ -18,6 +18,15 @@ func RegisterAgentRoutes(r *gin.Engine, v1 *gin.RouterGroup, h *handler.Handlers
 	g.POST("/assets", h.Agent.UploadTemporaryAsset)
 	g.POST("/assets/resolve", h.Agent.ResolveTemporaryAssets)
 
+	// Compatibility adapters for the desktop client's pre-Agent endpoint
+	// contract. They share the Agent authentication and storage pipeline; no
+	// upstream provider route is changed.
+	legacyV1 := r.Group("/v1")
+	legacyV1.Use(gin.HandlerFunc(apiKeyAuth))
+	legacyV1.Use(requireAgentGroup())
+	legacyV1.POST("/files", h.Agent.UploadTemporaryAssetCompat)
+	r.GET("/api/pricing", gin.HandlerFunc(apiKeyAuth), requireAgentGroup(), h.Agent.GetAgentPricingCompatibility)
+
 	r.GET("/temporary-assets/:token", h.Agent.ServeTemporaryAsset)
 	r.HEAD("/temporary-assets/:token", h.Agent.ServeTemporaryAsset)
 	r.GET("/media/:id/:filename", h.Agent.ServeCleanTemporaryAsset)

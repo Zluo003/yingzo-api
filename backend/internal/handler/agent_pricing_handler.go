@@ -3,12 +3,62 @@ package handler
 import (
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 )
+
+// GetAgentPricingCompatibility exposes the small pricing shape consumed by
+// older desktop clients. It is an adapter over the Agent catalogue; the
+// canonical endpoint remains /api/v1/agent/pricing.
+func (h *AgentHandler) GetAgentPricingCompatibility(c *gin.Context) {
+	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.Group == nil || !apiKey.Group.IsAgent() {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"code": "invalid_api_key", "message": "Invalid Agent API key"}})
+		return
+	}
+	if h.agentModels == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "agent_pricing_unavailable", "message": "Unable to resolve current Agent pricing"}})
+		return
+	}
+	config, err := h.agentModels.GetConfig(c.Request.Context(), apiKey.Group.ID)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"code": "agent_pricing_unavailable", "message": "Unable to resolve current Agent pricing"}})
+		return
+	}
+	data := make([]gin.H, 0)
+	for _, model := range config.Models {
+		if model.MediaType != service.AgentMediaTypeVideo || !model.Enabled || !model.Available || model.Excluded {
+			continue
+		}
+		resolutions := make([]string, 0, len(model.Prices))
+		seen := map[string]struct{}{}
+		for _, price := range model.Prices {
+			resolution := strings.TrimSpace(price.Resolution)
+			if resolution == "" {
+				continue
+			}
+			if _, exists := seen[resolution]; exists {
+				continue
+			}
+			seen[resolution] = struct{}{}
+			resolutions = append(resolutions, resolution)
+		}
+		if len(resolutions) == 0 {
+			continue
+		}
+		data = append(data, gin.H{
+			"model_name": model.ModelCode,
+			"billing_usage_schema": gin.H{
+				"resolution": gin.H{"enum": resolutions},
+			},
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data})
+}
 
 type agentPricingSnapshotRule struct {
 	Model               string  `json:"model"`
