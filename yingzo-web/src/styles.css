@@ -17,3 +17,5 @@
 .app-shell main{width:auto;min-width:0}
 .profile-logout{left:auto;right:6vw;top:42px}
 @media(max-width:900px){.profile-logout{right:20px;top:8px}}
+.profile-actions-row{width:100%;display:flex;justify-content:flex-end;align-items:center;margin:-18px 0 14px}.profile-actions-row .profile-logout{position:static}.profile-logout{left:auto;right:auto;top:auto}
+@media(max-width:900px){.profile-actions-row{margin:-8px 0 12px}.profile-actions-row .profile-logout{position:static}}
