@@ -10,3 +10,4 @@
 .page-head{position:relative}.profile-logout{position:absolute;right:0;top:8px;border:1px solid var(--line);border-radius:999px;padding:11px 20px;color:#8f3f34;background:transparent}.profile-logout:hover{background:#eadfd5}
 /* Fixed navigation rail; only the workspace content scrolls. */
 .app-shell{height:100vh;min-height:0;overflow:hidden}.app-shell aside{height:100vh;min-height:0;position:sticky;top:0;overflow:hidden}.app-shell main{height:100vh;min-height:0;overflow-y:auto;overscroll-behavior:contain}.app-shell main::-webkit-scrollbar{width:10px}.app-shell main::-webkit-scrollbar-thumb{background:#cbbcaf;border-radius:99px;border:3px solid #f2ece4}@media(max-width:900px){.app-shell{height:auto;min-height:100vh;overflow:visible}.app-shell aside{height:auto;position:static}.app-shell main{height:auto;min-height:calc(100vh - 64px);overflow:visible}}
+.profile-logout{left:360px;right:auto;top:42px}@media(max-width:900px){.profile-logout{left:auto;right:0;top:8px}}
