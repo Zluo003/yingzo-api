@@ -115,7 +115,13 @@ func ApplyMigrations(ctx context.Context, db *sql.DB) error {
 	if db == nil {
 		return errors.New("nil sql db")
 	}
-	return applyMigrationsFS(ctx, db, migrations.FS)
+	if err := applyMigrationsFS(ctx, db, migrations.FS); err != nil {
+		return err
+	}
+	// 迁移只跑一次，而系统内置聚合分组可能在那之后被删/停用（迁移 244 修过一次，
+	// 但同样只跑一次）。每次启动对齐一次，避免线上又出现"找不到 Yingzo Agent 分组"。
+	ensureSystemAgentGroupLogged(ctx, db)
+	return nil
 }
 
 // applyMigrationsFS 是迁移执行的核心实现。
