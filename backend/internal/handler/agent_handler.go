@@ -144,6 +144,13 @@ func (h *AgentHandler) Models(c *gin.Context) {
 // describes only routes that the existing gateway handlers already implement;
 // no upstream protocol handler is changed here.
 func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.AgentModelCatalogConfig) gin.H {
+	// The internal service uses the canonical billing/provider platform name
+	// "video".  The desktop model protocol identifies the native video
+	// interface as Seedance, however, and resolves the route by requiring the
+	// platform paired with seedance.videos to be "seedance".  Publish the
+	// protocol platform at this API boundary so clients can select and save
+	// video models without treating them as having no native interface.
+	platforms := agentCatalogPublicPlatforms(entry.Platforms)
 	input := []string{}
 	output := []string{}
 	operations := []string{}
@@ -154,7 +161,7 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 		"output_modalities": output,
 		"operations":        operations,
 		"media_types":       entry.MediaTypes,
-		"platforms":         entry.Platforms,
+		"platforms":         platforms,
 		"interfaces":        entry.Interfaces,
 		"streaming":         streaming,
 		"asynchronous":      asynchronous,
@@ -213,10 +220,30 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 		"capability_source": "gateway",
 		"display_name":      entry.ID,
 		"media_types":       entry.MediaTypes,
-		"platforms":         entry.Platforms,
+		"platforms":         platforms,
 		"interfaces":        entry.Interfaces,
 		"capabilities":      capabilities,
 	}
+}
+
+func agentCatalogPublicPlatforms(platforms []string) []string {
+	result := make([]string, 0, len(platforms))
+	seen := make(map[string]struct{}, len(platforms))
+	for _, platform := range platforms {
+		platform = strings.TrimSpace(platform)
+		if platform == service.PlatformVideo {
+			platform = "seedance"
+		}
+		if platform == "" {
+			continue
+		}
+		if _, ok := seen[platform]; ok {
+			continue
+		}
+		seen[platform] = struct{}{}
+		result = append(result, platform)
+	}
+	return result
 }
 
 func containsAgentMediaType(values []string, target string) bool {
