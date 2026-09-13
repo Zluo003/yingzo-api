@@ -104,6 +104,10 @@ var migrationChecksumCompatibilityRules = map[string]migrationChecksumCompatibil
 // - 已应用的迁移会被自动跳过（通过校验 filename 判断）
 // - 如果迁移文件内容被修改（checksum 不匹配），会返回错误
 // - 使用 PostgreSQL Advisory Lock 确保多实例并发安全
+// - 迁移完成后执行系统内置分组等数据的启动期自愈
+//
+// 启动路径应调用本函数，而不是直接调用 applyMigrationsFS；后者仅负责执行 SQL
+// 迁移，不会执行迁移后的数据对齐。
 //
 // 参数：
 //   - ctx: 上下文，用于超时控制和取消

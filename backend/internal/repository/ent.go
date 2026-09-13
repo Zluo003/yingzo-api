@@ -11,13 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent/dialect"
+	entsql "entgo.io/ent/dialect/sql"
 	"github.com/Wei-Shaw/sub2api/ent"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/timezone"
-	"github.com/Wei-Shaw/sub2api/migrations"
-
-	"entgo.io/ent/dialect"
-	entsql "entgo.io/ent/dialect/sql"
 	"github.com/lib/pq"
 )
 
@@ -136,7 +134,9 @@ func InitEnt(cfg *config.Config) (*ent.Client, *sql.DB, error) {
 	migrationCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	if err := initializeDatabaseWithRetry(migrationCtx, func(ctx context.Context) error {
-		return applyMigrationsFS(ctx, drv.DB(), migrations.FS)
+		// 正常启动也必须走公开入口；底层 applyMigrationsFS 不会执行迁移后的
+		// Yingzo Agent 分组自愈，升级后的旧库可能因此没有可绑定的 Agent 分组。
+		return ApplyMigrations(ctx, drv.DB())
 	}); err != nil {
 		_ = drv.Close() // 迁移失败时关闭驱动，避免资源泄露
 		return nil, nil, err
