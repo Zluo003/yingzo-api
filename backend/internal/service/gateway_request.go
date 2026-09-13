@@ -1421,7 +1421,12 @@ func normalizeEffortToken(raw string) string {
 }
 
 func isGLM53Model(model string) bool {
-	return strings.EqualFold(strings.TrimSpace(model), "glm-5.3")
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "glm-5.3", "glm-5.3-flash":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeGLMOpenAIReasoningEffort(raw string) string {

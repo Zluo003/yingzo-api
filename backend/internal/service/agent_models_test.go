@@ -218,7 +218,9 @@ func TestAgentModelCatalogSyncsAssignedAccountMappingsAcrossNativeProviders(t *t
 		}}},
 		{ID: 4, Platform: PlatformVideo, Credentials: map[string]any{"model_mapping": map[string]any{"video-custom": "upstream-video"}}},
 		{ID: 5, Platform: PlatformGrok, Credentials: map[string]any{"model_mapping": map[string]any{"grok-4": "grok-4"}}},
-		{ID: 6, Platform: PlatformDeepseek, Credentials: map[string]any{"model_mapping": map[string]any{"deepseek-v4-pro": "deepseek-v4-pro"}}},
+		{ID: 6, Platform: PlatformDeepseek, Credentials: map[string]any{"model_mapping": map[string]any{
+			"deepseek-v4-pro": "deepseek-v4-pro", "deepseek-flash": "deepseek-flash",
+		}}},
 		{ID: 7, Platform: PlatformKimi, Credentials: map[string]any{"model_mapping": map[string]any{"kimi-k3": "kimi-k3"}}},
 		{ID: 8, Platform: PlatformZhipu, Credentials: map[string]any{"model_mapping": map[string]any{"glm-5": "glm-5"}}},
 		{ID: 9, Platform: PlatformMiniMax, Credentials: map[string]any{"model_mapping": map[string]any{"MiniMax-M3": "MiniMax-M3"}}},
@@ -231,7 +233,7 @@ func TestAgentModelCatalogSyncsAssignedAccountMappingsAcrossNativeProviders(t *t
 	require.NoError(t, err)
 	// 聚合分组覆盖应用支持的全部 provider：三方协议平台 + grok + 国产供应商 + 视频。
 	require.Equal(t, []string{
-		"MiniMax-M3", "claude-opus-4-8", "deepseek-v4-pro", "embedding-alias",
+		"MiniMax-M3", "claude-opus-4-8", "deepseek-flash", "deepseek-v4-pro", "embedding-alias",
 		"gemini-2.5-flash", "gemini-image-alias", "glm-5", "gpt-5.4", "grok-4",
 		"image-alias", "kimi-k3", "video-custom",
 	}, agentCatalogIDsForTest(catalog))
@@ -242,8 +244,14 @@ func TestAgentModelCatalogSyncsAssignedAccountMappingsAcrossNativeProviders(t *t
 	require.Equal(t, []string{AgentMediaTypeText}, byID["embedding-alias"].MediaTypes)
 	require.Equal(t, []string{AgentInterfaceOpenAIEmbeddings}, byID["embedding-alias"].Interfaces)
 	require.Equal(t, []string{AgentMediaTypeVideo}, byID["video-custom"].MediaTypes)
-	// 国产供应商按 OpenAI 兼容 chat completions 调用。
-	require.Equal(t, []string{AgentInterfaceOpenAIChatCompletions}, byID["deepseek-v4-pro"].Interfaces)
+	// DeepSeek V4 supports the native Responses route, with Chat Completions
+	// retained as a compatibility interface.
+	require.ElementsMatch(t, []string{
+		AgentInterfaceOpenAIResponses, AgentInterfaceOpenAIChatCompletions,
+	}, byID["deepseek-v4-pro"].Interfaces)
+	require.ElementsMatch(t, []string{
+		AgentInterfaceOpenAIResponses, AgentInterfaceOpenAIChatCompletions,
+	}, byID["deepseek-flash"].Interfaces)
 	require.Equal(t, []string{PlatformDeepseek}, byID["deepseek-v4-pro"].Platforms)
 	require.Equal(t, []string{PlatformKimi}, byID["kimi-k3"].Platforms)
 	require.Equal(t, []string{PlatformZhipu}, byID["glm-5"].Platforms)
@@ -252,6 +260,27 @@ func TestAgentModelCatalogSyncsAssignedAccountMappingsAcrossNativeProviders(t *t
 	require.ElementsMatch(t, []string{
 		AgentInterfaceOpenAIResponses, AgentInterfaceOpenAIChatCompletions,
 	}, byID["grok-4"].Interfaces)
+}
+
+func TestZhipuGLM53CatalogAdvertisesChatAndAnthropicMessages(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
+		ID: 1, Platform: PlatformZhipu,
+		Credentials: map[string]any{"model_mapping": map[string]any{
+			"glm-5.3": "glm-5.3", "glm-5.3-flash": "glm-5.3-flash",
+		}},
+	}}}
+	catalogService, _ := newAgentCatalogForTest(accounts)
+	_, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	catalog, err := catalogService.ListAvailable(context.Background(), 9)
+	require.NoError(t, err)
+	byID := map[string]AgentModelCatalogEntry{}
+	for _, entry := range catalog {
+		byID[entry.ID] = entry
+	}
+	want := []string{AgentInterfaceOpenAIChatCompletions, AgentInterfaceAnthropicMessages}
+	require.ElementsMatch(t, want, byID["glm-5.3"].Interfaces)
+	require.ElementsMatch(t, want, byID["glm-5.3-flash"].Interfaces)
 }
 
 // 目录里不能出现"能配价却永远调不通"的模型：视频只有 video 平台有计费链路，

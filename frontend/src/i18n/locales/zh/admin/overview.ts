@@ -908,7 +908,7 @@ export default {
         zhipu: 'Zhipu GLM',
         deepseek: 'DeepSeek',
         minimax: 'MiniMax',
-        composite: 'Composite',
+        composite: '多平台路由',
       },
       saving: '保存中...',
       noGroups: '暂无分组',

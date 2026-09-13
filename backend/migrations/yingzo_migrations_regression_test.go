@@ -95,6 +95,19 @@ func TestRestoreYingzoAgentGroupMigrationIsScopedToTheSystemGroup(t *testing.T) 
 	require.NotContains(t, sql, "+goose down")
 }
 
+func TestYingzoAgentCompositePlatformMigrationIsScoped(t *testing.T) {
+	content, err := FS.ReadFile("250_yingzo_agent_composite_platform.sql")
+	require.NoError(t, err)
+	sql := strings.ToLower(string(content))
+
+	require.Contains(t, sql, "set platform = 'composite'")
+	require.Contains(t, sql, "system_code = 'yingzo'")
+	require.NotContains(t, sql, "lower(btrim(name)) = 'yingzo agent'")
+	require.NotContains(t, sql, "delete from")
+	require.NotContains(t, sql, "drop table")
+	require.NotContains(t, sql, "+goose down")
+}
+
 // 245 把"系统聚合分组有且仅有一个"落成数据库不变式。
 func TestSingleAgentGroupMigrationEnforcesUniqueness(t *testing.T) {
 	content, err := FS.ReadFile("245_single_agent_group.sql")

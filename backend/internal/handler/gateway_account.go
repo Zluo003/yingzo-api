@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/gin-gonic/gin"
@@ -33,11 +34,21 @@ func (h *GatewayHandler) AccountProfile(c *gin.Context) {
 	if apiKey.Quota > 0 {
 		remaining = apiKey.GetQuotaRemaining()
 	}
+	username := strings.TrimSpace(user.Username)
+	if username == "" {
+		username = strings.TrimSpace(user.Email)
+	}
+	if username == "" {
+		username = strings.TrimSpace(apiKey.Name)
+	}
+	if username == "" {
+		username = "Yingzo 用户"
+	}
 
 	c.Header("Cache-Control", "no-store")
 	c.JSON(http.StatusOK, gin.H{
 		"object":     "yingzo.account",
-		"username":   user.Username,
+		"username":   username,
 		"avatar_url": user.AvatarURL,
 		"balance":    user.Balance,
 		"remaining":  remaining,

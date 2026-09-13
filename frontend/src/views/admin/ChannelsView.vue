@@ -1216,7 +1216,11 @@ function apiToForm(channel: Channel): PlatformSection[] {
   const activePlatforms = new Set<GroupPlatform>()
   for (const gid of channel.group_ids || []) {
     const p = groupPlatformMap.get(gid)
-    if (p === 'composite') {
+    // Yingzo Agent is a system-managed aggregate group.  Older installations
+    // stored it with platform=openai, but it can be associated with pricing
+    // sections for every concrete provider just like a composite group.
+    const group = allGroups.value.find(g => g.id === gid)
+    if (p === 'composite' || isSystemAgentGroup(group)) {
       compositePlatforms.forEach(platform => activePlatforms.add(platform))
     } else if (p) {
       activePlatforms.add(p)
@@ -1236,8 +1240,12 @@ function apiToForm(channel: Channel): PlatformSection[] {
 
     const groupIds = (channel.group_ids || []).filter(gid => {
       const groupPlatform = groupPlatformMap.get(gid)
+      const group = allGroups.value.find(g => g.id === gid)
       return groupPlatform === platform ||
-        (groupPlatform === 'composite' && compositePlatforms.includes(platform))
+        (groupPlatform === 'composite' && compositePlatforms.includes(platform)) ||
+        // Preserve legacy Yingzo Agent bindings in every platform section so
+        // checking it in a non-OpenAI tab survives the edit/save round trip.
+        isSystemAgentGroup(group)
     })
     const mapping = (channel.model_mapping || {})[platform] || {}
     const pricing = (channel.model_pricing || [])

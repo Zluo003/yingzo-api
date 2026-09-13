@@ -51,13 +51,14 @@ func TestEnsureSystemAgentGroupHealsBrokenStates(t *testing.T) {
 	require.Equal(t, groupID, healed)
 	require.Equal(t, 1, liveAgentGroupCount())
 
-	var kind, systemCode, status, subscriptionType string
+	var kind, systemCode, platform, status, subscriptionType string
 	var exclusive bool
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `
-		SELECT kind, system_code, status, is_exclusive, subscription_type FROM groups WHERE id = $1
-	`, groupID).Scan(&kind, &systemCode, &status, &exclusive, &subscriptionType))
+		SELECT kind, system_code, platform, status, is_exclusive, subscription_type FROM groups WHERE id = $1
+	`, groupID).Scan(&kind, &systemCode, &platform, &status, &exclusive, &subscriptionType))
 	require.Equal(t, "agent", kind)
 	require.Equal(t, "yingzo", systemCode)
+	require.Equal(t, "composite", platform, "Yingzo Agent must be a multi-provider aggregate route")
 	require.Equal(t, "active", status)
 	require.False(t, exclusive, "agent 分组不能是专属分组，否则普通用户绑定不到（/groups/available 会过滤掉）")
 	require.Equal(t, "standard", subscriptionType, "订阅类型分组需要有效订阅，普通用户同样看不到")

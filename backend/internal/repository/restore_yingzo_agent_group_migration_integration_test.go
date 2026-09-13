@@ -76,6 +76,9 @@ func TestRestoreYingzoAgentGroupMigration(t *testing.T) {
 		SELECT platform, status, is_exclusive, allow_image_generation
 		FROM groups WHERE system_code = 'yingzo' AND deleted_at IS NULL
 	`).Scan(&platform, &status, &exclusive, &imageAllow))
+	// 244 is a historical restore migration and intentionally retains its
+	// original openai seed. Migration 250 upgrades existing installations to
+	// the composite platform marker without rewriting this checksummed file.
 	require.Equal(t, "openai", platform)
 	require.Equal(t, "active", status)
 	require.False(t, exclusive)
@@ -90,6 +93,18 @@ func TestRestoreYingzoAgentGroupMigration(t *testing.T) {
 		SELECT COUNT(*) FROM groups WHERE system_code = 'yingzo' AND deleted_at IS NULL
 	`).Scan(&liveCount))
 	require.Equal(t, 1, liveCount)
+
+	compositeContent, err := migrations.FS.ReadFile("250_yingzo_agent_composite_platform.sql")
+	require.NoError(t, err)
+	compositeMigration := string(compositeContent)
+	_, err = tx.ExecContext(ctx, compositeMigration)
+	require.NoError(t, err)
+	_, err = tx.ExecContext(ctx, compositeMigration)
+	require.NoError(t, err, "composite platform migration must be idempotent")
+	require.NoError(t, tx.QueryRowContext(ctx, `
+		SELECT platform FROM groups WHERE system_code = 'yingzo' AND deleted_at IS NULL
+	`).Scan(&platform))
+	require.Equal(t, "composite", platform)
 }
 
 // 245 把"系统聚合分组有且仅有一个"落成数据库不变式：不一致数据先收敛，

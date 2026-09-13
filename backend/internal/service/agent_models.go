@@ -887,7 +887,22 @@ func agentInterfacesForModel(platform, mediaType, modelCode string) []string {
 		if mediaType == AgentMediaTypeImage {
 			return []string{AgentInterfaceOpenAIImages}
 		}
-		// 国产供应商在本网关按 OpenAI 兼容 chat completions 调用。
+		if platform == PlatformZhipu && isGLM53Model(modelCode) {
+			// Z.AI's GLM-5.3 family is exposed through both its native
+			// OpenAI Chat Completions endpoint and the Anthropic Messages
+			// compatibility endpoint. Keep both in the manifest so clients
+			// can select the protocol they natively speak; Yingzo Agent
+			// prefers Chat Completions because it preserves the provider's
+			// tool-call/reasoning shape without a protocol bridge.
+			return []string{AgentInterfaceOpenAIChatCompletions, AgentInterfaceAnthropicMessages}
+		}
+		if platform == PlatformDeepseek {
+			// DeepSeek V4 exposes a native Responses-compatible route in the
+			// gateway. Advertise it first so clients that prefer Responses use
+			// the state-safe adapter; keep Chat Completions for compatibility.
+			return []string{AgentInterfaceOpenAIResponses, AgentInterfaceOpenAIChatCompletions}
+		}
+		// Other domestic providers remain OpenAI-compatible Chat Completions.
 		return []string{AgentInterfaceOpenAIChatCompletions}
 	default:
 		return nil
