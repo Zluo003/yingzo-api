@@ -19,3 +19,5 @@
 @media(max-width:900px){.profile-logout{right:20px;top:8px}}
 .profile-actions-row{width:100%;display:flex;justify-content:flex-end;align-items:center;margin:-18px 0 14px}.profile-actions-row .profile-logout{position:static}.profile-logout{left:auto;right:auto;top:auto}
 @media(max-width:900px){.profile-actions-row{margin:-8px 0 12px}.profile-actions-row .profile-logout{position:static}}
+.profile-actions-row{margin-top:-76px;margin-bottom:38px;position:relative;z-index:2}.profile-actions-row .profile-logout{transform:translateY(-2px)}
+@media(max-width:900px){.profile-actions-row{margin-top:-28px;margin-bottom:24px}}
