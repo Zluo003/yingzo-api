@@ -113,7 +113,9 @@ SELECT id, group_id, platform, model_code, media_type, enabled, available,
        excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at,
        rate_multiplier
 FROM agent_group_models
-WHERE group_id = $1 AND platform = $2 AND model_code = $3
+WHERE group_id = $1
+  AND (platform = $2 OR ($2 = 'video' AND platform = 'seedance'))
+  AND model_code = $3
   AND enabled = TRUE AND available = TRUE AND excluded = FALSE
 `, groupID, platform, modelCode)
 	model, err := scanAgentGroupModel(row)

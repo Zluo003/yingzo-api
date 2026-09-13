@@ -36,6 +36,15 @@ func (r publicAgentImageAccountRepo) ListSchedulableByGroupIDAndPlatform(_ conte
 	return []service.Account{r.account}, nil
 }
 
+func (r publicAgentImageAccountRepo) ListModelAvailabilityCandidates(_ context.Context, _ *int64, platforms []string, _ bool) ([]service.Account, error) {
+	for _, platform := range platforms {
+		if platform == r.account.Platform {
+			return []service.Account{r.account}, nil
+		}
+	}
+	return nil, nil
+}
+
 func (r publicAgentImageAccountRepo) ListSchedulableByPlatform(_ context.Context, platform string) ([]service.Account, error) {
 	return r.ListSchedulableByGroupIDAndPlatform(context.Background(), 0, platform)
 }

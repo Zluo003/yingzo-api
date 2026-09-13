@@ -34,6 +34,35 @@ func (s *agentCatalogAccountRepoStub) ListSchedulableByGroupIDAndPlatform(_ cont
 	return accounts, nil
 }
 
+func (s *agentCatalogAccountRepoStub) ListModelAvailabilityCandidates(_ context.Context, groupID *int64, platforms []string, _ bool) ([]Account, error) {
+	if s.err != nil {
+		return nil, s.err
+	}
+	allowed := make(map[string]struct{}, len(platforms))
+	for _, platform := range platforms {
+		allowed[normalizeAgentPlatform(platform)] = struct{}{}
+	}
+	accounts := make([]Account, 0, len(s.accounts))
+	for _, account := range s.accounts {
+		if groupID != nil && len(account.GroupIDs) > 0 {
+			bound := false
+			for _, id := range account.GroupIDs {
+				if id == *groupID {
+					bound = true
+					break
+				}
+			}
+			if !bound {
+				continue
+			}
+		}
+		if _, ok := allowed[normalizeAgentPlatform(account.Platform)]; ok {
+			accounts = append(accounts, account)
+		}
+	}
+	return accounts, nil
+}
+
 type agentCatalogGroupRepoStub struct {
 	GroupRepository
 	group *Group
@@ -391,6 +420,33 @@ func TestAgentModelCatalogIntersectsPersistedModelsWithCurrentAccounts(t *testin
 	catalog, err := catalogService.ListAvailable(context.Background(), 9)
 	require.NoError(t, err)
 	require.Empty(t, catalog)
+}
+
+func TestAgentVideoModelsRemainVisibleWhenAccountIsTemporarilyUnschedulable(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
+		Platform: PlatformVideo,
+		Credentials: map[string]any{"model_mapping": map[string]any{
+			VideoModelSeedance20: VideoModelSeedance20,
+		}},
+	}}}
+	catalogService, models := newAgentCatalogForTest(accounts)
+	config, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	require.Len(t, config.Models, 1)
+	video := models.models[agentModelKey(PlatformVideo, VideoModelSeedance20)]
+	require.NotNil(t, video)
+	video.Prices = []AgentModelPrice{{Resolution: VideoResolution720P, BillingUnit: AgentBillingUnitSecond, UnitPrice: 2}}
+
+	visible, err := catalogService.ListAvailable(context.Background(), 9)
+	require.NoError(t, err)
+	require.Equal(t, []string{VideoModelSeedance20}, agentCatalogIDsForTest(visible))
+
+	price, modelCode, err := catalogService.ResolveMediaUnitPrice(
+		context.Background(), 9, PlatformVideo, AgentMediaTypeVideo, VideoResolution720P, VideoModelSeedance20,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2.0, price)
+	require.Equal(t, VideoModelSeedance20, modelCode)
 }
 
 func TestAgentModelCatalogPropagatesAccountLookupFailure(t *testing.T) {

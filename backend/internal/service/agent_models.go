@@ -149,7 +149,7 @@ func (s *AgentModelCatalogService) Sync(ctx context.Context, groupID int64) (*Ag
 	if err := s.requireAgentGroup(ctx, groupID); err != nil {
 		return nil, err
 	}
-	accounts, err := s.accountRepo.ListSchedulableByGroupID(ctx, groupID)
+	accounts, err := s.listCatalogAccounts(ctx, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("list schedulable Agent accounts: %w", err)
 	}
@@ -159,6 +159,26 @@ func (s *AgentModelCatalogService) Sync(ctx context.Context, groupID int64) (*Ag
 	}
 	s.invalidateModelPlatforms(groupID)
 	return s.GetConfig(ctx, groupID)
+}
+
+// listCatalogAccounts returns accounts that are enabled for the Agent group by
+// persistent configuration. Transient scheduler state (rate limits, overload,
+// and cooldowns) must not erase a model from the catalog or turn its configured
+// prices into a missing-model error; dispatch still applies those checks later.
+func (s *AgentModelCatalogService) listCatalogAccounts(ctx context.Context, groupID int64) ([]Account, error) {
+	return s.accountRepo.ListModelAvailabilityCandidates(ctx, &groupID, []string{
+		PlatformOpenAI,
+		PlatformAnthropic,
+		PlatformGemini,
+		PlatformGrok,
+		PlatformKimi,
+		PlatformZhipu,
+		PlatformDeepseek,
+		PlatformMiniMax,
+		PlatformVideo,
+		// Compatibility for databases before the video platform rename.
+		"seedance",
+	}, true)
 }
 
 func (s *AgentModelCatalogService) GetConfig(ctx context.Context, groupID int64) (*AgentModelCatalogConfig, error) {
@@ -227,7 +247,7 @@ func (s *AgentModelCatalogService) ListAvailable(ctx context.Context, groupID in
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrAgentModelCatalogUnavailable, err)
 	}
-	accounts, err := s.accountRepo.ListSchedulableByGroupID(ctx, groupID)
+	accounts, err := s.listCatalogAccounts(ctx, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrAgentModelCatalogUnavailable, err)
 	}
@@ -237,6 +257,10 @@ func (s *AgentModelCatalogService) ListAvailable(ctx context.Context, groupID in
 		if !model.Enabled || !model.Available || model.Excluded {
 			continue
 		}
+		// The catalog account pool ignores transient scheduler state, but still
+		// requires an active, schedulable, Agent-bound account with a mapping.
+		// This keeps stale/unbound rows out while avoiding disappearance during a
+		// temporary rate-limit or overload window.
 		if _, ok := current[agentModelKey(model.Platform, model.ModelCode)]; !ok {
 			continue
 		}
@@ -329,7 +353,7 @@ func (s *AgentModelCatalogService) ResolveMediaUnitPrice(
 	if err != nil {
 		return 0, "", err
 	}
-	accounts, err := s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, groupID, platform)
+	accounts, err := s.listCatalogAccounts(ctx, groupID)
 	if err != nil {
 		return 0, "", fmt.Errorf("%w: %v", ErrAgentModelCatalogUnavailable, err)
 	}
@@ -340,6 +364,9 @@ func (s *AgentModelCatalogService) ResolveMediaUnitPrice(
 			continue
 		}
 		if _, ok := current[agentModelKey(platform, modelCode)]; !ok {
+			continue
+		}
+		if mediaType == AgentMediaTypeVideo && !isVideoAgentModelPlatform(model.Platform) {
 			continue
 		}
 		for _, price := range model.Prices {
@@ -518,7 +545,19 @@ func isValidAgentMediaType(mediaType string) bool {
 }
 
 func normalizeAgentPlatform(platform string) string {
-	return strings.ToLower(strings.TrimSpace(platform))
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	// 168 briefly renamed the persisted video platform to seedance. Keep
+	// discovery/catalog reads compatible with databases that have not yet run
+	// the corrective 239 migration; dispatch still uses the canonical video
+	// platform and its existing provider adapters.
+	if platform == "seedance" {
+		return PlatformVideo
+	}
+	return platform
+}
+
+func isVideoAgentModelPlatform(platform string) bool {
+	return normalizeAgentPlatform(platform) == PlatformVideo
 }
 
 func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
@@ -806,6 +845,7 @@ func agentModelDescriptorForMapping(platform, requestedModel, upstreamModel stri
 }
 
 func addConfiguredAgentCatalogEntry(entries map[string]*agentModelCatalogAccumulator, model AgentGroupModel) {
+	platform := normalizeAgentPlatform(model.Platform)
 	entry := entries[model.ModelCode]
 	if entry == nil {
 		entry = &agentModelCatalogAccumulator{
@@ -816,8 +856,8 @@ func addConfiguredAgentCatalogEntry(entries map[string]*agentModelCatalogAccumul
 		entries[model.ModelCode] = entry
 	}
 	entry.mediaTypes[model.MediaType] = struct{}{}
-	entry.platforms[model.Platform] = struct{}{}
-	for _, nativeInterface := range agentInterfacesForModel(model.Platform, model.MediaType, model.ModelCode) {
+	entry.platforms[platform] = struct{}{}
+	for _, nativeInterface := range agentInterfacesForModel(platform, model.MediaType, model.ModelCode) {
 		entry.interfaces[nativeInterface] = struct{}{}
 	}
 }
