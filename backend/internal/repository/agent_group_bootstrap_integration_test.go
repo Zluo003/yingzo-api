@@ -36,9 +36,11 @@ func TestEnsureSystemAgentGroupHealsBrokenStates(t *testing.T) {
 	require.Equal(t, groupID, healed, "恢复的是原来那一行，不是新插一条")
 	require.Equal(t, 1, liveAgentGroupCount())
 
-	// 2) 存活但被停用 / 标记被清掉：必须在 /groups/available（ListActive）里重新出现。
+	// 2) 存活但被停用 / 标记被清掉 / 被改成专属或订阅分组：必须在 /groups/available
+	//    （ListActive + canUserBindGroup）里重新出现——专属与订阅分组对普通用户不可见。
 	_, err = integrationDB.ExecContext(ctx, `
-		UPDATE groups SET status = 'inactive', kind = 'standard', system_code = '', is_exclusive = TRUE
+		UPDATE groups SET status = 'inactive', kind = 'standard', system_code = '',
+		       is_exclusive = TRUE, subscription_type = 'subscription'
 		 WHERE id = $1
 	`, groupID)
 	require.NoError(t, err)
@@ -49,15 +51,16 @@ func TestEnsureSystemAgentGroupHealsBrokenStates(t *testing.T) {
 	require.Equal(t, groupID, healed)
 	require.Equal(t, 1, liveAgentGroupCount())
 
-	var kind, systemCode, status string
+	var kind, systemCode, status, subscriptionType string
 	var exclusive bool
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `
-		SELECT kind, system_code, status, is_exclusive FROM groups WHERE id = $1
-	`, groupID).Scan(&kind, &systemCode, &status, &exclusive))
+		SELECT kind, system_code, status, is_exclusive, subscription_type FROM groups WHERE id = $1
+	`, groupID).Scan(&kind, &systemCode, &status, &exclusive, &subscriptionType))
 	require.Equal(t, "agent", kind)
 	require.Equal(t, "yingzo", systemCode)
 	require.Equal(t, "active", status)
 	require.False(t, exclusive, "agent 分组不能是专属分组，否则普通用户绑定不到（/groups/available 会过滤掉）")
+	require.Equal(t, "standard", subscriptionType, "订阅类型分组需要有效订阅，普通用户同样看不到")
 
 	// 3) 行被硬删（级联删除会连带 account_groups）：补种一行。
 	_, err = integrationDB.ExecContext(ctx, `DELETE FROM groups WHERE id = $1`, groupID)

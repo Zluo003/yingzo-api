@@ -27,6 +27,7 @@ var systemAgentGroupStatements = []string{
 	        kind = 'agent',
 	        status = 'active',
 	        is_exclusive = FALSE,
+	        subscription_type = 'standard',
 	        allow_image_generation = TRUE,
 	        image_rate_independent = TRUE,
 	        image_rate_multiplier = 1,
@@ -47,6 +48,7 @@ var systemAgentGroupStatements = []string{
 	        kind = 'agent',
 	        system_code = 'yingzo',
 	        is_exclusive = FALSE,
+	        subscription_type = 'standard',
 	        allow_image_generation = TRUE,
 	        image_rate_independent = TRUE,
 	        image_rate_multiplier = 1,
@@ -66,7 +68,7 @@ var systemAgentGroupStatements = []string{
 	// 3) 连行都没有（从更旧的库恢复）：补种一行，取值与迁移 244 一致。
 	`INSERT INTO groups (
 	    name, description, kind, system_code, platform, status,
-	    rate_multiplier, is_exclusive, allow_image_generation,
+	    rate_multiplier, is_exclusive, subscription_type, allow_image_generation,
 	    image_rate_independent, image_rate_multiplier
 	)
 	SELECT
@@ -78,6 +80,7 @@ var systemAgentGroupStatements = []string{
 	    'active',
 	    1.0,
 	    FALSE,
+	    'standard',
 	    TRUE,
 	    TRUE,
 	    1
