@@ -85,6 +85,30 @@ func (h *AgentHandler) ModelCatalog() *service.AgentModelCatalogService {
 	return h.agentModels
 }
 
+// Models 返回 Yingzo Agent 当前可用的聚合模型目录。Agent 分组的数据库平台
+// 仍保持 openai 以兼容现有入口，但目录来源是所有已配置 provider 的 Agent 模型。
+func (h *AgentHandler) Models(c *gin.Context) {
+	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.Group == nil || !apiKey.Group.IsAgent() {
+		c.JSON(http.StatusForbidden, gin.H{"error": gin.H{"type": "agent_credential_required", "message": "This endpoint requires an Agent credential"}})
+		return
+	}
+	if h.agentModels == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "api_error", "message": "Agent model catalog is unavailable"}})
+		return
+	}
+	entries, err := h.agentModels.ListAvailable(c.Request.Context(), apiKey.Group.ID)
+	if err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "api_error", "message": err.Error()}})
+		return
+	}
+	models := make([]gin.H, 0, len(entries))
+	for _, entry := range entries {
+		models = append(models, gin.H{"id": entry.ID, "object": "model", "created": 0, "owned_by": "yingzo-agent", "media_types": entry.MediaTypes, "platforms": entry.Platforms, "interfaces": entry.Interfaces})
+	}
+	c.JSON(http.StatusOK, gin.H{"object": "list", "data": models})
+}
+
 func (h *AgentHandler) StartCleanupWorker(interval time.Duration) {
 	if h == nil || h.db == nil || interval <= 0 {
 		return

@@ -85,6 +85,10 @@ func RegisterGatewayRoutes(
 		}
 	}
 	modelsHandler := func(c *gin.Context) {
+		if isAgentGroup(c) {
+			h.Agent.Models(c)
+			return
+		}
 		if isOpenAIGatewayPlatform(c) && c.Query("client_version") != "" {
 			h.OpenAIGateway.CodexModels(c)
 			return
