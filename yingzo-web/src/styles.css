@@ -21,3 +21,4 @@
 @media(max-width:900px){.profile-actions-row{margin:-8px 0 12px}.profile-actions-row .profile-logout{position:static}}
 .profile-actions-row{margin-top:-76px;margin-bottom:38px;position:relative;z-index:2}.profile-actions-row .profile-logout{transform:translateY(-2px)}
 @media(max-width:900px){.profile-actions-row{margin-top:-28px;margin-bottom:24px}}
+.home header{max-width:1400px;margin:0 auto}.home{padding-left:5vw;padding-right:5vw}
