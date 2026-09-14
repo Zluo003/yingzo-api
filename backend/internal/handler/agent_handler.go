@@ -181,8 +181,15 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 		streaming = false
 		asynchronous = true
 		capabilities["supported_video_resolutions"] = configuredAgentVideoResolutions(entry, config)
-		capabilities["supported_video_durations_sec"] = []int{4, 8, 15}
+		// Duration is a per-model upstream constraint, not a fixed three-tier
+		// menu: the 2.0 family accepts 4-15s and 2.5 accepts 4-30s. Deriving it
+		// from the video spec keeps the catalog aligned with request validation.
+		capabilities["supported_video_durations_sec"] = service.SupportedVideoDurations(entry.ID)
 		capabilities["supports_video_audio"] = true
+		// 参考音频能否单独成篇是按模型声明的能力：所有视频模型都要求参考音频
+		// 搭配至少一张图或一段视频，因此对每个模型显式声明为 false，而不是靠
+		// 字段缺失让客户端自己猜。
+		capabilities["supports_audio_only_reference"] = service.SupportsAudioOnlyReference(entry.ID)
 		capabilities["cancellation"] = []string{"remoteJob"}
 	}
 	if containsAgentInterface(entry.Interfaces, service.AgentInterfaceOpenAIEmbeddings) {

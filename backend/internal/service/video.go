@@ -99,6 +99,8 @@ var videoModelSpecs = map[string]videoModelSpec{
 		MaxRefTotal:             videoSeedance25MaxReferences,
 		MaxRefVideoSeconds:      videoSeedance25MaxDuration,
 		MaxRefVideoTotalSeconds: videoSeedance25MaxDuration,
+		// 2.5 与 2.0 系列同规则：参考音频必须搭配至少一张图或一段视频。
+		AudioNeedsVisual: true,
 	},
 }
 
@@ -151,6 +153,32 @@ func SupportedVideoResolutions(model string) []string {
 		return nil
 	}
 	return append([]string(nil), spec.Resolutions...)
+}
+
+// SupportedVideoDurations returns every integer duration (seconds) the model
+// accepts. The bounds come from the same spec that validates create requests,
+// so the advertised catalog can never drift from what the gateway enforces:
+// the seedance-2.0 family accepts 4-15s, seedance-2.5 accepts 4-30s.
+func SupportedVideoDurations(model string) []int {
+	spec, _ := videoSpecForModel(model)
+	if spec.MaxSeconds < spec.MinSeconds {
+		return nil
+	}
+	durations := make([]int, 0, spec.MaxSeconds-spec.MinSeconds+1)
+	for seconds := spec.MinSeconds; seconds <= spec.MaxSeconds; seconds++ {
+		durations = append(durations, seconds)
+	}
+	return durations
+}
+
+// SupportsAudioOnlyReference reports whether a reference-to-video request may
+// consist solely of reference audio. Audio on its own has nothing to animate,
+// so every current model sets AudioNeedsVisual and rejects it; the catalog still
+// declares the verdict explicitly for each model instead of leaving clients to
+// infer it from an absent field.
+func SupportsAudioOnlyReference(model string) bool {
+	spec, _ := videoSpecForModel(model)
+	return !spec.AudioNeedsVisual
 }
 
 func IsSupportedVideoResolution(model, resolution string) bool {

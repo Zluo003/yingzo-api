@@ -54,6 +54,7 @@ curl -X POST https://api-key.cc/v1/videos \
 
 - Reference video, per clip: 2–15s (`seedance-2.5`: 2–30s); total reference video duration: ≤15s (`seedance-2.5`: ≤30s). These are now evaluated against the **measured** durations.
 - Reference counts: `seedance-2.0` and `seedance-2.0-fast` accept 9 images + 3 videos + 3 audios; `seedance-2.5` accepts 30 images + 10 videos + 10 audios, ≤50 materials in total.
+- Reference audio must be accompanied by at least one image or video. An audio-only reference set is rejected for **every** model (`seedance-2.0`, `seedance-2.0-fast`, `seedance-2.5`) with `invalid_video_content`. The model catalog declares this per model as `capabilities.supports_audio_only_reference` (`false` for all current models).
 - Single material size: image 30 MiB, video 200 MiB, audio 15 MiB. The media type is decided by content sniffing, not by what the client declares, and must be one of the whitelisted types (`jpeg/png/webp/gif/bmp/tiff/heic/heif`, `mp4/quicktime`, `wav/mp3`).
 - Only `http` / `https` URLs are fetched. Loopback, private-range and link-local addresses (including cloud metadata endpoints) are refused, redirects are re-validated hop by hop, and the download is capped by the size limit above with a 5-minute timeout.
 - Identical materials referenced more than once in the same request are downloaded and stored once; each content item still counts its own measured duration.

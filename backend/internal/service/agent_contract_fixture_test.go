@@ -36,7 +36,8 @@ func TestYingzoAgentContractFixtureMatchesService(t *testing.T) {
 		"media_types", "platforms", "interfaces", "input_modalities", "output_modalities",
 		"operations", "streaming", "asynchronous", "max_input_images",
 		"supported_aspect_ratios", "supported_image_sizes", "supported_video_resolutions",
-		"supported_video_durations_sec", "supports_video_audio", "cancellation",
+		"supported_video_durations_sec", "supports_video_audio", "supports_audio_only_reference",
+		"cancellation",
 	}, fixture.ModelCatalog.CapabilityFields)
 	require.Equal(t, []string{
 		"ETag", "X-Model-Catalog-Schema-Version", "X-Gateway-Contract-Version",

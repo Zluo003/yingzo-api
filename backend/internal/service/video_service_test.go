@@ -568,7 +568,29 @@ func TestNormalizeVideoCreateRequestSupportsSeedance25DurationAndRatioLimits(t *
 	}
 }
 
-func TestNormalizeVideoCreateRequestSupportsSeedance25AudioOnlyReference(t *testing.T) {
+// 纯参考音频对每个 Seedance 模型都不成立：音频本身没有画面可动，必须搭配至少
+// 一张图或一段视频。2.5 也不例外。
+func TestNormalizeVideoCreateRequestRejectsAudioOnlyReference(t *testing.T) {
+	for _, model := range []string{VideoModelSeedance20, VideoModelSeedance20Fast, VideoModelSeedance25} {
+		t.Run(model, func(t *testing.T) {
+			_, err := normalizeVideoCreateRequest(&VideoCreateRequest{
+				Model:       model,
+				Prompt:      "follow the music rhythm",
+				Duration:    8,
+				Resolution:  VideoResolution480P,
+				AbilityCode: videoAbilityReferenceToVideo,
+				Content: []VideoContent{{
+					Type:     "audio_url",
+					Role:     "reference_audio",
+					AudioURL: &VideoContentURL{URL: "https://cdn.example.com/music.mp3"},
+				}},
+			})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "invalid_video_content")
+		})
+	}
+
+	// 参考音频搭配一张图就成立。
 	normalized, err := normalizeVideoCreateRequest(&VideoCreateRequest{
 		Model:       VideoModelSeedance25,
 		Prompt:      "follow the music rhythm",
@@ -576,6 +598,11 @@ func TestNormalizeVideoCreateRequestSupportsSeedance25AudioOnlyReference(t *test
 		Resolution:  VideoResolution480P,
 		AbilityCode: videoAbilityReferenceToVideo,
 		Content: []VideoContent{
+			{
+				Type:     "image_url",
+				Role:     "reference_image",
+				ImageURL: &VideoContentURL{URL: "https://cdn.example.com/person.png"},
+			},
 			{
 				Type:     "audio_url",
 				Role:     "reference_audio",
@@ -586,6 +613,7 @@ func TestNormalizeVideoCreateRequestSupportsSeedance25AudioOnlyReference(t *test
 	require.NoError(t, err)
 	require.Equal(t, videoAbilityReferenceToVideo, normalized.AbilityCode)
 
+	// 零参考仍然被拒。
 	_, err = normalizeVideoCreateRequest(&VideoCreateRequest{
 		Model:       VideoModelSeedance25,
 		Prompt:      "missing reference",

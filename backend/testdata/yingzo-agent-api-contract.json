@@ -19,6 +19,7 @@
       "supported_video_resolutions",
       "supported_video_durations_sec",
       "supports_video_audio",
+      "supports_audio_only_reference",
       "cancellation"
     ],
     "cache_headers": ["ETag", "X-Model-Catalog-Schema-Version", "X-Gateway-Contract-Version"]
