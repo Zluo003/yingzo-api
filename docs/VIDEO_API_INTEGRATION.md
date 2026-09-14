@@ -134,7 +134,61 @@ JSON 请求中的 URL 必须是上游可访问的公网 URL。若客户端只有
 
 服务端会先上传并转存素材，再替换 URL 后调用上游。上传失败、类型不支持或视频时长超限会在创建阶段返回明确错误。
 
-## 5. 异步查询与下载
+## 5. 本地文件上传并获取 URL
+
+本地图片、视频或音频不能直接把本机路径传给上游。应先上传到 yingzo-api 的临时素材接口，取得公网 URL，再把 URL 放入 `/v1/videos` 的 `content`。该接口需要 Agent 分组凭证。
+
+### 5.1 上传接口
+
+- 推荐接口：`POST /api/v1/agent/assets`
+- 旧版兼容接口：`POST /v1/files`
+- Content-Type：`multipart/form-data`
+- 文件字段：`file`
+
+```bash
+curl https://your-host/api/v1/agent/assets \\n  -H 'Authorization: Bearer sk-xxx' \\n  -F 'file=@./start.png'
+```
+
+成功响应包含 `url`、`id`、`contentType`、`size`、`sha256`、`expiresAt` 和 `leaseUntil`，示例：
+
+```json
+{
+  "id": "asset-uuid",
+  "url": "https://your-host/media/asset-uuid/asset.png",
+  "contentType": "image/png",
+  "size": 182736,
+  "sha256": "...",
+  "expiresAt": "2026-09-15T04:00:00Z",
+  "leaseUntil": "2026-09-15T05:00:00Z"
+}
+```
+
+将响应中的 `url` 用于视频请求：
+
+```json
+{
+  "model": "seedance-2.0",
+  "prompt": "让画面中的人物自然挥手",
+  "ability_code": "video_image_to_video",
+  "duration": 6,
+  "resolution": "720p",
+  "content": [
+    {
+      "type": "image_url",
+      "image_url": {"url": "https://your-host/media/asset-uuid/asset.png"},
+      "role": "first_frame"
+    }
+  ]
+}
+```
+
+### 5.2 多个本地文件
+
+首尾帧需要分别上传两次，并按上传响应 URL 组成 `first_frame` 和 `last_frame`。参考生视频同理，按 MIME 类型写入 `image_url`、`video_url` 或 `audio_url`。上传 URL 只在 `expiresAt`/`leaseUntil` 前有效；建议上传后立即创建任务，不要长期缓存。
+
+如果调用方不希望分两步，也可以使用第 6 节的 multipart 视频创建方式，由 yingzo-api 在一次请求中完成上传、转存和 URL 替换。
+
+## 6. 异步查询与下载
 
 创建成功后保存响应中的任务 ID。使用同一个 API Key 查询：
 
@@ -153,7 +207,7 @@ curl -L https://your-host/v1/videos/<VIDEO_ID>/content \\
 
 不要把上游下载地址当作永久地址；应通过 yingzo-api 的 content 接口获取并保存结果。
 
-## 6. 错误处理
+## 7. 错误处理
 
 错误统一为：
 
@@ -178,7 +232,7 @@ curl -L https://your-host/v1/videos/<VIDEO_ID>/content \\
 - `reference_material_failed`：素材转存或探测失败。
 - `upstream_timeout`、`upstream_unavailable`：上游暂时不可用，可按幂等键重试。
 
-## 7. 渠道、分组与平台配置
+## 8. 渠道、分组与平台配置
 
 视频请求必须能通过 `model` 找到可用渠道。Yingzo Agent 是多平台聚合分组，平台类型应保持为多平台路由；它不能被定义为 OpenAI 单平台，否则其它平台渠道会被错误附加 OpenAI 标识，导致渠道定价分组无法正确保存。
 
@@ -192,7 +246,7 @@ curl -L https://your-host/v1/videos/<VIDEO_ID>/content \\
 
 Agent 分组的 `/v1/videos` 请求必须进入原生视频处理链路；如果被路由到 Grok 专用处理器，会返回 `Videos API is not supported for this platform` 或 HTTP 404。
 
-## 8. Yingzo 客户端字段映射
+## 9. Yingzo 客户端字段映射
 
 Yingzo 客户端内部字段到 yingzo-api 字段的映射如下：
 
@@ -211,7 +265,7 @@ Yingzo 客户端内部字段到 yingzo-api 字段的映射如下：
 
 客户端不直接信任用户输入的能力码，而是根据素材数量和 `forceReferenceMode` 编译能力；这样可以避免把首尾帧请求误发成普通参考请求。
 
-## 9. 最小接入检查清单
+## 10. 最小接入检查清单
 
 - [ ] API Key 可访问 `/v1/videos`。
 - [ ] 模型已配置到正确渠道和多平台分组。
