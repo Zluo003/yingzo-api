@@ -28,7 +28,7 @@ func TestAgentCatalogModelPublishesRoutingCapabilities(t *testing.T) {
 	require.Equal(t, "gateway", model["source"])
 	require.Equal(t, "advertised", model["availability"])
 	require.Equal(t, "gateway", model["capability_source"])
-	capabilities := model["capabilities"].(gin.H)
+	capabilities := capabilitiesOf(t, model)
 	require.Equal(t, []string{"video"}, capabilities["output_modalities"])
 	require.Equal(t, []string{"video.generate"}, capabilities["operations"])
 	require.Equal(t, []string{"720p", "1080p"}, capabilities["supported_video_resolutions"])
@@ -57,7 +57,7 @@ func TestAgentCatalogModelPublishesPerModelVideoDurations(t *testing.T) {
 				Interfaces: []string{service.AgentInterfaceSeedanceVideos},
 			}, nil)
 
-			capabilities := model["capabilities"].(gin.H)
+			capabilities := capabilitiesOf(t, model)
 			durations, ok := capabilities["supported_video_durations_sec"].([]int)
 			require.True(t, ok)
 			require.Len(t, durations, tc.maxSeconds-tc.minSeconds+1)
@@ -88,7 +88,7 @@ func TestAgentCatalogModelPublishesAudioOnlyReferenceCapability(t *testing.T) {
 				Interfaces: []string{service.AgentInterfaceSeedanceVideos},
 			}, nil)
 
-			capabilities := model["capabilities"].(gin.H)
+			capabilities := capabilitiesOf(t, model)
 			declared, present := capabilities["supports_audio_only_reference"]
 			require.True(t, present, "每个视频模型都要声明该能力")
 			require.Equal(t, tc.want, declared)
@@ -104,9 +104,18 @@ func TestAgentCatalogModelUnionsTextAndImageRoutes(t *testing.T) {
 		Interfaces: []string{service.AgentInterfaceOpenAIResponses, service.AgentInterfaceOpenAIImages},
 	}, nil)
 
-	capabilities := model["capabilities"].(gin.H)
+	capabilities := capabilitiesOf(t, model)
 	require.Equal(t, []string{"text", "image"}, capabilities["input_modalities"])
 	require.Equal(t, []string{"text", "image"}, capabilities["output_modalities"])
 	require.Equal(t, []string{"text.generate", "image.generate", "image.edit"}, capabilities["operations"])
 	require.Equal(t, false, capabilities["streaming"])
+}
+
+// capabilitiesOf 取目录条目的能力表。用 comma-ok 断言，errcheck 的
+// check-type-assertions 不接受 `model["capabilities"].(gin.H)` 这种写法。
+func capabilitiesOf(t *testing.T, model gin.H) gin.H {
+	t.Helper()
+	capabilities, ok := model["capabilities"].(gin.H)
+	require.True(t, ok, "model catalog entry must carry a capabilities object")
+	return capabilities
 }
