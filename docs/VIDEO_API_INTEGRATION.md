@@ -146,7 +146,8 @@ JSON 请求中的 URL 必须是上游可访问的公网 URL。若客户端只有
 - 文件字段：`file`
 
 ```bash
-curl https://your-host/api/v1/agent/assets \\n  -H 'Authorization: Bearer sk-xxx' \\n  -F 'file=@./start.png'
+curl https://your-host/api/v1/agent/assets \
+  -H 'Authorization: Bearer sk-xxx' \\n  -F 'file=@./start.png'
 ```
 
 成功响应包含 `url`、`id`、`contentType`、`size`、`sha256`、`expiresAt` 和 `leaseUntil`，示例：
@@ -181,6 +182,35 @@ curl https://your-host/api/v1/agent/assets \\n  -H 'Authorization: Bearer sk-xxx
   ]
 }
 ```
+
+### 5.2 两步法：上传后创建视频
+
+完整流程是“上传本地文件 → 读取响应中的 `url` → 组装 `content` → 创建视频 → 轮询 → 下载”：
+
+```bash
+# 1) 上传本地首帧
+UPLOAD=$(curl -s https://your-host/api/v1/agent/assets \
+  -H "Authorization: Bearer $API_KEY" \
+  -F "file=@./start.png")
+URL=$(echo "$UPLOAD" | jq -r .url)
+
+# 2) 用公网 URL 创建图生视频
+CREATE=$(curl -s https://your-host/v1/videos \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -H "Idempotency-Key: local-video-$(date +%s)" \
+  -d "$(jq -n --arg url "$URL" '{model:"seedance-2.0",prompt:"人物自然挥手",ability_code:"video_image_to_video",duration:6,resolution:"720p",content:[{type:"image_url",image_url:{url:$url},role:"first_frame"}]}')")
+VIDEO_ID=$(echo "$CREATE" | jq -r '.id // .video.id // .data.id')
+
+# 3) 轮询任务
+curl -s https://your-host/v1/videos/$VIDEO_ID -H "Authorization: Bearer $API_KEY"
+
+# 4) 下载成品
+curl -L https://your-host/v1/videos/$VIDEO_ID/content \
+  -H "Authorization: Bearer $API_KEY" -o output.mp4
+```
+
+首尾帧场景重复上传 `start.png` 和 `end.png`，分别取两个 `url`，放入 `first_frame`、`last_frame`。参考生视频则按上传文件的 MIME 类型放入 `image_url`、`video_url` 或 `audio_url`，并使用对应的参考角色。
 
 ### 5.2 多个本地文件
 
