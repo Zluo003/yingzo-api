@@ -118,7 +118,8 @@ func RegisterGatewayRoutes(
 		}
 	}
 	videoGenerationHandler := func(c *gin.Context) {
-		if getGroupPlatform(c) == service.PlatformGrok {
+		if getGroupPlatform(c) == service.PlatformGrok ||
+			(getGroupPlatform(c) == service.PlatformComposite && !isAgentGroup(c)) {
 			h.OpenAIGateway.GrokVideoGeneration(c)
 			return
 		}
@@ -228,7 +229,9 @@ func RegisterGatewayRoutes(
 		}
 	}
 	videoCreateDispatch := func(c *gin.Context) {
-		if getGroupPlatform(c) == service.PlatformGrok || getGroupPlatform(c) == service.PlatformComposite {
+		// Composite/Agent video models use the native Seedance VideoService. A
+		// composite group may resolve to Grok, in which case keep Grok's handler.
+		if getGroupPlatform(c) == service.PlatformGrok {
 			videoGenerationHandler(c)
 			return
 		}
@@ -236,8 +239,14 @@ func RegisterGatewayRoutes(
 	}
 	videoGetDispatch := func(c *gin.Context) {
 		switch getGroupPlatform(c) {
-		case service.PlatformGrok, service.PlatformComposite:
+		case service.PlatformGrok:
 			videoStatusHandler(c)
+		case service.PlatformComposite:
+			if isAgentGroup(c) {
+				videoGetHandler(c)
+			} else {
+				videoStatusHandler(c)
+			}
 		default:
 			videoGetHandler(c)
 		}
