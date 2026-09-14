@@ -140,13 +140,15 @@ JSON 请求中的 URL 必须是上游可访问的公网 URL。若客户端只有
 
 ### 5.1 上传接口
 
-- 推荐接口：`POST /api/v1/agent/assets`
-- 旧版兼容接口：`POST /v1/files`
+- Yingzo 客户端实际使用：`POST /v1/files`
+- 新式 Agent 接口：`POST /api/v1/agent/assets`
+
+两者都使用同一套素材存储和校验逻辑；如果要兼容当前 Yingzo 客户端，必须启用并使用 `/v1/files`。
 - Content-Type：`multipart/form-data`
 - 文件字段：`file`
 
 ```bash
-curl https://your-host/api/v1/agent/assets \
+curl https://your-host/v1/files \
   -H 'Authorization: Bearer sk-xxx' \\n  -F 'file=@./start.png'
 ```
 
@@ -189,7 +191,7 @@ curl https://your-host/api/v1/agent/assets \
 
 ```bash
 # 1) 上传本地首帧
-UPLOAD=$(curl -s https://your-host/api/v1/agent/assets \
+UPLOAD=$(curl -s https://your-host/v1/files \
   -H "Authorization: Bearer $API_KEY" \
   -F "file=@./start.png")
 URL=$(echo "$UPLOAD" | jq -r .url)
