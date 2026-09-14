@@ -213,6 +213,17 @@ func TestChannelGateEnforcesDurationAndRatio(t *testing.T) {
 	}
 }
 
+// Agent 分组按模型目录筛选账号后，仍必须执行 provider 的请求能力闸门。
+// aigod 与 jingyu 也有时长/画幅约束；漏掉它会让不支持的请求被调度到对应上游，
+// 直到上游 400 才失败，而同一 Agent 下的其它渠道本可正常承接。
+func TestVideoProviderNeedsRequestCompatibilityIncludesAigod(t *testing.T) {
+	for _, provider := range []string{videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu} {
+		require.True(t, videoProviderNeedsRequestCompatibility(provider), "%s 必须执行请求能力检查", provider)
+	}
+	// 未知 provider 仍按默认 aigod 适配器处理，但这里只接受显式 provider 名。
+	require.False(t, videoProviderNeedsRequestCompatibility("unknown"))
+}
+
 // aigod 与 newtoken 的轮询超时统一为 15 分钟（覆盖 aigod 真人过白 ≤10 分钟 + 生成）。
 func TestSeedancePollTimeoutIsFifteenMinutesForEveryProvider(t *testing.T) {
 	require.Equal(t, 15*time.Minute, videoDefaultPollTimeout)

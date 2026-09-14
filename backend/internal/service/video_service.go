@@ -26,6 +26,7 @@ const (
 	videoProviderAigod    = "aigod"
 	videoProviderNewtoken = "newtoken"
 	videoProviderMikuapi  = "mikuapi"
+	videoProviderJingyu   = "jingyu"
 	// videoAigodSubjectType：aigod 要求参考图/参考视频统一声明主体类型。
 	// 该上游把参考素材一律按真人链路处理，与下游是否传 subject_type 无关。
 	videoAigodSubjectType       = "person"
@@ -33,6 +34,10 @@ const (
 	videoDefaultNewtokenBaseURL = "https://newtoken.club"
 	videoDefaultMikuapiBaseURL  = "https://mikuapi.org"
 	videoDefaultAPIPath         = "/v1/videos"
+	videoDefaultJingyuBaseURL   = "https://api.jingyuapi.art"
+	videoDefaultJingyuAPIPath   = "/v1/video/generations"
+	videoJingyuSeedance20Model  = "yu-video-2-pro"
+	videoJingyuSeedance25Model  = "yu-video-2.5-pro"
 	// newtoken encodes the output resolution into the upstream model id, so the
 	// adapter routes on (downstream model, resolution) instead of a static map.
 	videoNewtokenSeedance20720PModel     = "sd2.0-720p-official"
@@ -51,6 +56,10 @@ const (
 	// mikuapi 的视频创建立即返回任务 id，成片要自己轮询；按 5 秒一轮，
 	// 与 newtoken 一样不去打秒级轮询。
 	videoMikuapiPollInterval     = 5 * time.Second
+	videoJingyuPollInterval      = 5 * time.Second
+	videoJingyuPollTimeout       = 30 * time.Minute
+	videoJingyuRequestTimeout    = 30 * time.Minute
+	videoJingyuConnectTimeout    = 60 * time.Second
 	videoNewtokenRequestTimeout  = 5 * time.Minute
 	videoNewtokenConnectTimeout  = 15 * time.Second
 	videoMinDurationSeconds      = 4
@@ -1462,7 +1471,7 @@ func isVideoAccountCompatibleForRequest(account *Account, normalized *normalized
 // unsupported request is routed to another upstream instead of failing there.
 func videoProviderNeedsRequestCompatibility(provider string) bool {
 	switch provider {
-	case videoProviderNewtoken, videoProviderMikuapi:
+	case videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu:
 		return true
 	default:
 		return false
@@ -1638,6 +1647,9 @@ func SanitizeVideoClientError(code, message string) (string, string) {
 		"api.aigod.one",
 		"newtoken",
 		"newtoken.club",
+		"jingyu",
+		"jingyuapi",
+		"api.jingyuapi.art",
 		// Covers every newtoken upstream model id (sd2.0-720p-official, ...).
 		"-official",
 		"upstream",
@@ -1698,6 +1710,8 @@ func videoAccountProvider(account *Account) string {
 		return videoProviderNewtoken
 	case videoProviderMikuapi:
 		return videoProviderMikuapi
+	case videoProviderJingyu:
+		return videoProviderJingyu
 	default:
 		return videoProviderAigod
 	}
@@ -1721,6 +1735,17 @@ func videoAccountDuration(account *Account, key string, fallback time.Duration) 
 
 func videoAccountDefaultDuration(account *Account, key string) time.Duration {
 	switch videoAccountProvider(account) {
+	case videoProviderJingyu:
+		switch key {
+		case "poll_interval_ms":
+			return videoJingyuPollInterval
+		case "poll_timeout_ms":
+			return videoJingyuPollTimeout
+		case "request_timeout_ms":
+			return videoJingyuRequestTimeout
+		case "connect_timeout_ms":
+			return videoJingyuConnectTimeout
+		}
 	case videoProviderMikuapi:
 		switch key {
 		case "poll_interval_ms":

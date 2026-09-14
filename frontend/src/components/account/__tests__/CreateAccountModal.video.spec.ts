@@ -108,14 +108,14 @@ describe('CreateAccountModal video mode', () => {
     expect(payload.type).toBe('apikey')
   })
 
-  it('offers aigod, newtoken and mikuapi as upstreams', async () => {
+  it('offers aigod, newtoken, mikuapi and jingyu as upstreams', async () => {
     const wrapper = await mountVideoModal()
 
-    for (const supported of ['aigod', 'newtoken', 'mikuapi']) {
+    for (const supported of ['aigod', 'newtoken', 'mikuapi', 'jingyu']) {
       expect(wrapper.find(`[data-testid="video-provider-${supported}"]`).exists()).toBe(true)
     }
     // 早期清理掉的上游不能悄悄回来。
-    for (const removed of ['ycyapi', 'jingyu']) {
+    for (const removed of ['ycyapi']) {
       expect(wrapper.find(`[data-testid="video-provider-${removed}"]`).exists()).toBe(false)
     }
   })

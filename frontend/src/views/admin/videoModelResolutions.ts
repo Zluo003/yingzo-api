@@ -15,7 +15,7 @@
  * 注意 4K 的官方写法是大写 K：后端按大小写不敏感匹配后回写官方写法，
  * 因此前后端之间只传官方字符串，不要用 ToLower 的副本。
  */
-export type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi'
+export type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu'
 
 export interface VideoModelResolutionSpec {
   model: string
@@ -63,6 +63,12 @@ export const VIDEO_PROVIDER_RESOLUTIONS: Record<
     'seedance-2.0': ['480p', '720p', '1080p', '4K'],
     'seedance-2.0-fast': ['480p', '720p'],
     'seedance-2.5': ['480p', '720p', '1080p']
+  },
+  jingyu: {
+    // Jingyu 2.0 提供 480p/720p/1080p/4K，2.5 仅提供 480p/720p。
+    'seedance-2.0': ['480p', '720p', '1080p', '4K'],
+    'seedance-2.0-fast': [],
+    'seedance-2.5': ['480p', '720p']
   }
 }
 

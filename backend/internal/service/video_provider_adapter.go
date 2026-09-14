@@ -29,6 +29,8 @@ func videoProviderAdapterForAccount(account *Account) videoProviderAdapter {
 		return newtokenVideoProviderAdapter{}
 	case videoProviderMikuapi:
 		return mikuapiVideoProviderAdapter{}
+	case videoProviderJingyu:
+		return jingyuVideoProviderAdapter{}
 	default:
 		return aigodVideoProviderAdapter{}
 	}
@@ -40,6 +42,8 @@ func videoProviderAdapterByName(provider string) videoProviderAdapter {
 		return newtokenVideoProviderAdapter{}
 	case videoProviderMikuapi:
 		return mikuapiVideoProviderAdapter{}
+	case videoProviderJingyu:
+		return jingyuVideoProviderAdapter{}
 	default:
 		return aigodVideoProviderAdapter{}
 	}
