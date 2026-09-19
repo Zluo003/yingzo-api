@@ -327,6 +327,21 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 		cmd.AccountQuotaCost = p.Cost.TotalCost * p.AccountRateMultiplier
 	}
 
+	// 退费（负数费用）对称回冲：余额与订阅用量在上方按非零写入，这里补齐配额
+	// 与限额的回冲字段。缺失它，失败退费只回补余额，API Key 配额、速率限额与
+	// 账号配额会留下永久占用（预扣了却没释放）。守卫与扣费侧镜像。
+	if p.Cost.ActualCost < 0 {
+		if p.APIKey.Quota > 0 && p.APIKeyService != nil {
+			cmd.APIKeyQuotaCost = p.Cost.ActualCost
+		}
+		if p.APIKey.HasRateLimits() {
+			cmd.APIKeyRateLimitCost = p.Cost.ActualCost
+		}
+	}
+	if p.Cost.TotalCost < 0 && p.Account.IsAPIKeyOrBedrock() && p.Account.HasAnyQuotaLimit() {
+		cmd.AccountQuotaCost = p.Cost.TotalCost * p.AccountRateMultiplier
+	}
+
 	cmd.Normalize()
 	return cmd
 }

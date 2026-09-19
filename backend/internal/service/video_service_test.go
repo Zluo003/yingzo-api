@@ -1285,17 +1285,20 @@ func TestVideoPrebillingDoesNotMarkTaskBilledWhenBillingFails(t *testing.T) {
 func TestVideoServiceRefundsFailedPrebilledTaskOnce(t *testing.T) {
 	groupID := int64(20)
 	apiKey := &APIKey{
-		ID:      10,
-		UserID:  100,
-		GroupID: &groupID,
-		User:    &User{ID: 100, Balance: 100},
-		Group:   &Group{ID: groupID, Platform: PlatformVideo, RateMultiplier: 1, SubscriptionType: SubscriptionTypeStandard},
+		ID:          10,
+		UserID:      100,
+		GroupID:     &groupID,
+		User:        &User{ID: 100, Balance: 100},
+		Group:       &Group{ID: groupID, Platform: PlatformVideo, RateMultiplier: 1, SubscriptionType: SubscriptionTypeStandard},
+		Quota:       100,
+		RateLimit5h: 50,
 	}
 	account := &Account{
 		ID:       30,
 		Platform: PlatformVideo,
 		Type:     AccountTypeAPIKey,
 		Status:   StatusActive,
+		Extra:    map[string]any{"quota_limit": 500.0},
 	}
 	taskRepo := newVideoTaskMemoryRepo()
 	task, err := taskRepo.Create(context.Background(), &VideoTaskCreateInput{
@@ -1363,6 +1366,11 @@ func TestVideoServiceRefundsFailedPrebilledTaskOnce(t *testing.T) {
 	require.NotNil(t, usageRepo.videoResultUpdates[0].update.DurationMs)
 	require.Len(t, billingRepo.commands, 1)
 	require.InDelta(t, -4, billingRepo.commands[0].BalanceCost, 0.0001)
+	// 退费命令必须带上配额/限额/账号配额的回冲字段，否则失败退费只回补余额，
+	// 预扣时占用的配额与限额会永久留下。
+	require.InDelta(t, -4, billingRepo.commands[0].APIKeyQuotaCost, 0.0001)
+	require.InDelta(t, -4, billingRepo.commands[0].APIKeyRateLimitCost, 0.0001)
+	require.InDelta(t, -4, billingRepo.commands[0].AccountQuotaCost, 0.0001)
 }
 
 func TestVideoCompletionUpdatesChargeUsageLogResultWithoutBillingAgain(t *testing.T) {

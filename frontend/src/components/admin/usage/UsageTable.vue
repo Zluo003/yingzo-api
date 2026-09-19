@@ -130,6 +130,14 @@
               {{ getRequestTypeLabel(row) }}
             </span>
             <span
+              v-if="isUsageRefund(row)"
+              data-testid="usage-refund-badge"
+              class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium"
+              :class="getRefundBadgeClass()"
+            >
+              {{ t('usage.refund') }}
+            </span>
+            <span
               v-if="row.native_compaction_v2"
               data-testid="native-compaction-badge"
               class="inline-flex items-center rounded bg-teal-100 px-2 py-0.5 text-xs font-medium text-teal-800 dark:bg-teal-900 dark:text-teal-200"
@@ -702,16 +710,31 @@ const getRequestTypeLabel = (row: AdminUsageLog): string => {
   const requestType = resolveUsageRequestType(row)
   if (requestType === 'cyber') return t('usage.cyber')
   if (requestType === 'live') return t('usage.live')
+  if (requestType === 'video') return t('usage.video')
   if (requestType === 'ws_v2') return t('usage.ws')
   if (requestType === 'stream') return t('usage.stream')
   if (requestType === 'sync') return t('usage.sync')
   return t('usage.unknown')
 }
 
+/**
+ * 退费记录：异步任务（视频等）失败时回冲预扣费用而生成的负费用条目。
+ * 命中两个特征之一即可：request_id 以 :refund 结尾（后端退费统一后缀），
+ * 或费用为负（历史数据 / 其它负向调整）。
+ */
+const isUsageRefund = (row: AdminUsageLog): boolean => {
+  if ((row.request_id ?? '').endsWith(':refund')) return true
+  return (row.total_cost ?? 0) < 0
+}
+
+const getRefundBadgeClass = (): string =>
+  'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+
 const getRequestTypeBadgeClass = (row: AdminUsageLog): string => {
   const requestType = resolveUsageRequestType(row)
   if (requestType === 'cyber') return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
   if (requestType === 'live') return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+  if (requestType === 'video') return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200'
   if (requestType === 'ws_v2') return 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200'
   if (requestType === 'stream') return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
   if (requestType === 'sync') return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'

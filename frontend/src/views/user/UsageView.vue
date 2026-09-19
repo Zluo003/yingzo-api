@@ -609,6 +609,7 @@ const getRequestTypeExportText = (log: UsageLog): string => {
   const requestType = resolveUsageRequestType(log)
   if (requestType === 'cyber') return 'Cyber'
   if (requestType === 'live') return 'Live'
+  if (requestType === 'video') return 'Video'
   if (requestType === 'ws_v2') return 'WS'
   if (requestType === 'stream') return 'Stream'
   if (requestType === 'sync') return 'Sync'

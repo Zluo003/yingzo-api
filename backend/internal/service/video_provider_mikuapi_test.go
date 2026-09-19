@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -734,4 +735,46 @@ func TestMikuapiNewModelsRequestValidation(t *testing.T) {
 		Model: VideoModelGrokImagineVideo15, Prompt: strings.Repeat("a", 5000), Duration: 5,
 	})
 	require.NoError(t, err, "提示词长度交由上游判定，归一化层不做特例")
+}
+
+// 端到端锁死创建端点的路由：kling 必须POST 到 /v1/videos（可灵端点），
+// grok-imagine 才追加 /generations。真实走一遍 createUpstreamTask，
+// 捕获实际发出的 URL，防止"发到原生 grok 端点"这类回归。
+func TestMikuapiCreateUpstreamTaskPostsToCorrectPath(t *testing.T) {
+	var gotPath string
+	var gotModel string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		gotModel, _ = body["model"].(string)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"request_id":"probe-1"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	account := &Account{ID: 46, Platform: PlatformVideo, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "sk-miku-test"},
+		Extra: map[string]any{
+			VideoProviderExtraKey: videoProviderMikuapi,
+			"base_url":            server.URL,
+			"api_path":            videoDefaultAPIPath,
+		}}
+	svc := newMikuapiPollTestService(nil, nil)
+
+	// kling：上游模型名是 kling-video-v3-omni，不匹配 grok 前缀。
+	_, err := svc.createUpstreamTask(context.Background(), account, map[string]any{
+		"model": videoMikuapiKlingVideoV3OmniModel,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "/v1/videos", gotPath, "可灵必须 POST 到 /v1/videos")
+	require.Equal(t, "kling-video-v3-omni", gotModel)
+
+	// grok：上游模型名带 grok-imagine 前缀，追加 /generations。
+	_, err = svc.createUpstreamTask(context.Background(), account, map[string]any{
+		"model": videoMikuapiGrokImagineVideo15PreviewModel,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "/v1/videos/generations", gotPath, "grok 走 /v1/videos/generations")
+	require.Equal(t, "grok-imagine-video-1.5-preview", gotModel)
 }

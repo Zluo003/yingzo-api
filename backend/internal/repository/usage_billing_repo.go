@@ -172,8 +172,15 @@ func (r *usageBillingRepository) applyBatchImageBalanceHold(
 }
 
 func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, tx *sql.Tx, cmd *service.UsageBillingCommand, result *service.UsageBillingApplyResult) error {
+	// 负数费用是退费（视频等异步任务失败时回冲预扣）：与扣费对称地回补每一本
+	// 账，任何一侧漏掉都会让"使用记录显示已退费、实际余额/配额没回来"。
 	if cmd.SubscriptionCost > 0 && cmd.SubscriptionID != nil {
 		if err := incrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost); err != nil {
+			return err
+		}
+	}
+	if cmd.SubscriptionCost < 0 && cmd.SubscriptionID != nil {
+		if err := decrementUsageBillingSubscription(ctx, tx, *cmd.SubscriptionID, cmd.SubscriptionCost); err != nil {
 			return err
 		}
 	}
@@ -186,6 +193,13 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 		result.NewBalance = &newBalance
 		result.BalanceOverdrafted = !sufficient
 	}
+	if cmd.BalanceCost < 0 {
+		newBalance, err := creditUsageBillingBalance(ctx, tx, cmd.UserID, -cmd.BalanceCost)
+		if err != nil {
+			return err
+		}
+		result.NewBalance = &newBalance
+	}
 
 	if cmd.APIKeyQuotaCost > 0 {
 		exhausted, err := incrementUsageBillingAPIKeyQuota(ctx, tx, cmd.APIKeyID, cmd.APIKeyQuotaCost)
@@ -194,9 +208,19 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 		}
 		result.APIKeyQuotaExhausted = exhausted
 	}
+	if cmd.APIKeyQuotaCost < 0 {
+		if err := decrementUsageBillingAPIKeyQuota(ctx, tx, cmd.APIKeyID, cmd.APIKeyQuotaCost); err != nil {
+			return err
+		}
+	}
 
 	if cmd.APIKeyRateLimitCost > 0 {
 		if err := incrementUsageBillingAPIKeyRateLimit(ctx, tx, cmd.APIKeyID, cmd.APIKeyRateLimitCost); err != nil {
+			return err
+		}
+	}
+	if cmd.APIKeyRateLimitCost < 0 {
+		if err := decrementUsageBillingAPIKeyRateLimit(ctx, tx, cmd.APIKeyID, cmd.APIKeyRateLimitCost); err != nil {
 			return err
 		}
 	}
@@ -207,6 +231,11 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 			return err
 		}
 		result.QuotaState = quotaState
+	}
+	if cmd.AccountQuotaCost < 0 && (strings.EqualFold(cmd.AccountType, service.AccountTypeAPIKey) || strings.EqualFold(cmd.AccountType, service.AccountTypeBedrock)) {
+		if err := decrementUsageBillingAccountQuota(ctx, tx, cmd.AccountID, cmd.AccountQuotaCost); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -238,6 +267,139 @@ func incrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscrip
 		return nil
 	}
 	return service.ErrSubscriptionNotFound
+}
+
+// creditUsageBillingBalance 把退费金额加回用户余额。与扣费不同不做余额校验：
+// 回补金额由退费入口的守卫（BilledAt 非空、未退过、ActualCost > 0）保证不超过
+// 先前预扣。
+func creditUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64) (float64, error) {
+	var newBalance float64
+	err := tx.QueryRowContext(ctx, `
+		UPDATE users
+		SET balance = balance + $1,
+			updated_at = NOW()
+		WHERE id = $2 AND deleted_at IS NULL
+		RETURNING balance
+	`, amount, userID).Scan(&newBalance)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, service.ErrUserNotFound
+	}
+	return newBalance, err
+}
+
+// decrementUsageBillingSubscription 回冲订阅用量。GREATEST(0, ...) 钳制保证任何
+// 异常序列（例如窗口先重置后退费）不会把用量打成负数。
+func decrementUsageBillingSubscription(ctx context.Context, tx *sql.Tx, subscriptionID int64, costUSD float64) error {
+	const updateSQL = `
+		UPDATE user_subscriptions us
+		SET
+			daily_usage_usd = GREATEST(0, us.daily_usage_usd + $1),
+			weekly_usage_usd = GREATEST(0, us.weekly_usage_usd + $1),
+			monthly_usage_usd = GREATEST(0, us.monthly_usage_usd + $1),
+			updated_at = NOW()
+		FROM groups g
+		WHERE us.id = $2
+			AND us.deleted_at IS NULL
+			AND us.group_id = g.id
+			AND g.deleted_at IS NULL
+	`
+	res, err := tx.ExecContext(ctx, updateSQL, costUSD, subscriptionID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected > 0 {
+		return nil
+	}
+	return service.ErrSubscriptionNotFound
+}
+
+// decrementUsageBillingAPIKeyQuota 回冲 API Key 配额占用（钳到 0），并把因额度
+// 耗尽被置为 exhausted 的 key 恢复 active（仅当回冲后确实低于额度）。
+func decrementUsageBillingAPIKeyQuota(ctx context.Context, tx *sql.Tx, apiKeyID int64, amount float64) error {
+	res, err := tx.ExecContext(ctx, `
+		UPDATE api_keys
+		SET quota_used = GREATEST(0, quota_used + $1),
+			status = CASE
+				WHEN quota > 0
+					AND status = $3
+					AND GREATEST(0, quota_used + $1) < quota
+				THEN $4
+				ELSE status
+			END,
+			updated_at = NOW()
+		WHERE id = $2 AND deleted_at IS NULL
+	`, amount, apiKeyID, service.StatusAPIKeyQuotaExhausted, service.StatusAPIKeyActive)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected > 0 {
+		return nil
+	}
+	return service.ErrUserNotFound
+}
+
+// decrementUsageBillingAPIKeyRateLimit 回冲速率限额用量（钳到 0）。不动窗口起点：
+// 退费发生在扣费后的短时间内，用量归属窗口与扣费时一致。
+func decrementUsageBillingAPIKeyRateLimit(ctx context.Context, tx *sql.Tx, apiKeyID int64, cost float64) error {
+	res, err := tx.ExecContext(ctx, `
+		UPDATE api_keys SET
+			usage_5h = GREATEST(0, usage_5h + $1),
+			usage_1d = GREATEST(0, usage_1d + $1),
+			usage_7d = GREATEST(0, usage_7d + $1),
+			updated_at = NOW()
+		WHERE id = $2 AND deleted_at IS NULL
+	`, cost, apiKeyID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected > 0 {
+		return nil
+	}
+	return service.ErrUserNotFound
+}
+
+// decrementUsageBillingAccountQuota 回冲上游账号配额（钳到 0）。日窗口未过期时
+// 一并回冲 quota_daily_used；已过期则不动——过期意味着新窗口尚未产生用量，
+// 旧窗口的数字会在下一次自增时被重置逻辑覆盖。
+func decrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountID int64, amount float64) error {
+	res, err := tx.ExecContext(ctx, `
+		UPDATE accounts SET extra = (
+			COALESCE(extra, '{}'::jsonb)
+			|| jsonb_build_object('quota_used', GREATEST(0, COALESCE((extra->>'quota_used')::numeric, 0) + $1))
+			|| jsonb_build_object('quota_daily_used',
+				CASE WHEN COALESCE((extra->>'quota_daily_reset_mode', 'rolling') = 'fixed'
+					THEN NOW() >= COALESCE((extra->>'quota_daily_reset_at')::timestamptz, '1970-01-01'::timestamptz)
+					ELSE COALESCE((extra->>'quota_daily_start')::timestamptz, '1970-01-01'::timestamptz)
+						+ '24 hours'::interval <= NOW()
+				END
+				THEN COALESCE((extra->>'quota_daily_used')::numeric, 0)
+				ELSE GREATEST(0, COALESCE((extra->>'quota_daily_used')::numeric, 0) + $1) END)
+		)
+		WHERE id = $2
+	`, amount, accountID)
+	if err != nil {
+		return err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected > 0 {
+		return nil
+	}
+	return service.ErrUserNotFound
 }
 
 func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64) (float64, bool, error) {

@@ -362,6 +362,8 @@ export default {
     ws: 'WS',
     stream: 'Stream',
     sync: 'Sync',
+    video: 'Video',
+    refund: 'Refund',
     nativeCompactionV2: 'Compaction',
     compactionFilter: 'Request Kind',
     allCompactionTypes: 'All Requests',
