@@ -134,7 +134,12 @@ func (j jingyuVideoProviderAdapter) ResultURL(_ string, _ string, payload map[st
 	return videoResultURLFromPayload(payload)
 }
 
-func (j jingyuVideoProviderAdapter) ResultAuthorization(*Account) string { return "" }
+func (j jingyuVideoProviderAdapter) ResultAuthorization(*Account, string) string { return "" }
+
+// CreateEndpoint：jingyu 的创建端点不区分模型族。
+func (j jingyuVideoProviderAdapter) CreateEndpoint(endpoint, _ string) string {
+	return endpoint
+}
 
 func (j jingyuVideoProviderAdapter) PollMaxConsecutiveFailures() int { return 1 }
 

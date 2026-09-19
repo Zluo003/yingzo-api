@@ -15,8 +15,14 @@ type videoProviderAdapter interface {
 	// /v1/videos/{id}/content。
 	ResultURL(endpoint, taskID string, payload map[string]any) string
 	// ResultAuthorization 返回回捞成片时要带的 Authorization 头；空串表示成片地址
-	// 自带授权（预签名）或公开可读。
-	ResultAuthorization(account *Account) string
+	// 自带授权（预签名）或公开可读。upstreamModel 是创建任务时的上游模型名：同一
+	// 渠道可能按模型族混用"受保护下载端点"与"公开直链"（mikuapi 的可灵成片是
+	// 可灵 CDN 直链，带 key 等于把上游密钥发给第三方）。
+	ResultAuthorization(account *Account, upstreamModel string) string
+	// CreateEndpoint 返回创建任务要 POST 的地址，默认原样返回传入端点。同一渠道
+	// 的不同模型族可能用不同创建路径（mikuapi 的 grok-imagine 走 /v1/videos/generations，
+	// 其余走 /v1/videos）。轮询与成片地址不经过这里，账号 api_path 必须保持三者通用的形态。
+	CreateEndpoint(endpoint, upstreamModel string) string
 	// PollMaxConsecutiveFailures 是轮询阶段可容忍的连续失败次数：<=1 表示沿用既有
 	// 行为（可重试错误继续重试，其余错误一次即判失败）；>1 表示连不可重试的错误
 	// （例如上游暂时查不到任务返回 404）也先重试到该次数再放弃。

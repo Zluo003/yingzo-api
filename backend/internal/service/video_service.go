@@ -496,6 +496,9 @@ func (s *VideoService) createUpstreamTask(ctx context.Context, account *Account,
 	if err != nil {
 		return nil, err
 	}
+	// 同一渠道的不同模型族可能用不同创建路径（mikuapi 的 grok-imagine 走
+	// /generations），由适配器按上游模型名调整；其余适配器原样返回。
+	endpoint = videoProviderAdapterForAccount(account).CreateEndpoint(endpoint, stringFromMap(body, "model"))
 	reqCtx, cancel := context.WithTimeout(ctx, videoAccountDuration(account, "request_timeout_ms", videoAccountDefaultDuration(account, "request_timeout_ms")))
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, endpoint, bytes.NewReader(raw))
@@ -728,10 +731,12 @@ func (s *VideoService) publishVideoResult(ctx context.Context, input VideoTaskLi
 		GroupID:  input.APIKey.Group.ID,
 	}
 	// 有的上游成片地址是受保护的下载端点（mikuapi 的 /content），回捞时要带 key；
-	// 其余上游给的是预签名/公开地址，保持原样不带授权头。
+	// 其余上游给的是预签名/公开地址，保持原样不带授权头。同一渠道内不同模型族的
+	// 成片机制可能不同（mikuapi 的可灵是公开直链），因此把上游模型名一并交给适配器。
+	upstreamModel := stringFromMap(input.UpstreamBody, "model")
 	var publishedURL string
 	var err error
-	if authorization := videoProviderAdapterForAccount(input.Account).ResultAuthorization(input.Account); authorization != "" {
+	if authorization := videoProviderAdapterForAccount(input.Account).ResultAuthorization(input.Account, upstreamModel); authorization != "" {
 		authenticated, ok := s.videoResultPublisher.(AuthenticatedVideoResultPublisher)
 		if !ok {
 			return "", errors.New("video result publisher does not support authenticated downloads")
@@ -1573,6 +1578,10 @@ func normalizeVideoUpstreamStatus(status string) string {
 		return VideoTaskStatusProcessing
 	case "completed", "succeeded", "success":
 		return VideoTaskStatusCompleted
+	// "done" 是 mikuapi grok-imagine 的完成态；pending 不在这张表里，走 default
+	// 归为 processing。
+	case "done":
+		return VideoTaskStatusCompleted
 	case "failed", "error":
 		return VideoTaskStatusFailed
 	case "cancelled", "canceled":
@@ -1825,11 +1834,16 @@ func firstNonEmptyVideoString(values ...string) string {
 
 // videoTaskIDFromPayload accepts the documented top-level id and the common
 // data/task/result envelopes used by OpenAI-compatible async providers.
+// request_id（mikuapi grok-imagine 的任务 id 字段）放在最后匹配，避免改变既有
+// 上游同时携带 id 与 request_id 时的优先级。
 func videoTaskIDFromPayload(payload map[string]any) string {
 	if payload == nil {
 		return ""
 	}
 	if id := firstNonEmptyVideoString(stringFromMap(payload, "task_id"), stringFromMap(payload, "id")); id != "" {
+		return id
+	}
+	if id := strings.TrimSpace(stringFromMap(payload, "request_id")); id != "" {
 		return id
 	}
 	for _, key := range []string{"data", "task", "result"} {

@@ -189,6 +189,16 @@ func TestVideoProviderServableResolutionMatrix(t *testing.T) {
 			// newtoken 目录含 sd2.5-1080p-official，故 2.5 的 1080p 同样可服务。
 			VideoModelSeedance25: {VideoResolution720P, VideoResolution1080P},
 		},
+		// mikuapi：Seedance 三档与官方档位一致（2.0 含 4K、2.5 无 4K）；
+		// grok-imagine 只有 480p/720p/1080p，可灵 omni 是 720p/1080p/4K
+		// （上游目录写小写 4k，请求体里转小写）。
+		videoProviderMikuapi: {
+			VideoModelSeedance20:                {VideoResolution480P, VideoResolution720P, VideoResolution1080P, VideoResolution4K},
+			VideoModelSeedance20Fast:            {VideoResolution480P, VideoResolution720P},
+			VideoModelSeedance25:                {VideoResolution480P, VideoResolution720P, VideoResolution1080P},
+			VideoModelGrokImagineVideo15Preview: {VideoResolution480P, VideoResolution720P, VideoResolution1080P},
+			VideoModelKlingVideoV3Omni:          {VideoResolution720P, VideoResolution1080P, VideoResolution4K},
+		},
 	}
 
 	for provider, byModel := range expected {

@@ -196,8 +196,13 @@ func (n newtokenVideoProviderAdapter) ResultURL(string, string, map[string]any) 
 }
 
 // ResultAuthorization：newtoken 的成片地址自带授权，不需要额外请求头。
-func (n newtokenVideoProviderAdapter) ResultAuthorization(*Account) string {
+func (n newtokenVideoProviderAdapter) ResultAuthorization(*Account, string) string {
 	return ""
+}
+
+// CreateEndpoint：newtoken 的创建端点不区分模型族。
+func (n newtokenVideoProviderAdapter) CreateEndpoint(endpoint, _ string) string {
+	return endpoint
 }
 
 // PollMaxConsecutiveFailures：保持既有轮询容错。

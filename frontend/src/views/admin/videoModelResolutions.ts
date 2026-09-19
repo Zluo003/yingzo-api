@@ -26,7 +26,9 @@ export interface VideoModelResolutionSpec {
 export const VIDEO_MODEL_RESOLUTIONS: VideoModelResolutionSpec[] = [
   { model: 'seedance-2.0', resolutions: ['480p', '720p', '1080p', '4K'] },
   { model: 'seedance-2.0-fast', resolutions: ['480p', '720p'] },
-  { model: 'seedance-2.5', resolutions: ['480p', '720p', '1080p'] }
+  { model: 'seedance-2.5', resolutions: ['480p', '720p', '1080p'] },
+  { model: 'grok-imagine-video-1.5-preview', resolutions: ['480p', '720p', '1080p'] },
+  { model: 'kling-video-v3-omni', resolutions: ['720p', '1080p', '4K'] }
 ]
 
 /** 对外提供的视频模型清单，与后端 SupportedVideoModels() 一致。 */
@@ -60,9 +62,13 @@ export const VIDEO_PROVIDER_RESOLUTIONS: Record<
   mikuapi: {
     // mikuapi 的清晰度走请求体字段（不拼进模型名），三档与官方档位一致：
     // 2.0 含 4K、2.0-fast 仅 480p/720p、2.5 没有 4K（传 4K 会被上游降到 1080p）。
+    // grok-imagine 与可灵的档位同样走请求体字段；可灵只认小写 4k，
+    // 下游规范写法仍是大写 4K（适配器负责转写）。
     'seedance-2.0': ['480p', '720p', '1080p', '4K'],
     'seedance-2.0-fast': ['480p', '720p'],
-    'seedance-2.5': ['480p', '720p', '1080p']
+    'seedance-2.5': ['480p', '720p', '1080p'],
+    'grok-imagine-video-1.5-preview': ['480p', '720p', '1080p'],
+    'kling-video-v3-omni': ['720p', '1080p', '4K']
   },
   jingyu: {
     // Jingyu 2.0 提供 480p/720p/1080p/4K，2.5 仅提供 480p/720p。

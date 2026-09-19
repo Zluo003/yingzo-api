@@ -96,8 +96,13 @@ func (a aigodVideoProviderAdapter) ResultURL(string, string, map[string]any) str
 }
 
 // ResultAuthorization：aigod 的成片地址是公开/预签名地址，不需要额外授权头。
-func (a aigodVideoProviderAdapter) ResultAuthorization(*Account) string {
+func (a aigodVideoProviderAdapter) ResultAuthorization(*Account, string) string {
 	return ""
+}
+
+// CreateEndpoint：aigod 的创建端点不区分模型族。
+func (a aigodVideoProviderAdapter) CreateEndpoint(endpoint, _ string) string {
+	return endpoint
 }
 
 // PollMaxConsecutiveFailures：保持既有轮询容错（可重试错误继续重试，

@@ -45,6 +45,11 @@ curl https://your-host/v1/videos \\
 
 `duration`、`resolution` 和画幅最终以模型能力合同为准。以当前 Seedance 配置为例：2.0 支持 480p/720p/1080p/4K，2.0-fast 不支持 1080p/4K，2.5 支持 480p/720p/1080p；超出能力会在创建阶段返回错误，不会产生上游任务。
 
+除 Seedance 三档外，还经 mikuapi 渠道提供两个模型，创建/查询协议与下文完全一致，仅模型能力合同不同（上游接口差异由服务端适配器吸收）：
+
+- `grok-imagine-video-1.5-preview`：时长 1-15 秒，分辨率 480p/720p/1080p；参考素材仅支持图片（参考图至多 7 张，首帧与参考图互斥），不支持 `video_start_end_to_video`；首帧图生视频的输出画幅跟随输入图。
+- `kling-video-v3-omni`：时长 3-15 秒，分辨率 720p/1080p/4K，画幅仅 `16:9` / `9:16` / `1:1`；参考图至多 7 张，同样不支持 `video_start_end_to_video`。
+
 ## 3. 四种视频能力
 
 ### 3.1 文生视频

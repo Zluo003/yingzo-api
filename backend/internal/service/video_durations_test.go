@@ -6,11 +6,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// 时长是按模型的上游约束，不是固定三档：2.0 系列 4-15 秒，2.5 为 4-30 秒。
+// 时长是按模型的上游约束，不是固定三档：2.0 系列 4-15 秒，2.5 为 4-30 秒；
+// grok-imagine 为 1-15 秒，可灵 omni 为 3-15 秒。
 func TestSupportedVideoDurationsArePerModelRanges(t *testing.T) {
 	require.Equal(t, secondsRange(4, 15), SupportedVideoDurations(VideoModelSeedance20))
 	require.Equal(t, secondsRange(4, 15), SupportedVideoDurations(VideoModelSeedance20Fast))
 	require.Equal(t, secondsRange(4, 30), SupportedVideoDurations(VideoModelSeedance25))
+	require.Equal(t, secondsRange(1, 15), SupportedVideoDurations(VideoModelGrokImagineVideo15Preview))
+	require.Equal(t, secondsRange(3, 15), SupportedVideoDurations(VideoModelKlingVideoV3Omni))
 	// 账号 model_mapping 里自定义的视频模型走 legacy 兜底窗口。
 	require.Equal(t, secondsRange(4, 15), SupportedVideoDurations("seedance-custom"))
 }

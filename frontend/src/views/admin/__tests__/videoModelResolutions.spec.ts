@@ -20,7 +20,9 @@ describe('video model resolutions', () => {
     expect(VIDEO_MODEL_CODES).toEqual([
       'seedance-2.0',
       'seedance-2.0-fast',
-      'seedance-2.5'
+      'seedance-2.5',
+      'grok-imagine-video-1.5-preview',
+      'kling-video-v3-omni'
     ])
     expect(videoModelResolutions('seedance-2.0')).toEqual([
       '480p',
@@ -33,6 +35,16 @@ describe('video model resolutions', () => {
       '480p',
       '720p',
       '1080p'
+    ])
+    expect(videoModelResolutions('grok-imagine-video-1.5-preview')).toEqual([
+      '480p',
+      '720p',
+      '1080p'
+    ])
+    expect(videoModelResolutions('kling-video-v3-omni')).toEqual([
+      '720p',
+      '1080p',
+      '4K'
     ])
     expect(videoModelResolutions('seedance-9.9')).toEqual([])
     expect(VIDEO_MODEL_RESOLUTIONS.map((entry) => entry.model)).toEqual(
@@ -111,12 +123,17 @@ describe('video model resolutions', () => {
     expect(defaultVideoModelResolutions('aigod')).toEqual({
       'seedance-2.0': ['480p', '720p', '1080p', '4K'],
       'seedance-2.0-fast': ['480p', '720p'],
-      'seedance-2.5': ['480p', '720p', '1080p']
+      'seedance-2.5': ['480p', '720p', '1080p'],
+      // aigod / newtoken 不提供 grok-imagine 与可灵：条目为空（不可勾选）。
+      'grok-imagine-video-1.5-preview': [],
+      'kling-video-v3-omni': []
     })
     expect(defaultVideoModelResolutions('newtoken')).toEqual({
       'seedance-2.0': ['720p', '1080p'],
       'seedance-2.0-fast': ['720p'],
-      'seedance-2.5': ['720p', '1080p']
+      'seedance-2.5': ['720p', '1080p'],
+      'grok-imagine-video-1.5-preview': [],
+      'kling-video-v3-omni': []
     })
   })
 
@@ -221,7 +238,10 @@ describe('video model resolutions', () => {
       'seedance-2.0-fast': ['720p'],
       // 未配置 / 值非法 => 后端语义是"不限制"，界面必须显示该上游可服务的全部档位，
       // 而不是留空（留空会读成"什么都不支持"，与后端相反）。
-      'seedance-2.5': ['720p', '1080p']
+      'seedance-2.5': ['720p', '1080p'],
+      // newtoken 不提供这两个模型，"不限制"呈现为空（无可勾选档位）。
+      'grok-imagine-video-1.5-preview': [],
+      'kling-video-v3-omni': []
     })
   })
 
@@ -229,7 +249,9 @@ describe('video model resolutions', () => {
     const aigodDefaults = {
       'seedance-2.0': ['480p', '720p', '1080p', '4K'],
       'seedance-2.0-fast': ['480p', '720p'],
-      'seedance-2.5': ['480p', '720p', '1080p']
+      'seedance-2.5': ['480p', '720p', '1080p'],
+      'grok-imagine-video-1.5-preview': [],
+      'kling-video-v3-omni': []
     }
     expect(
       parseVideoModelResolutions(
@@ -240,7 +262,9 @@ describe('video model resolutions', () => {
       'seedance-2.0': ['720p'],
       // 未列出的模型（未知模型键被忽略）保持"不限制"的默认呈现
       'seedance-2.0-fast': aigodDefaults['seedance-2.0-fast'],
-      'seedance-2.5': aigodDefaults['seedance-2.5']
+      'seedance-2.5': aigodDefaults['seedance-2.5'],
+      'grok-imagine-video-1.5-preview': aigodDefaults['grok-imagine-video-1.5-preview'],
+      'kling-video-v3-omni': aigodDefaults['kling-video-v3-omni']
     })
     for (const raw of [undefined, null, 'x', 42, ['720p']]) {
       expect(parseVideoModelResolutions(raw, 'aigod')).toEqual(aigodDefaults)
@@ -294,6 +318,26 @@ describe('mikuapi video provider', () => {
     // 2.5 的官方档位本身就不含 4K（上游文档也说明传 4K 会落到 1080p），
     // 所以"该上游不提供"的列表是空的。
     expect(unsupportedVideoResolutions('mikuapi', 'seedance-2.5')).toEqual([])
+  })
+
+  it('serves grok-imagine and kling omni on mikuapi only', () => {
+    // grok-imagine：480p/720p/1080p（无 4K）。
+    expect(videoProviderModelResolutions('mikuapi', 'grok-imagine-video-1.5-preview')).toEqual([
+      '480p',
+      '720p',
+      '1080p'
+    ])
+    // 可灵 omni：720p/1080p/4K（上游目录写小写 4k，规范写法仍是大写 4K）。
+    expect(videoProviderModelResolutions('mikuapi', 'kling-video-v3-omni')).toEqual([
+      '720p',
+      '1080p',
+      '4K'
+    ])
+    // 其它上游不提供这两个模型。
+    for (const provider of ['aigod', 'newtoken', 'jingyu'] as const) {
+      expect(videoProviderModelResolutions(provider, 'grok-imagine-video-1.5-preview')).toEqual([])
+      expect(videoProviderModelResolutions(provider, 'kling-video-v3-omni')).toEqual([])
+    }
   })
 
   it('prunes selections that mikuapi cannot serve', () => {

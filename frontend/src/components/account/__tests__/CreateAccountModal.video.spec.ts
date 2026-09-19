@@ -159,10 +159,16 @@ describe('CreateAccountModal video mode', () => {
     expect(payload.extra.poll_timeout_ms).toBe(900000)
   })
 
-  it('whitelists exactly the three Seedance models by default', async () => {
+  it('whitelists exactly the shipped video models by default', async () => {
     const wrapper = await mountVideoModal()
 
-    for (const model of ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5']) {
+    for (const model of [
+      'seedance-2.0',
+      'seedance-2.0-fast',
+      'seedance-2.5',
+      'grok-imagine-video-1.5-preview',
+      'kling-video-v3-omni'
+    ]) {
       expect(wrapper.find(`[data-testid="video-model-${model}"]`).exists()).toBe(true)
     }
 
@@ -175,6 +181,8 @@ describe('CreateAccountModal video mode', () => {
       'seedance-2.0': 'seedance-2.0',
       'seedance-2.0-fast': 'seedance-2.0-fast',
       'seedance-2.5': 'seedance-2.5',
+      'grok-imagine-video-1.5-preview': 'grok-imagine-video-1.5-preview',
+      'kling-video-v3-omni': 'kling-video-v3-omni',
     })
   })
 
@@ -192,6 +200,8 @@ describe('CreateAccountModal video mode', () => {
     expect(createAccountMock.mock.calls[0]?.[0].credentials.model_mapping).toEqual({
       'seedance-2.0': 'seedance-2.0',
       'seedance-2.5': 'seedance-2.5',
+      'grok-imagine-video-1.5-preview': 'grok-imagine-video-1.5-preview',
+      'kling-video-v3-omni': 'kling-video-v3-omni',
     })
   })
 

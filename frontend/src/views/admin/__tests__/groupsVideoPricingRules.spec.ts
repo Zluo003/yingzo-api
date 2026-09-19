@@ -13,11 +13,13 @@ import {
 } from '../groupsVideoPricingRules'
 
 describe('video group pricing rules', () => {
-  it('only exposes the three shipped Seedance models', () => {
+  it('exposes the shipped video models', () => {
     expect(VIDEO_PRICING_MODELS).toEqual([
       'seedance-2.0',
       'seedance-2.0-fast',
-      'seedance-2.5'
+      'seedance-2.5',
+      'grok-imagine-video-1.5-preview',
+      'kling-video-v3-omni'
     ])
   })
 

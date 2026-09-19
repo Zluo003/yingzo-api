@@ -251,7 +251,7 @@ export default {
         },
         aigodAdapter: 'Seedance 2.0 / 2.0 Fast / 2.5',
         newtokenAdapter: '按分辨率路由上游模型：2.0 / 1080p、2.0 Fast、2.5',
-        mikuapiAdapter: '按请求体里的 resolution 字段路由：2.0（含 4K）/ 2.0 Fast（480p/720p，仅 5/10 秒）/ 2.5（无 4K）',
+        mikuapiAdapter: '按请求体里的 resolution 字段路由：Seedance 2.0（含 4K）/ 2.0 Fast（480p/720p，仅 5/10 秒）/ 2.5（无 4K），另支持 grok-imagine-video-1.5-preview 与可灵 kling-video-v3-omni（可灵走 /v1/videos，成片为直链）',
         jingyuAdapter: 'Jingyu /v1/video/generations：2.0（含 4K）/ 2.5（480p/720p）',
         models: '可用模型',
         modelsHint: '勾选的模型才会被调度到该账号；默认全部可用。',

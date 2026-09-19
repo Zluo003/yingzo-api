@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -154,13 +156,13 @@ func TestMikuapiResultURLFallsBackToContentEndpoint(t *testing.T) {
 
 	account := &Account{Platform: PlatformVideo, Type: AccountTypeAPIKey,
 		Credentials: map[string]any{"api_key": "sk-miku"}}
-	require.Equal(t, "Bearer sk-miku", adapter.ResultAuthorization(account))
+	require.Equal(t, "Bearer sk-miku", adapter.ResultAuthorization(account, videoMikuapiSeedance25Model))
 
 	// 其它上游保持"地址自带授权"的既有行为。
 	for _, provider := range []string{videoProviderAigod, videoProviderNewtoken} {
 		other := videoProviderAdapterByName(provider)
 		require.Empty(t, other.ResultURL(endpoint, "vid_123", map[string]any{}), "%s 交给通用解析", provider)
-		require.Empty(t, other.ResultAuthorization(account), "%s 不需要额外授权头", provider)
+		require.Empty(t, other.ResultAuthorization(account, "seedance-2.0-720p"), "%s 不需要额外授权头", provider)
 	}
 }
 
@@ -362,4 +364,374 @@ func TestMikuapiPollLifecycleFailsOnlyAfterToleranceExhausted(t *testing.T) {
 	require.Equal(t, VideoTaskStatusFailed, taskRepo.task.Status)
 	require.Equal(t, int32(videoMikuapiPollMaxConsecutiveFailures), atomic.LoadInt32(&statusCalls),
 		"必须在第 %d 次连续失败后才判失败", videoMikuapiPollMaxConsecutiveFailures)
+}
+
+// grok-imagine 与可灵的下游模型名与上游一致（分辨率/时长都走请求体字段），
+// 逐条锁住映射与档位。
+func TestMikuapiGrokAndKlingUpstreamModelsAndResolutions(t *testing.T) {
+	adapter := videoProviderAdapterByName(videoProviderMikuapi)
+
+	require.Equal(t, videoMikuapiGrokImagineVideo15PreviewModel,
+		adapter.UpstreamModel(nil, &normalizedVideoRequest{Model: VideoModelGrokImagineVideo15Preview, Resolution: VideoResolution720P}))
+	require.Equal(t, videoMikuapiKlingVideoV3OmniModel,
+		adapter.UpstreamModel(nil, &normalizedVideoRequest{Model: VideoModelKlingVideoV3Omni, Resolution: VideoResolution720P}))
+
+	// grok：480p/720p/1080p，没有 4K。
+	require.True(t, adapter.Compatible(VideoModelGrokImagineVideo15Preview, VideoResolution480P))
+	require.True(t, adapter.Compatible(VideoModelGrokImagineVideo15Preview, VideoResolution1080P))
+	require.False(t, adapter.Compatible(VideoModelGrokImagineVideo15Preview, VideoResolution4K))
+	// 可灵 omni：720p/1080p/4K（下游规范写法大写 K，上游 4k 由请求体转小写）。
+	require.True(t, adapter.Compatible(VideoModelKlingVideoV3Omni, VideoResolution4K))
+	require.True(t, adapter.Compatible(VideoModelKlingVideoV3Omni, VideoResolution1080P))
+	require.False(t, adapter.Compatible(VideoModelKlingVideoV3Omni, VideoResolution480P))
+
+	// 其它渠道不得认领这两个模型。
+	for _, provider := range []string{videoProviderAigod, videoProviderNewtoken, videoProviderJingyu} {
+		require.False(t, videoProviderAdapterByName(provider).Compatible(VideoModelGrokImagineVideo15Preview, VideoResolution720P),
+			"%s 不能服务 grok-imagine", provider)
+		require.False(t, videoProviderAdapterByName(provider).Compatible(VideoModelKlingVideoV3Omni, VideoResolution720P),
+			"%s 不能服务可灵", provider)
+	}
+}
+
+// grok-imagine 的渠道闸门：时长 1-15；参考素材只有图片且首帧/参考图互斥；
+// 画幅是 grok 的 7 档（21:9 会 422）；首帧模式不发画幅，因此不校验画幅值。
+func TestMikuapiGrokChannelGate(t *testing.T) {
+	adapter := videoProviderAdapterByName(videoProviderMikuapi)
+	request := func(content []VideoContent, ratio string, ratioProvided bool, seconds int) *normalizedVideoRequest {
+		return &normalizedVideoRequest{
+			Model: VideoModelGrokImagineVideo15Preview, Resolution: VideoResolution720P,
+			GeneratedSeconds: seconds, Content: content, Ratio: ratio, RatioProvided: ratioProvided,
+		}
+	}
+	firstFrame := VideoContent{Type: "image_url", Role: "first_frame", ImageURL: &VideoContentURL{URL: "https://cdn/first.png"}}
+	referenceImage := VideoContent{Type: "image_url", Role: "reference_image", ImageURL: &VideoContentURL{URL: "https://cdn/ref.png"}}
+
+	// 时长：1 秒可服务（seedance 的 4 秒下限不适用），0/16 拒绝。
+	require.True(t, adapter.CompatibleRequest(request(nil, "", false, 1)))
+	require.True(t, adapter.CompatibleRequest(request(nil, "", false, 15)))
+	require.False(t, adapter.CompatibleRequest(request(nil, "", false, 0)))
+	require.False(t, adapter.CompatibleRequest(request(nil, "", false, 16)))
+
+	// 参考素材：图片可以，视频/音频一律不行；首帧与参考图混传拒绝。
+	require.True(t, adapter.CompatibleRequest(request([]VideoContent{firstFrame}, "", false, 5)))
+	require.True(t, adapter.CompatibleRequest(request([]VideoContent{referenceImage}, "", false, 5)))
+	require.False(t, adapter.CompatibleRequest(request([]VideoContent{firstFrame, referenceImage}, "", false, 5)),
+		"两种传图模式互斥")
+	require.False(t, adapter.CompatibleRequest(request([]VideoContent{
+		{Type: "video_url", VideoURL: &VideoContentURL{URL: "https://cdn/a.mp4"}},
+	}, "", false, 5)))
+	require.False(t, adapter.CompatibleRequest(request([]VideoContent{
+		{Type: "audio_url", AudioURL: &VideoContentURL{URL: "https://cdn/a.mp3"}},
+	}, "", false, 5)))
+	// grok 没有尾帧语义（start-end 由渠道闸门拒绝，归一化层不做特例）。
+	require.False(t, adapter.CompatibleRequest(request([]VideoContent{
+		{Type: "image_url", Role: "last_frame", ImageURL: &VideoContentURL{URL: "https://cdn/end.png"}},
+	}, "", false, 5)), "grok 不接受尾帧输入")
+
+	// 画幅：文生模式必须是 7 档之一（含 grok 独有的 3:2/2:3，不含 21:9）。
+	require.True(t, adapter.CompatibleRequest(request(nil, "3:2", true, 5)))
+	require.True(t, adapter.CompatibleRequest(request(nil, "2:3", true, 5)))
+	require.False(t, adapter.CompatibleRequest(request(nil, "21:9", true, 5)))
+	// 首帧模式：画幅由适配器丢弃而不是让上游拉伸，值不再参与判定。
+	require.True(t, adapter.CompatibleRequest(request([]VideoContent{firstFrame}, "21:9", true, 5)),
+		"首帧模式画幅被丢弃，不应把请求排挤出该渠道")
+}
+
+// 可灵 omni 的渠道闸门：时长 3-15；画幅只有 16:9/9:16/1:1；参考素材只有图片
+// 且至多 7 张；没有尾帧。
+func TestMikuapiKlingChannelGate(t *testing.T) {
+	adapter := videoProviderAdapterByName(videoProviderMikuapi)
+	request := func(content []VideoContent, ratio string, seconds int) *normalizedVideoRequest {
+		return &normalizedVideoRequest{
+			Model: VideoModelKlingVideoV3Omni, Resolution: VideoResolution720P,
+			GeneratedSeconds: seconds, Content: content, Ratio: ratio, RatioProvided: ratio != "",
+		}
+	}
+	image := func(url string) VideoContent {
+		return VideoContent{Type: "image_url", Role: "reference_image", ImageURL: &VideoContentURL{URL: url}}
+	}
+
+	// 时长：3 秒起（seedance 的 4 秒下限不适用），16 拒绝。
+	require.True(t, adapter.CompatibleRequest(request(nil, "", 3)))
+	require.True(t, adapter.CompatibleRequest(request(nil, "", 15)))
+	require.False(t, adapter.CompatibleRequest(request(nil, "", 2)))
+	require.False(t, adapter.CompatibleRequest(request(nil, "", 16)))
+
+	// 画幅：三档白名单。
+	require.True(t, adapter.CompatibleRequest(request(nil, "16:9", 5)))
+	require.True(t, adapter.CompatibleRequest(request(nil, "9:16", 5)))
+	require.True(t, adapter.CompatibleRequest(request(nil, "1:1", 5)))
+	require.False(t, adapter.CompatibleRequest(request(nil, "4:3", 5)))
+	require.False(t, adapter.CompatibleRequest(request(nil, "21:9", 5)))
+
+	// 参考图：至多 7 张；视频/音频/尾帧不行。
+	require.True(t, adapter.CompatibleRequest(request([]VideoContent{image("https://cdn/1.png")}, "", 5)))
+	seven := make([]VideoContent, 0, 7)
+	for i := 0; i < 7; i++ {
+		seven = append(seven, image(fmt.Sprintf("https://cdn/%d.png", i)))
+	}
+	eight := append(append([]VideoContent{}, seven...), image("https://cdn/8.png"))
+	require.True(t, adapter.CompatibleRequest(request(seven, "", 5)))
+	require.False(t, adapter.CompatibleRequest(request(eight, "", 5)), "omni 至多 7 张参考图")
+	require.False(t, adapter.CompatibleRequest(request([]VideoContent{
+		{Type: "video_url", VideoURL: &VideoContentURL{URL: "https://cdn/a.mp4"}},
+	}, "", 5)))
+	require.False(t, adapter.CompatibleRequest(request([]VideoContent{
+		{Type: "image_url", Role: "last_frame", ImageURL: &VideoContentURL{URL: "https://cdn/end.png"}},
+	}, "", 5)), "omni 没有尾帧语义")
+}
+
+// grok 请求体字段名与形态：首帧是 input_reference 对象、参考图是 reference_images
+// 对象数组；首帧模式绝不携带 aspect_ratio（上游会非等比拉伸首帧）。
+func TestMikuapiGrokBuildCreateBody(t *testing.T) {
+	adapter := videoProviderAdapterByName(videoProviderMikuapi)
+	firstFrame := VideoContent{Type: "image_url", Role: "first_frame", ImageURL: &VideoContentURL{URL: "https://cdn/first.png"}}
+	referenceImages := []VideoContent{
+		{Type: "image_url", Role: "reference_image", ImageURL: &VideoContentURL{URL: "https://cdn/a.png"}},
+		{Type: "image_url", Role: "reference_image", ImageURL: &VideoContentURL{URL: "https://cdn/b.png"}},
+	}
+
+	// 文生视频：显式画幅随请求下发。
+	textBody := adapter.BuildCreateBody(&normalizedVideoRequest{
+		Model: VideoModelGrokImagineVideo15Preview, Prompt: "a cat running in the rain",
+		Resolution: VideoResolution720P, GeneratedSeconds: 4, Ratio: "16:9", RatioProvided: true,
+	}, videoMikuapiGrokImagineVideo15PreviewModel)
+	require.Equal(t, videoMikuapiGrokImagineVideo15PreviewModel, textBody["model"])
+	require.Equal(t, 4, textBody["seconds"])
+	require.Equal(t, "720p", textBody["resolution"])
+	require.Equal(t, "16:9", textBody["aspect_ratio"])
+	require.NotContains(t, textBody, "input_reference")
+	require.NotContains(t, textBody, "reference_images")
+
+	// 首帧模式：input_reference 必须是对象；即使下游给了画幅也不发——上游会把
+	// 首帧非等比拉伸（实测 3.2 倍），省略后输出跟随输入图比例。
+	frameBody := adapter.BuildCreateBody(&normalizedVideoRequest{
+		Model: VideoModelGrokImagineVideo15Preview, Prompt: "gentle camera push in",
+		Resolution: VideoResolution720P, GeneratedSeconds: 5, Ratio: "16:9", RatioProvided: true,
+		Content: []VideoContent{firstFrame},
+	}, videoMikuapiGrokImagineVideo15PreviewModel)
+	require.Equal(t, map[string]any{"image_url": "https://cdn/first.png"}, frameBody["input_reference"],
+		"input_reference 必须是对象，字符串会被 422 拒绝")
+	require.NotContains(t, frameBody, "aspect_ratio", "首帧模式不能带画幅")
+	require.NotContains(t, frameBody, "reference_images")
+
+	// 参考图模式：对象数组 + 键名 image_url，画幅可以安全指定。
+	referenceBody := adapter.BuildCreateBody(&normalizedVideoRequest{
+		Model: VideoModelGrokImagineVideo15Preview, Prompt: "morph through references",
+		Resolution: VideoResolution480P, GeneratedSeconds: 15, Ratio: "16:9", RatioProvided: true,
+		Content: referenceImages,
+	}, videoMikuapiGrokImagineVideo15PreviewModel)
+	require.Equal(t, []map[string]any{
+		{"image_url": "https://cdn/a.png"},
+		{"image_url": "https://cdn/b.png"},
+	}, referenceBody["reference_images"])
+	require.Equal(t, "16:9", referenceBody["aspect_ratio"])
+	require.NotContains(t, referenceBody, "input_reference")
+
+	// 顶层 image_url 会被上游静默忽略（计费但图不生效），任何模式下都不能出现。
+	for _, body := range []map[string]any{textBody, frameBody, referenceBody} {
+		require.NotContains(t, body, "image_url")
+	}
+}
+
+// 可灵请求体：分辨率转小写（4K→4k）、秒数为整数、参考图是 {url} 对象数组、
+// 首帧角色同样按参考图下发。
+func TestMikuapiKlingBuildCreateBody(t *testing.T) {
+	adapter := videoProviderAdapterByName(videoProviderMikuapi)
+	body := adapter.BuildCreateBody(&normalizedVideoRequest{
+		Model: VideoModelKlingVideoV3Omni, Prompt: "a red wooden boat drifting",
+		Resolution: VideoResolution4K, GeneratedSeconds: 5, Ratio: "16:9", RatioProvided: true,
+		Content: []VideoContent{
+			{Type: "image_url", Role: "first_frame", ImageURL: &VideoContentURL{URL: "https://cdn/ref.png"}},
+		},
+	}, videoMikuapiKlingVideoV3OmniModel)
+	require.Equal(t, videoMikuapiKlingVideoV3OmniModel, body["model"])
+	require.Equal(t, 5, body["seconds"])
+	require.Equal(t, "4k", body["resolution"], "可灵只认小写 4k")
+	require.Equal(t, "16:9", body["aspect_ratio"])
+	require.Equal(t, []map[string]any{{"url": "https://cdn/ref.png"}}, body["reference_images"])
+	require.NotContains(t, body, "input_reference", "omni 没有首帧字段")
+	require.NotContains(t, body, "image_end")
+
+	// 未显式提供画幅时不发（上游默认 16:9，与网关默认一致）。
+	noRatio := adapter.BuildCreateBody(&normalizedVideoRequest{
+		Model: VideoModelKlingVideoV3Omni, Prompt: "drift",
+		Resolution: VideoResolution720P, GeneratedSeconds: 3,
+	}, videoMikuapiKlingVideoV3OmniModel)
+	require.NotContains(t, noRatio, "aspect_ratio")
+}
+
+// grok-imagine 的创建端点是 /v1/videos/generations；可灵与 Seedance 仍走
+// /v1/videos。端点已带 /generations 时不重复追加（防止 api_path 被改写后拼出
+// generations/generations）。
+func TestMikuapiCreateEndpointPerModelFamily(t *testing.T) {
+	adapter := videoProviderAdapterByName(videoProviderMikuapi)
+	base := "https://mikuapi.org/v1/videos"
+
+	require.Equal(t, base+"/generations",
+		adapter.CreateEndpoint(base, videoMikuapiGrokImagineVideo15PreviewModel))
+	require.Equal(t, base, adapter.CreateEndpoint(base, videoMikuapiKlingVideoV3OmniModel))
+	require.Equal(t, base, adapter.CreateEndpoint(base, videoMikuapiSeedance25Model))
+	require.Equal(t, base+"/generations", adapter.CreateEndpoint(base+"/generations", videoMikuapiGrokImagineVideo15PreviewModel))
+
+	// 其余渠道不做端点调整。
+	for _, provider := range []string{videoProviderAigod, videoProviderNewtoken, videoProviderJingyu} {
+		require.Equal(t, base, videoProviderAdapterByName(provider).CreateEndpoint(base, videoMikuapiSeedance25Model))
+	}
+}
+
+// 成片回捞的授权按模型族区分：可灵成片是可灵 CDN 公开直链，带 key 等于把
+// 上游密钥发给第三方；Seedance / grok 走受保护的 /content，必须带 key。
+func TestMikuapiResultAuthorizationPerModelFamily(t *testing.T) {
+	adapter := videoProviderAdapterByName(videoProviderMikuapi)
+	account := &Account{Platform: PlatformVideo, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "sk-miku"}}
+
+	require.Equal(t, "Bearer sk-miku", adapter.ResultAuthorization(account, videoMikuapiSeedance25Model))
+	require.Equal(t, "Bearer sk-miku", adapter.ResultAuthorization(account, videoMikuapiGrokImagineVideo15PreviewModel))
+	require.Empty(t, adapter.ResultAuthorization(account, videoMikuapiKlingVideoV3OmniModel),
+		"可灵 CDN 直链必须裸取")
+}
+
+// mikuapi grok 的状态值是 pending/done/failed；可灵沿用 queued/completed。
+func TestMikuapiGrokStatusNormalization(t *testing.T) {
+	require.Equal(t, VideoTaskStatusCompleted, normalizeVideoUpstreamStatus("done"))
+	require.Equal(t, VideoTaskStatusProcessing, normalizeVideoUpstreamStatus("pending"))
+	require.Equal(t, VideoTaskStatusQueued, normalizeVideoUpstreamStatus("queued"))
+	require.Equal(t, VideoTaskStatusCompleted, normalizeVideoUpstreamStatus("completed"))
+}
+
+// grok 创建任务只返回 request_id，可灵返回 id/task_id，都必须能取到任务 id。
+func TestVideoTaskIDFromPayloadReadsRequestID(t *testing.T) {
+	require.Equal(t, "e29c84ce", videoTaskIDFromPayload(map[string]any{"request_id": "e29c84ce"}))
+	// 既有优先级不变：同时携带 id 与 request_id 时仍取 id。
+	require.Equal(t, "primary", videoTaskIDFromPayload(map[string]any{
+		"id": "primary", "request_id": "secondary",
+	}))
+}
+
+// mikuapi grok 的轮询全链路：pending 继续等，done 后从 /content 带 key 回捞
+// （状态里的 video.url 是相对路径，只作参考，地址仍按任务 id 拼）。
+func TestMikuapiGrokPollLifecycleCompletesFromContentEndpoint(t *testing.T) {
+	var statusCalls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/videos/grok-req-1" {
+			http.NotFound(w, r)
+			return
+		}
+		require.Equal(t, "Bearer sk-miku-test", r.Header.Get("Authorization"))
+		if atomic.AddInt32(&statusCalls, 1) == 1 {
+			_, _ = w.Write([]byte(`{"status":"pending","progress":37}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"status":"done","progress":100,"model":"grok-imagine-video-1.5","video":{"url":"/v1/videos/grok-req-1/content"}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	account := &Account{ID: 44, Platform: PlatformVideo, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "sk-miku-test"},
+		Extra: map[string]any{
+			VideoProviderExtraKey: videoProviderMikuapi,
+			"base_url":            server.URL,
+			"api_path":            videoDefaultAPIPath,
+			"poll_interval_ms":    1,
+		}}
+	taskRepo := &mikuapiPollTaskRepoStub{task: &VideoTask{PublicID: "video_miku_grok", Status: VideoTaskStatusProcessing}}
+	publisher := &mikuapiResultPublisherStub{}
+	svc := newMikuapiPollTestService(taskRepo, publisher)
+
+	input := mikuapiPollTestInput(account)
+	input.UpstreamBody = map[string]any{"model": videoMikuapiGrokImagineVideo15PreviewModel}
+	svc.pollLifecycle(input, "grok-req-1")
+
+	require.Equal(t, VideoTaskStatusCompleted, taskRepo.task.Status)
+	require.Equal(t, []string{server.URL + "/v1/videos/grok-req-1/content"}, publisher.urls,
+		"grok 成片从 /content 回捞")
+	require.Equal(t, []string{"Bearer sk-miku-test"}, publisher.auths,
+		"/content 受保护，必须带上游 key")
+}
+
+// mikuapi 可灵的轮询全链路：queued 原地等待，completed 后成片是可灵 CDN 直链，
+// 直接发布且不带上游 key。
+func TestMikuapiKlingPollLifecyclePublishesCDNURL(t *testing.T) {
+	const cdnURL = "https://v15-kling.klingai.com/bs2/upload-ylab-stunt-sgp/abc-output.mp4?x-kcdn-pid=112372"
+	var statusCalls int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/v1/videos/kling-task-1" {
+			http.NotFound(w, r)
+			return
+		}
+		if atomic.AddInt32(&statusCalls, 1) == 1 {
+			_, _ = w.Write([]byte(`{"id":"kling-task-1","status":"queued","progress":0}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"kling-task-1","status":"completed","progress":100,"download_url":"` + cdnURL + `","video_url":"` + cdnURL + `"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	account := &Account{ID: 45, Platform: PlatformVideo, Type: AccountTypeAPIKey,
+		Credentials: map[string]any{"api_key": "sk-miku-test"},
+		Extra: map[string]any{
+			VideoProviderExtraKey: videoProviderMikuapi,
+			"base_url":            server.URL,
+			"api_path":            videoDefaultAPIPath,
+			"poll_interval_ms":    1,
+		}}
+	taskRepo := &mikuapiPollTaskRepoStub{task: &VideoTask{PublicID: "video_miku_kling", Status: VideoTaskStatusProcessing}}
+	publisher := &mikuapiResultPublisherStub{}
+	svc := newMikuapiPollTestService(taskRepo, publisher)
+
+	input := mikuapiPollTestInput(account)
+	input.UpstreamBody = map[string]any{"model": videoMikuapiKlingVideoV3OmniModel}
+	svc.pollLifecycle(input, "kling-task-1")
+
+	require.Equal(t, VideoTaskStatusCompleted, taskRepo.task.Status)
+	require.Equal(t, []string{cdnURL}, publisher.urls, "可灵成片按状态响应里的 CDN 直链发布")
+	require.Empty(t, publisher.auths, "可灵 CDN 直链公开可读，不能把上游 key 发给第三方")
+}
+
+// 归一化阶段的按模型约束：时长边界（grok 1-15、可灵 3-15）与参考图数量上限。
+// 这两项来自共享规格表（与 Seedance 同一机制）；上游特有约束一律不在归一化
+// 层出现，由 mikuapi 适配器的渠道闸门与上游自身兜底。
+func TestMikuapiNewModelsRequestValidation(t *testing.T) {
+	// 时长：grok 的 1 秒可服务，可灵 2 秒越界、3 秒可服务。
+	_, err := normalizeVideoCreateRequest(&VideoCreateRequest{
+		Model: VideoModelGrokImagineVideo15Preview, Prompt: "x", Duration: 1,
+	})
+	require.NoError(t, err, "grok 的 1 秒应通过")
+	_, err = normalizeVideoCreateRequest(&VideoCreateRequest{
+		Model: VideoModelKlingVideoV3Omni, Prompt: "x", Duration: 2,
+	})
+	require.Error(t, err, "可灵的 2 秒应被拒绝")
+	_, err = normalizeVideoCreateRequest(&VideoCreateRequest{
+		Model: VideoModelKlingVideoV3Omni, Prompt: "x", Duration: 3,
+	})
+	require.NoError(t, err, "可灵的 3 秒应通过")
+
+	// 参考图数量：两模型都是 7 张（grok 实测上限，可灵 omni 文档上限）。
+	refs := make([]VideoContent, 0, 8)
+	for i := 0; i < 8; i++ {
+		refs = append(refs, VideoContent{
+			Type: "image_url", Role: "reference_image",
+			ImageURL: &VideoContentURL{URL: fmt.Sprintf("https://cdn/%d.png", i)},
+		})
+	}
+	for _, model := range []string{VideoModelGrokImagineVideo15Preview, VideoModelKlingVideoV3Omni} {
+		_, err = normalizeVideoCreateRequest(&VideoCreateRequest{
+			Model: model, Prompt: "x", Duration: 5, Content: refs[:7],
+		})
+		require.NoError(t, err, "%s 的 7 张参考图应通过", model)
+		_, err = normalizeVideoCreateRequest(&VideoCreateRequest{
+			Model: model, Prompt: "x", Duration: 5, Content: refs,
+		})
+		require.Error(t, err, "%s 的第 8 张参考图应被拒绝", model)
+	}
+
+	// 归一化层对两个新模型不再有其它特例：超长提示词等上游约束不在这里校验，
+	// 与 Seedance 的行为保持一致。
+	_, err = normalizeVideoCreateRequest(&VideoCreateRequest{
+		Model: VideoModelGrokImagineVideo15Preview, Prompt: strings.Repeat("a", 5000), Duration: 5,
+	})
+	require.NoError(t, err, "提示词长度交由上游判定，归一化层不做特例")
 }
