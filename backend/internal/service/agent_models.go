@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"sync"
@@ -104,6 +105,18 @@ type AgentModelRepository interface {
 	ExcludeModel(ctx context.Context, groupID, modelID int64, excludedAt time.Time) error
 }
 
+// agentModelDriftHealer 是 AgentModelRepository 的可选能力：只增不减的目录
+// 自愈写入。读路径用它把"账号已声明、模型表缺行"的漂移收敛掉，让图片账号
+// 建号/改映射后无需依赖管理端手动同步；未实现该能力的仓库（测试替身）按
+// 原行为工作。
+type agentModelDriftHealer interface {
+	EnsureDiscovered(ctx context.Context, groupID int64, discovered []AgentModelDiscovery, seenAt time.Time) error
+}
+
+// agentModelHealInterval 限制同一分组的读路径自愈频率：补写幂等，窗口内错过
+// 的漂移由下一次读取继续收敛，避免并发读把自愈放大成写风暴。
+const agentModelHealInterval = 5 * time.Second
+
 // AgentModelCatalogEntry describes one client-visible model and the native
 // provider interfaces through which Yingzo can invoke it.
 type AgentModelCatalogEntry struct {
@@ -125,6 +138,11 @@ type AgentModelCatalogService struct {
 	// TTL 只用于兜底多实例部署下其它实例的写入。
 	platformMu    sync.Mutex
 	platformCache map[int64]agentModelPlatformSnapshot
+
+	// healMu 守护各分组的读路径自愈节流。自愈只加行不删行，输掉竞争只是
+	// 下次读取再补一次。
+	healMu     sync.Mutex
+	lastHealAt map[int64]time.Time
 }
 
 // agentModelPlatformSnapshotTTL 是模型→平台映射的最长陈旧时间。
@@ -189,10 +207,80 @@ func (s *AgentModelCatalogService) GetConfig(ctx context.Context, groupID int64)
 	if err != nil {
 		return nil, fmt.Errorf("list Agent models: %w", err)
 	}
+	// 管理端配置页也走同一套自愈：账号刚加进分组时，新模型立刻出现在配置
+	// 列表里（启用状态可直接配价），而不是等管理员先点一次同步。
+	models = s.healAgentModelRows(ctx, groupID, models)
 	if models == nil {
 		models = []AgentGroupModel{}
 	}
 	return &AgentModelCatalogConfig{Models: models}, nil
+}
+
+// healAgentModelRows 对账分组模型表与目录账号池的当前发现结果：账号已声明、
+// 但表里缺行（或被上次同步置为不可用）的模型补回可见行。只增不减——人工
+// 排除（excluded）与管理员停用（enabled=false）的行永远不会被自愈翻转；
+// 自愈失败或仓库不支持时按原样返回，绝不因自愈拒绝本次读取。
+func (s *AgentModelCatalogService) healAgentModelRows(ctx context.Context, groupID int64, models []AgentGroupModel) []AgentGroupModel {
+	if s == nil || s.accountRepo == nil || s.modelRepo == nil {
+		return models
+	}
+	accounts, err := s.listCatalogAccounts(ctx, groupID)
+	if err != nil {
+		return models
+	}
+	discovered := discoverAgentModels(accounts)
+	if len(discovered) == 0 {
+		// 没有目录账号池就没有"应该有"的基准；空发现不得清空现有行。
+		return models
+	}
+	return s.healDiscoveredModelRows(ctx, groupID, discovered, models)
+}
+
+// healDiscoveredModelRows 在发现清单与现有行之间找漂移并补齐。补写受每分组
+// 节流约束，成功后失效平台缓存并重读行。
+func (s *AgentModelCatalogService) healDiscoveredModelRows(ctx context.Context, groupID int64, discovered []AgentModelDiscovery, models []AgentGroupModel) []AgentGroupModel {
+	healer, ok := s.modelRepo.(agentModelDriftHealer)
+	if !ok {
+		return models
+	}
+	rows := make(map[string]*AgentGroupModel, len(models))
+	for i := range models {
+		model := &models[i]
+		rows[agentModelKey(model.Platform, model.ModelCode)] = model
+	}
+	drift := make([]AgentModelDiscovery, 0, len(discovered))
+	for _, item := range discovered {
+		row := rows[agentModelKey(item.Platform, item.ModelCode)]
+		if row != nil && (row.Available || row.Excluded) {
+			continue
+		}
+		drift = append(drift, item)
+	}
+	if len(drift) == 0 {
+		return models
+	}
+	now := time.Now()
+	s.healMu.Lock()
+	if s.lastHealAt == nil {
+		s.lastHealAt = make(map[int64]time.Time)
+	}
+	if now.Sub(s.lastHealAt[groupID]) < agentModelHealInterval {
+		s.healMu.Unlock()
+		return models
+	}
+	s.lastHealAt[groupID] = now
+	s.healMu.Unlock()
+	if err := healer.EnsureDiscovered(ctx, groupID, drift, now.UTC()); err != nil {
+		slog.Error("agent_model_catalog_heal_failed", "group_id", groupID, "error", err)
+		return models
+	}
+	s.invalidateModelPlatforms(groupID)
+	fresh, err := s.modelRepo.ListModels(ctx, groupID, false)
+	if err != nil {
+		slog.Error("agent_model_catalog_heal_reread_failed", "group_id", groupID, "error", err)
+		return models
+	}
+	return fresh
 }
 
 func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, modelID int64, input AgentModelConfigInput) (*AgentModelCatalogConfig, error) {
@@ -243,15 +331,17 @@ func (s *AgentModelCatalogService) ListAvailable(ctx context.Context, groupID in
 	if s == nil || s.accountRepo == nil || s.modelRepo == nil || groupID <= 0 {
 		return nil, ErrAgentModelCatalogUnavailable
 	}
-	models, err := s.modelRepo.ListModels(ctx, groupID, false)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrAgentModelCatalogUnavailable, err)
-	}
 	accounts, err := s.listCatalogAccounts(ctx, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrAgentModelCatalogUnavailable, err)
 	}
-	current := agentDiscoverySet(discoverAgentModels(accounts))
+	discovered := discoverAgentModels(accounts)
+	models, err := s.modelRepo.ListModels(ctx, groupID, false)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrAgentModelCatalogUnavailable, err)
+	}
+	current := agentDiscoverySet(discovered)
+	models = s.healDiscoveredModelRows(ctx, groupID, discovered, models)
 	entries := make(map[string]*agentModelCatalogAccumulator)
 	for _, model := range models {
 		if !model.Enabled || !model.Available || model.Excluded {

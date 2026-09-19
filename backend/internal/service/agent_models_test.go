@@ -110,6 +110,29 @@ func (r *agentModelMemoryRepo) SyncDiscovered(_ context.Context, groupID int64, 
 	return nil
 }
 
+func (r *agentModelMemoryRepo) EnsureDiscovered(_ context.Context, groupID int64, discovered []AgentModelDiscovery, seenAt time.Time) error {
+	for _, item := range discovered {
+		key := agentModelKey(item.Platform, item.ModelCode)
+		model := r.models[key]
+		if model == nil {
+			model = &AgentGroupModel{
+				ID: r.nextID, GroupID: groupID, Platform: item.Platform, ModelCode: item.ModelCode,
+				MediaType: item.MediaType, Enabled: true, DiscoveredAt: seenAt, CreatedAt: seenAt,
+				Prices: []AgentModelPrice{},
+			}
+			r.nextID++
+			r.models[key] = model
+		}
+		model.LastSeenAt = seenAt
+		model.UpdatedAt = seenAt
+		// 与真实仓库一致：人工排除的行自愈时不得翻回可用。
+		if !model.Excluded {
+			model.Available = true
+		}
+	}
+	return nil
+}
+
 func (r *agentModelMemoryRepo) ListModels(_ context.Context, groupID int64, includeExcluded bool) ([]AgentGroupModel, error) {
 	models := make([]AgentGroupModel, 0)
 	for _, model := range r.models {
@@ -776,4 +799,88 @@ func TestAgentCatalogTreatsImageAccountModelsAsImages(t *testing.T) {
 	emptyConfig, err := emptyCatalog.Sync(context.Background(), 9)
 	require.NoError(t, err)
 	require.Empty(t, emptyConfig.Models)
+}
+
+func newImage25AccountStub() *agentCatalogAccountRepoStub {
+	return &agentCatalogAccountRepoStub{accounts: []Account{{
+		ID: 14, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive,
+		Extra: map[string]any{"image_account": true},
+		Credentials: map[string]any{"model_mapping": map[string]any{
+			"gpt-image-2.5-flare":    "gpt-image-2.5-flare",
+			"gpt-image-2.5-sunburst": "gpt-image-2.5-sunburst",
+		}},
+		GroupIDs: []int64{9},
+	}}}
+}
+
+func image25CatalogIDs(catalog []AgentModelCatalogEntry) []string {
+	ids := make([]string, 0, len(catalog))
+	for _, entry := range catalog {
+		if entry.ID == "gpt-image-2.5-flare" || entry.ID == "gpt-image-2.5-sunburst" {
+			ids = append(ids, entry.ID)
+		}
+	}
+	return ids
+}
+
+// 图片账号绑进 Agent 分组后，即便从没跑过管理端"同步"，下一次目录读取也必须
+// 返回它声明的模型（读路径自愈补行）。
+func TestListAvailableHealsMissingModelRowsWithoutManualSync(t *testing.T) {
+	catalogService, models := newAgentCatalogForTest(newImage25AccountStub())
+
+	catalog, err := catalogService.ListAvailable(context.Background(), 9)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"}, image25CatalogIDs(catalog))
+
+	// 自愈必须落库：后续 GetConfig 直接能看到同一批行（启用且可用）。
+	config, err := catalogService.GetConfig(context.Background(), 9)
+	require.NoError(t, err)
+	require.Len(t, config.Models, 2)
+	for _, model := range config.Models {
+		require.Equal(t, AgentMediaTypeImage, model.MediaType)
+		require.True(t, model.Enabled)
+		require.True(t, model.Available)
+	}
+	require.Len(t, models.models, 2)
+}
+
+// 自愈只增不减：管理员停用（enabled=false）与人工排除（excluded）的行永远
+// 不会被自愈翻回启用，目录也不得重新收录它们。
+func TestListAvailableHealNeverResurrectsExcludedOrDisabledRows(t *testing.T) {
+	catalogService, models := newAgentCatalogForTest(newImage25AccountStub())
+	models.models[agentModelKey(PlatformOpenAI, "gpt-image-2.5-flare")] = &AgentGroupModel{
+		ID: 1, GroupID: 9, Platform: PlatformOpenAI, ModelCode: "gpt-image-2.5-flare",
+		MediaType: AgentMediaTypeImage, Enabled: true, Available: false, Excluded: true,
+		Prices: []AgentModelPrice{},
+	}
+	models.models[agentModelKey(PlatformOpenAI, "gpt-image-2.5-sunburst")] = &AgentGroupModel{
+		ID: 2, GroupID: 9, Platform: PlatformOpenAI, ModelCode: "gpt-image-2.5-sunburst",
+		MediaType: AgentMediaTypeImage, Enabled: false, Available: true,
+		Prices: []AgentModelPrice{},
+	}
+
+	catalog, err := catalogService.ListAvailable(context.Background(), 9)
+	require.NoError(t, err)
+	require.Empty(t, image25CatalogIDs(catalog))
+
+	flare := models.models[agentModelKey(PlatformOpenAI, "gpt-image-2.5-flare")]
+	require.True(t, flare.Excluded, "excluded row must stay excluded")
+	require.False(t, flare.Available, "excluded row must stay unavailable")
+	sunburst := models.models[agentModelKey(PlatformOpenAI, "gpt-image-2.5-sunburst")]
+	require.False(t, sunburst.Enabled, "admin-disabled row must stay disabled")
+}
+
+// 目录账号池为空时没有"应该有"的基准：自愈不得创建行，也不得清空现有行。
+func TestListAvailableHealSkipsWhenNoCatalogAccounts(t *testing.T) {
+	catalogService, models := newAgentCatalogForTest(&agentCatalogAccountRepoStub{})
+	models.models[agentModelKey(PlatformOpenAI, "gpt-image-2")] = &AgentGroupModel{
+		ID: 1, GroupID: 9, Platform: PlatformOpenAI, ModelCode: "gpt-image-2",
+		MediaType: AgentMediaTypeImage, Enabled: true, Available: true,
+		Prices: []AgentModelPrice{},
+	}
+
+	catalog, err := catalogService.ListAvailable(context.Background(), 9)
+	require.NoError(t, err)
+	require.Empty(t, catalog)
+	require.Len(t, models.models, 1)
 }
