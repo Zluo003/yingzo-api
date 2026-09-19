@@ -1,21 +1,20 @@
 /**
- * 视频账号「本账号每个模型实际支持哪些分辨率」的单一来源。
+ * 视频模型「官方分辨率档位」与账号级分辨率白名单的配置辅助。
  *
  * 镜像的后端实现（改这里必须同步改后端，反之亦然）：
- * - internal/service/video.go → videoModelSpecs / SupportedVideoModels（模型官方分辨率）
- * - internal/service/video_provider_aigod.go → Compatible（aigod 明确拒绝 4K）
- * - internal/service/video_provider_newtoken.go → videoNewtokenUpstreamModel
- *   （分辨率编进上游模型 id，其它组合返回 ""，即该渠道不提供）
+ * - internal/service/video.go → videoModelSpecs / SupportedVideoModels（模型官方档位）
  * - internal/service/admin_account.go → VideoModelResolutionsExtraKey /
  *   normalizeVideoModelResolutionsExtra（写入 extra.video_model_resolutions 的校验规则）
  *
  * 语义：某模型未列入 => 该模型不限制分辨率（模型维度本身已由 model_mapping 白名单约束）；
  * 列入后只有列出的档位会参与该账号的调度。
  *
+ * 模型与上游解耦：这里不维护"哪个上游能服务哪些档位"的矩阵——上游能不能生成由
+ * 适配器的渠道闸门在调度时判定，运营在账号上按模型勾选该 key 实际支持的档位即可。
+ *
  * 注意 4K 的官方写法是大写 K：后端按大小写不敏感匹配后回写官方写法，
- * 因此前后端之间只传官方字符串，不要用 ToLower 的副本。
+ * 因此前 后端之间只传官方字符串，不要用 ToLower 的副本。
  */
-export type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu'
 
 export interface VideoModelResolutionSpec {
   model: string
@@ -27,8 +26,8 @@ export const VIDEO_MODEL_RESOLUTIONS: VideoModelResolutionSpec[] = [
   { model: 'seedance-2.0', resolutions: ['480p', '720p', '1080p', '4K'] },
   { model: 'seedance-2.0-fast', resolutions: ['480p', '720p'] },
   { model: 'seedance-2.5', resolutions: ['480p', '720p', '1080p'] },
-  { model: 'grok-imagine-video-1.5-preview', resolutions: ['480p', '720p', '1080p'] },
-  { model: 'kling-video-v3-omni', resolutions: ['720p', '1080p', '4K'] }
+  { model: 'grok-imagine-video-1.5', resolutions: ['480p', '720p', '1080p'] },
+  { model: 'kling-v3-omni', resolutions: ['720p', '1080p', '4K'] }
 ]
 
 /** 对外提供的视频模型清单，与后端 SupportedVideoModels() 一致。 */
@@ -36,46 +35,38 @@ export const VIDEO_MODEL_CODES: string[] = VIDEO_MODEL_RESOLUTIONS.map(
   (entry) => entry.model
 )
 
+/** 视频上游平台名，与后端 supportedVideoProviders 对齐。 */
+export type VideoProviderName = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu'
+
 /**
- * 各上游渠道真正能服务的档位（官方档位的子集）。
- * aigod 提供 2.0 的全部官方档位（含 4K，目录里有 seedance-2.0-4k）；
- * newtoken 只有 720p/1080p 的 official 变体：2.0 两档齐全，2.0 Fast 仅 720p，
- * 2.5 为 720p + 1080p。
+ * 各上游适配器当前能路由的模型——仅用于「上游平台」下拉的分组提示，
+ * 镜像后端各适配器 Compatible 的支持范围（见 video_model_resolutions_test.go
+ * 的服务矩阵固化）。真正的调度判定在适配器渠道闸门：这里不限制任何配置，
+ * 只是帮运营在选定模型后快速找到匹配的平台；平台与模型的实际组合以调度为准。
  */
-export const VIDEO_PROVIDER_RESOLUTIONS: Record<
-  VideoProvider,
-  Record<string, string[]>
+export const VIDEO_PROVIDER_SUPPORTED_MODELS: Record<
+  VideoProviderName,
+  string[]
 > = {
-  aigod: {
-    // aigod 目录含 seedance-2.0-4k（4K 仅 2.0 提供）。
-    'seedance-2.0': ['480p', '720p', '1080p', '4K'],
-    'seedance-2.0-fast': ['480p', '720p'],
-    'seedance-2.5': ['480p', '720p', '1080p']
-  },
-  newtoken: {
-    'seedance-2.0': ['720p', '1080p'],
-    'seedance-2.0-fast': ['720p'],
-    // newtoken 目录含 sd2.5-1080p-official（见其 Seedance OpenAI 兼容文档的
-    // official 模型表），因此 2.5 的 1080p 也可服务。
-    'seedance-2.5': ['720p', '1080p']
-  },
-  mikuapi: {
-    // mikuapi 的清晰度走请求体字段（不拼进模型名），三档与官方档位一致：
-    // 2.0 含 4K、2.0-fast 仅 480p/720p、2.5 没有 4K（传 4K 会被上游降到 1080p）。
-    // grok-imagine 与可灵的档位同样走请求体字段；可灵只认小写 4k，
-    // 下游规范写法仍是大写 4K（适配器负责转写）。
-    'seedance-2.0': ['480p', '720p', '1080p', '4K'],
-    'seedance-2.0-fast': ['480p', '720p'],
-    'seedance-2.5': ['480p', '720p', '1080p'],
-    'grok-imagine-video-1.5-preview': ['480p', '720p', '1080p'],
-    'kling-video-v3-omni': ['720p', '1080p', '4K']
-  },
-  jingyu: {
-    // Jingyu 2.0 提供 480p/720p/1080p/4K，2.5 仅提供 480p/720p。
-    'seedance-2.0': ['480p', '720p', '1080p', '4K'],
-    'seedance-2.0-fast': [],
-    'seedance-2.5': ['480p', '720p']
-  }
+  aigod: ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5'],
+  newtoken: ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5'],
+  mikuapi: [...VIDEO_MODEL_CODES],
+  jingyu: ['seedance-2.0', 'seedance-2.5']
+}
+
+/** 报告哪些上游平台能服务给定的全部模型；未选模型时返回全部平台。 */
+export function videoProvidersServing(
+  models: readonly string[]
+): VideoProviderName[] {
+  const providers = Object.keys(
+    VIDEO_PROVIDER_SUPPORTED_MODELS
+  ) as VideoProviderName[]
+  if (models.length === 0) return providers
+  return providers.filter((provider) =>
+    models.every((model) =>
+      VIDEO_PROVIDER_SUPPORTED_MODELS[provider].includes(model)
+    )
+  )
 }
 
 /** 模型官方档位；未接入的模型返回空数组。 */
@@ -86,73 +77,22 @@ export function videoModelResolutions(model: string): string[] {
   )
 }
 
-/** 上游平台可服务的档位（官方 ∩ 上游），保持官方顺序。 */
-export function videoProviderModelResolutions(
-  provider: VideoProvider,
-  model: string
-): string[] {
-  const servable = VIDEO_PROVIDER_RESOLUTIONS[provider]?.[model] ?? []
-  return videoModelResolutions(model).filter((resolution) =>
-    servable.includes(resolution)
-  )
-}
-
-/** 当前上游能否服务该 (模型, 分辨率)；界面上不可服务的档位一律禁用。 */
-export function isVideoResolutionServable(
-  provider: VideoProvider,
-  model: string,
-  resolution: string
-): boolean {
-  return videoProviderModelResolutions(provider, model).includes(resolution)
-}
-
-/** 当前上游服务不了的官方档位，用于渲染「该上游不提供」的提示。 */
-export function unsupportedVideoResolutions(
-  provider: VideoProvider,
-  model: string
-): string[] {
-  return videoModelResolutions(model).filter(
-    (resolution) => !isVideoResolutionServable(provider, model, resolution)
-  )
-}
-
-/** 新建时的默认勾选：该上游能服务的档位全部勾上。 */
-export function defaultVideoModelResolutions(
-  provider: VideoProvider
-): Record<string, string[]> {
+/** 默认勾选：模型官方档位全部勾上（运营按账号实际能力收敛）。 */
+export function defaultVideoModelResolutions(): Record<string, string[]> {
   const selection: Record<string, string[]> = {}
   for (const model of VIDEO_MODEL_CODES) {
-    selection[model] = videoProviderModelResolutions(provider, model)
+    selection[model] = [...videoModelResolutions(model)]
   }
   return selection
 }
 
 /**
- * 切换上游后收敛勾选：丢掉新上游服务不了的档位（模型条目为空则整条删除）。
- * 只减不增：用户此前刻意取消的档位不会被重新勾上。
+ * 勾选/取消一个档位：官方档位之外的取值直接忽略，结果按官方顺序排列。
+ * 不允许把某个模型勾到空：空条目在下游等价于"不限制该模型的分辨率"，
+ * 与"该账号不服务这个模型"是两回事，后者应通过模型白名单表达。
  */
-export function pruneVideoModelResolutions(
-  selection: Record<string, readonly string[] | undefined>,
-  provider: VideoProvider
-): Record<string, string[]> {
-  const pruned: Record<string, string[]> = {}
-  for (const model of VIDEO_MODEL_CODES) {
-    const kept = (selection[model] ?? []).filter((resolution) =>
-      isVideoResolutionServable(provider, model, resolution)
-    )
-    if (kept.length > 0) {
-      pruned[model] = videoModelResolutions(model).filter((resolution) =>
-        kept.includes(resolution)
-      )
-    }
-  }
-  return pruned
-}
-
-/** 勾选/取消一个档位：不可服务的档位直接忽略，结果按官方顺序排列。 */
 export function toggleVideoResolution(
   selection: Record<string, readonly string[] | undefined>,
-  provider: VideoProvider,
   model: string,
   resolution: string
 ): Record<string, string[]> {
@@ -160,28 +100,24 @@ export function toggleVideoResolution(
   for (const [key, value] of Object.entries(selection)) {
     if (value) next[key] = [...value]
   }
-  if (!isVideoResolutionServable(provider, model, resolution)) {
+  const official = videoModelResolutions(model)
+  if (!official.includes(resolution)) {
     return next
   }
   const current = next[model] ?? []
   const toggled = current.includes(resolution)
     ? current.filter((item) => item !== resolution)
     : [...current, resolution]
-  // 不允许把某个模型勾到空：空条目在下游等价于"不限制该模型的分辨率"，
-  // 与"该账号不服务这个模型"是两回事，后者应通过模型白名单表达。
-  // 若不拦住，运营以为禁用了全部分辨率，实际却把限制放开了。
   if (toggled.length === 0) {
     return next
   }
-  next[model] = videoModelResolutions(model).filter((item) =>
-    toggled.includes(item)
-  )
+  next[model] = official.filter((item) => toggled.includes(item))
   return next
 }
 
 /**
  * 表单勾选 → extra.video_model_resolutions。
- * - `models` 传入时只提交这些模型（创建弹窗按「已勾选模型」过滤）。
+ * - `models` 传入时只提交这些模型（弹窗按「已勾选模型」过滤）。
  * - 一个档位都没勾的模型整条删除（后端同样丢弃空条目）；全部为空时返回 undefined，
  *   调用方据此完全不写该键 —— 键缺失即「不限制分辨率」，与旧行为一致。
  * - 大小写不敏感匹配并回写官方写法，避免手写出 "4k" 这类非规范值。
@@ -214,18 +150,16 @@ export function serializeVideoModelResolutions(
 
 /**
  * extra.video_model_resolutions → 表单勾选。
- * 只保留已接入模型与其官方档位，并收敛到当前上游能服务的集合：
- * 界面上「已勾选但被禁用」是矛盾状态，而渠道服务不了的档位后端虽接受却永远调度不到。
+ * 只保留已接入模型与其官方档位。未配置的模型回落到全部官方档位，而不是留空：
+ * 后端把"未配置"解释为不限制，界面上留空却读作"什么都不支持"，
+ * 两者相反，会让运营误以为一个其实可用的账号被禁用了。
+ * 存了一个空数组（或整份是非法档位）时同样回落到"全部官方档位"：
+ * 后端把空列表归一化成"不限制"，界面必须呈现同一含义。
  */
 export function parseVideoModelResolutions(
-  raw: unknown,
-  provider: VideoProvider
+  raw: unknown
 ): Record<string, string[]> {
-  // 未配置的模型回落到该上游能服务的全部档位，而不是留空：
-  // 后端把"未配置"解释为不限制，界面上留空却读作"什么都不支持"，
-  // 两者相反，会让运营误以为一个其实可用的账号被禁用了。
-  // 配合 toggleVideoResolution 不允许勾空，空状态只在"从未配置"时出现。
-  const selection: Record<string, string[]> = defaultVideoModelResolutions(provider)
+  const selection: Record<string, string[]> = defaultVideoModelResolutions()
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return selection
   }
@@ -237,16 +171,14 @@ export function parseVideoModelResolutions(
   for (const model of VIDEO_MODEL_CODES) {
     const list = byModel.get(model)
     if (!Array.isArray(list)) continue
-    const allowed = videoProviderModelResolutions(provider, model)
-    const intersected = allowed.filter((resolution) =>
+    const official = videoModelResolutions(model)
+    const intersected = official.filter((resolution) =>
       list.some(
         (value) =>
           typeof value === 'string' &&
           value.trim().toLowerCase() === resolution.toLowerCase()
       )
     )
-    // 存了一个空数组（或整份是非法档位）时同样回落到"全部可服务"：
-    // 后端把空列表归一化成"不限制"，界面必须呈现同一含义。
     if (intersected.length > 0) {
       selection[model] = intersected
     }

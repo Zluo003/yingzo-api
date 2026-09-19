@@ -13,11 +13,12 @@ const (
 	VideoModelSeedance20Fast = "seedance-2.0-fast"
 	VideoModelSeedance25     = "seedance-2.5"
 
-	// 经 mikuapi 渠道提供的 Grok Imagine 与可灵视频，下游模型名与上游一致。
-	// 两者与 Seedance 是三套完全独立的接口（端点、字段、状态值、成片机制都
-	// 不同），渠道侧的分支见 mikuapi 适配器。
-	VideoModelGrokImagineVideo15Preview = "grok-imagine-video-1.5-preview"
-	VideoModelKlingVideoV3Omni          = "kling-video-v3-omni"
+	// 经 mikuapi 渠道提供的 Grok Imagine 与可灵视频。下游暴露的是网关自定义名
+	// （Grok 去掉 -preview 后缀、可灵省略 video- 前缀），与上游模型名的映射由
+	// mikuapi 适配器负责；两者与 Seedance 是三套完全独立的接口（端点、字段、
+	// 状态值、成片机制都不同），渠道侧的分支见 mikuapi 适配器。
+	VideoModelGrokImagineVideo15 = "grok-imagine-video-1.5"
+	VideoModelKlingV3Omni        = "kling-v3-omni"
 
 	VideoResolution480P  = "480p"
 	VideoResolution720P  = "720p"
@@ -108,11 +109,11 @@ var videoModelSpecs = map[string]videoModelSpec{
 		// 2.5 与 2.0 系列同规则：参考音频必须搭配至少一张图或一段视频。
 		AudioNeedsVisual: true,
 	},
-	// grok-imagine-video-1.5-preview（mikuapi）：时长 1-15 秒，清晰度 480p/720p/
+	// grok-imagine-video-1.5（mikuapi，上游名 grok-imagine-video-1.5-preview）：时长 1-15 秒，清晰度 480p/720p/
 	// 1080p；参考素材只有图片（参考图模式实测 7 张），没有尾帧语义。上游差异
 	// （创建端点、首帧模式互斥、画幅拉伸等）全部由 mikuapi 适配器吸收，下游
 	// 协议不变。
-	VideoModelGrokImagineVideo15Preview: {
+	VideoModelGrokImagineVideo15: {
 		Resolutions:       []string{VideoResolution480P, VideoResolution720P, VideoResolution1080P},
 		DefaultResolution: VideoResolution720P,
 		MinSeconds:        1,
@@ -120,10 +121,10 @@ var videoModelSpecs = map[string]videoModelSpec{
 		MaxRefImages:      7,
 		AudioNeedsVisual:  true,
 	},
-	// kling-video-v3-omni（mikuapi 可灵）：时长 3-15 秒，清晰度 720p/1080p/4K，
+	// kling-v3-omni（mikuapi 可灵，上游名 kling-video-v3-omni）：时长 3-15 秒，清晰度 720p/1080p/4K，
 	// 参考图至多 7 张，没有尾帧语义（首尾帧插值是 kling-video-v3 的能力，omni
 	// 只做参考图）。画幅只有 16:9/9:16/1:1，由 mikuapi 适配器的渠道闸门收紧。
-	VideoModelKlingVideoV3Omni: {
+	VideoModelKlingV3Omni: {
 		Resolutions:       []string{VideoResolution720P, VideoResolution1080P, VideoResolution4K},
 		DefaultResolution: VideoResolution720P,
 		MinSeconds:        3,
@@ -172,8 +173,8 @@ func SupportedVideoModels() []string {
 		VideoModelSeedance20,
 		VideoModelSeedance20Fast,
 		VideoModelSeedance25,
-		VideoModelGrokImagineVideo15Preview,
-		VideoModelKlingVideoV3Omni,
+		VideoModelGrokImagineVideo15,
+		VideoModelKlingV3Omni,
 	}
 }
 

@@ -87,6 +87,14 @@ async function mountVideoModal() {
   return wrapper
 }
 
+async function submitVideoAccount(wrapper: ReturnType<typeof mount>) {
+  await wrapper.get('form#create-account-form input[type="text"]').setValue('video account')
+  await wrapper.get('form#create-account-form input[type="password"]').setValue('sk-video')
+  await wrapper.get('form#create-account-form').trigger('submit.prevent')
+  await flushPromises()
+  return createAccountMock.mock.calls.at(-1)?.[0]
+}
+
 describe('CreateAccountModal video mode', () => {
   beforeEach(() => {
     createAccountMock.mockReset().mockResolvedValue({})
@@ -108,22 +116,52 @@ describe('CreateAccountModal video mode', () => {
     expect(payload.type).toBe('apikey')
   })
 
-  it('offers aigod, newtoken, mikuapi and jingyu as upstreams', async () => {
+  it('links the platform options to the selected models', async () => {
     const wrapper = await mountVideoModal()
 
-    for (const supported of ['aigod', 'newtoken', 'mikuapi', 'jingyu']) {
-      expect(wrapper.find(`[data-testid="video-provider-${supported}"]`).exists()).toBe(true)
-    }
+    // 默认全选模型：只有 mikuapi 能服务全部五个模型。
+    const select = wrapper.get('[data-testid="video-provider-select"]')
+    const optionValues = () =>
+      select.findAll('option').map((option) => option.element.value)
+    expect(optionValues()).toEqual(['mikuapi'])
+
+    // 取消 grok / kling 后，四个平台都能服务剩余的 Seedance 系列。
+    await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="video-model-grok-imagine-video-1.5"]').trigger('click')
+    await wrapper.get('[data-testid="video-model-kling-v3-omni"]').trigger('click')
+    await flushPromises()
+
+    // jingyu 不服务 seedance-2.0-fast，因此不在可服务平台里。
+    expect(optionValues()).toEqual(['aigod', 'newtoken', 'mikuapi'])
     // 早期清理掉的上游不能悄悄回来。
-    for (const removed of ['ycyapi']) {
-      expect(wrapper.find(`[data-testid="video-provider-${removed}"]`).exists()).toBe(false)
+    expect(optionValues()).not.toContain('ycyapi')
+  })
+
+  it('auto-switches the platform to the only upstream serving the selected model', async () => {
+    const wrapper = await mountVideoModal()
+
+    // 只勾 kling：平台应自动切到 mikuapi（唯一可服务它的上游）。
+    await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
+    await flushPromises()
+    for (const model of [
+      'seedance-2.0',
+      'seedance-2.0-fast',
+      'seedance-2.5',
+      'grok-imagine-video-1.5'
+    ]) {
+      await wrapper.get(`[data-testid="video-model-${model}"]`).trigger('click')
     }
+    await flushPromises()
+
+    const payload = await submitVideoAccount(wrapper)
+    expect(payload.extra.video_provider).toBe('mikuapi')
   })
 
   it('switches base URL + timeouts when mikuapi is picked', async () => {
     const wrapper = await mountVideoModal()
 
-    await wrapper.get('[data-testid="video-provider-mikuapi"]').trigger('click')
+    await wrapper.get('[data-testid="video-provider-select"]').setValue('mikuapi')
     await flushPromises()
 
     await wrapper.get('form#create-account-form input[type="text"]').setValue('mikuapi account')
@@ -139,10 +177,16 @@ describe('CreateAccountModal video mode', () => {
     expect(payload.extra.poll_timeout_ms).toBe(900000)
   })
 
-  it('defaults to aigod and switches base URL + timeouts when newtoken is picked', async () => {
+  it('switches base URL + timeouts when newtoken is picked after narrowing models', async () => {
     const wrapper = await mountVideoModal()
 
-    await wrapper.get('[data-testid="video-provider-newtoken"]').trigger('click')
+    // 默认全选模型时平台自动落在 mikuapi；先取消 grok/kling 让 newtoken 可选。
+    await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="video-model-grok-imagine-video-1.5"]').trigger('click')
+    await wrapper.get('[data-testid="video-model-kling-v3-omni"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="video-provider-select"]').setValue('newtoken')
     await flushPromises()
 
     await wrapper.get('form#create-account-form input[type="text"]').setValue('newtoken account')
@@ -162,12 +206,14 @@ describe('CreateAccountModal video mode', () => {
   it('whitelists exactly the shipped video models by default', async () => {
     const wrapper = await mountVideoModal()
 
+    await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
+    await flushPromises()
     for (const model of [
       'seedance-2.0',
       'seedance-2.0-fast',
       'seedance-2.5',
-      'grok-imagine-video-1.5-preview',
-      'kling-video-v3-omni'
+      'grok-imagine-video-1.5',
+      'kling-v3-omni'
     ]) {
       expect(wrapper.find(`[data-testid="video-model-${model}"]`).exists()).toBe(true)
     }
@@ -181,14 +227,16 @@ describe('CreateAccountModal video mode', () => {
       'seedance-2.0': 'seedance-2.0',
       'seedance-2.0-fast': 'seedance-2.0-fast',
       'seedance-2.5': 'seedance-2.5',
-      'grok-imagine-video-1.5-preview': 'grok-imagine-video-1.5-preview',
-      'kling-video-v3-omni': 'kling-video-v3-omni',
+      'grok-imagine-video-1.5': 'grok-imagine-video-1.5',
+      'kling-v3-omni': 'kling-v3-omni',
     })
   })
 
   it('narrows the whitelist when a model is unchecked', async () => {
     const wrapper = await mountVideoModal()
 
+    await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
+    await flushPromises()
     await wrapper.get('[data-testid="video-model-seedance-2.0-fast"]').trigger('click')
     await flushPromises()
 
@@ -200,8 +248,8 @@ describe('CreateAccountModal video mode', () => {
     expect(createAccountMock.mock.calls[0]?.[0].credentials.model_mapping).toEqual({
       'seedance-2.0': 'seedance-2.0',
       'seedance-2.5': 'seedance-2.5',
-      'grok-imagine-video-1.5-preview': 'grok-imagine-video-1.5-preview',
-      'kling-video-v3-omni': 'kling-video-v3-omni',
+      'grok-imagine-video-1.5': 'grok-imagine-video-1.5',
+      'kling-v3-omni': 'kling-v3-omni',
     })
   })
 

@@ -372,24 +372,24 @@ func TestMikuapiGrokAndKlingUpstreamModelsAndResolutions(t *testing.T) {
 	adapter := videoProviderAdapterByName(videoProviderMikuapi)
 
 	require.Equal(t, videoMikuapiGrokImagineVideo15PreviewModel,
-		adapter.UpstreamModel(nil, &normalizedVideoRequest{Model: VideoModelGrokImagineVideo15Preview, Resolution: VideoResolution720P}))
+		adapter.UpstreamModel(nil, &normalizedVideoRequest{Model: VideoModelGrokImagineVideo15, Resolution: VideoResolution720P}))
 	require.Equal(t, videoMikuapiKlingVideoV3OmniModel,
-		adapter.UpstreamModel(nil, &normalizedVideoRequest{Model: VideoModelKlingVideoV3Omni, Resolution: VideoResolution720P}))
+		adapter.UpstreamModel(nil, &normalizedVideoRequest{Model: VideoModelKlingV3Omni, Resolution: VideoResolution720P}))
 
 	// grok：480p/720p/1080p，没有 4K。
-	require.True(t, adapter.Compatible(VideoModelGrokImagineVideo15Preview, VideoResolution480P))
-	require.True(t, adapter.Compatible(VideoModelGrokImagineVideo15Preview, VideoResolution1080P))
-	require.False(t, adapter.Compatible(VideoModelGrokImagineVideo15Preview, VideoResolution4K))
+	require.True(t, adapter.Compatible(VideoModelGrokImagineVideo15, VideoResolution480P))
+	require.True(t, adapter.Compatible(VideoModelGrokImagineVideo15, VideoResolution1080P))
+	require.False(t, adapter.Compatible(VideoModelGrokImagineVideo15, VideoResolution4K))
 	// 可灵 omni：720p/1080p/4K（下游规范写法大写 K，上游 4k 由请求体转小写）。
-	require.True(t, adapter.Compatible(VideoModelKlingVideoV3Omni, VideoResolution4K))
-	require.True(t, adapter.Compatible(VideoModelKlingVideoV3Omni, VideoResolution1080P))
-	require.False(t, adapter.Compatible(VideoModelKlingVideoV3Omni, VideoResolution480P))
+	require.True(t, adapter.Compatible(VideoModelKlingV3Omni, VideoResolution4K))
+	require.True(t, adapter.Compatible(VideoModelKlingV3Omni, VideoResolution1080P))
+	require.False(t, adapter.Compatible(VideoModelKlingV3Omni, VideoResolution480P))
 
 	// 其它渠道不得认领这两个模型。
 	for _, provider := range []string{videoProviderAigod, videoProviderNewtoken, videoProviderJingyu} {
-		require.False(t, videoProviderAdapterByName(provider).Compatible(VideoModelGrokImagineVideo15Preview, VideoResolution720P),
+		require.False(t, videoProviderAdapterByName(provider).Compatible(VideoModelGrokImagineVideo15, VideoResolution720P),
 			"%s 不能服务 grok-imagine", provider)
-		require.False(t, videoProviderAdapterByName(provider).Compatible(VideoModelKlingVideoV3Omni, VideoResolution720P),
+		require.False(t, videoProviderAdapterByName(provider).Compatible(VideoModelKlingV3Omni, VideoResolution720P),
 			"%s 不能服务可灵", provider)
 	}
 }
@@ -400,7 +400,7 @@ func TestMikuapiGrokChannelGate(t *testing.T) {
 	adapter := videoProviderAdapterByName(videoProviderMikuapi)
 	request := func(content []VideoContent, ratio string, ratioProvided bool, seconds int) *normalizedVideoRequest {
 		return &normalizedVideoRequest{
-			Model: VideoModelGrokImagineVideo15Preview, Resolution: VideoResolution720P,
+			Model: VideoModelGrokImagineVideo15, Resolution: VideoResolution720P,
 			GeneratedSeconds: seconds, Content: content, Ratio: ratio, RatioProvided: ratioProvided,
 		}
 	}
@@ -444,7 +444,7 @@ func TestMikuapiKlingChannelGate(t *testing.T) {
 	adapter := videoProviderAdapterByName(videoProviderMikuapi)
 	request := func(content []VideoContent, ratio string, seconds int) *normalizedVideoRequest {
 		return &normalizedVideoRequest{
-			Model: VideoModelKlingVideoV3Omni, Resolution: VideoResolution720P,
+			Model: VideoModelKlingV3Omni, Resolution: VideoResolution720P,
 			GeneratedSeconds: seconds, Content: content, Ratio: ratio, RatioProvided: ratio != "",
 		}
 	}
@@ -494,7 +494,7 @@ func TestMikuapiGrokBuildCreateBody(t *testing.T) {
 
 	// 文生视频：显式画幅随请求下发。
 	textBody := adapter.BuildCreateBody(&normalizedVideoRequest{
-		Model: VideoModelGrokImagineVideo15Preview, Prompt: "a cat running in the rain",
+		Model: VideoModelGrokImagineVideo15, Prompt: "a cat running in the rain",
 		Resolution: VideoResolution720P, GeneratedSeconds: 4, Ratio: "16:9", RatioProvided: true,
 	}, videoMikuapiGrokImagineVideo15PreviewModel)
 	require.Equal(t, videoMikuapiGrokImagineVideo15PreviewModel, textBody["model"])
@@ -507,7 +507,7 @@ func TestMikuapiGrokBuildCreateBody(t *testing.T) {
 	// 首帧模式：input_reference 必须是对象；即使下游给了画幅也不发——上游会把
 	// 首帧非等比拉伸（实测 3.2 倍），省略后输出跟随输入图比例。
 	frameBody := adapter.BuildCreateBody(&normalizedVideoRequest{
-		Model: VideoModelGrokImagineVideo15Preview, Prompt: "gentle camera push in",
+		Model: VideoModelGrokImagineVideo15, Prompt: "gentle camera push in",
 		Resolution: VideoResolution720P, GeneratedSeconds: 5, Ratio: "16:9", RatioProvided: true,
 		Content: []VideoContent{firstFrame},
 	}, videoMikuapiGrokImagineVideo15PreviewModel)
@@ -518,7 +518,7 @@ func TestMikuapiGrokBuildCreateBody(t *testing.T) {
 
 	// 参考图模式：对象数组 + 键名 image_url，画幅可以安全指定。
 	referenceBody := adapter.BuildCreateBody(&normalizedVideoRequest{
-		Model: VideoModelGrokImagineVideo15Preview, Prompt: "morph through references",
+		Model: VideoModelGrokImagineVideo15, Prompt: "morph through references",
 		Resolution: VideoResolution480P, GeneratedSeconds: 15, Ratio: "16:9", RatioProvided: true,
 		Content: referenceImages,
 	}, videoMikuapiGrokImagineVideo15PreviewModel)
@@ -540,7 +540,7 @@ func TestMikuapiGrokBuildCreateBody(t *testing.T) {
 func TestMikuapiKlingBuildCreateBody(t *testing.T) {
 	adapter := videoProviderAdapterByName(videoProviderMikuapi)
 	body := adapter.BuildCreateBody(&normalizedVideoRequest{
-		Model: VideoModelKlingVideoV3Omni, Prompt: "a red wooden boat drifting",
+		Model: VideoModelKlingV3Omni, Prompt: "a red wooden boat drifting",
 		Resolution: VideoResolution4K, GeneratedSeconds: 5, Ratio: "16:9", RatioProvided: true,
 		Content: []VideoContent{
 			{Type: "image_url", Role: "first_frame", ImageURL: &VideoContentURL{URL: "https://cdn/ref.png"}},
@@ -556,7 +556,7 @@ func TestMikuapiKlingBuildCreateBody(t *testing.T) {
 
 	// 未显式提供画幅时不发（上游默认 16:9，与网关默认一致）。
 	noRatio := adapter.BuildCreateBody(&normalizedVideoRequest{
-		Model: VideoModelKlingVideoV3Omni, Prompt: "drift",
+		Model: VideoModelKlingV3Omni, Prompt: "drift",
 		Resolution: VideoResolution720P, GeneratedSeconds: 3,
 	}, videoMikuapiKlingVideoV3OmniModel)
 	require.NotContains(t, noRatio, "aspect_ratio")
@@ -697,15 +697,15 @@ func TestMikuapiKlingPollLifecyclePublishesCDNURL(t *testing.T) {
 func TestMikuapiNewModelsRequestValidation(t *testing.T) {
 	// 时长：grok 的 1 秒可服务，可灵 2 秒越界、3 秒可服务。
 	_, err := normalizeVideoCreateRequest(&VideoCreateRequest{
-		Model: VideoModelGrokImagineVideo15Preview, Prompt: "x", Duration: 1,
+		Model: VideoModelGrokImagineVideo15, Prompt: "x", Duration: 1,
 	})
 	require.NoError(t, err, "grok 的 1 秒应通过")
 	_, err = normalizeVideoCreateRequest(&VideoCreateRequest{
-		Model: VideoModelKlingVideoV3Omni, Prompt: "x", Duration: 2,
+		Model: VideoModelKlingV3Omni, Prompt: "x", Duration: 2,
 	})
 	require.Error(t, err, "可灵的 2 秒应被拒绝")
 	_, err = normalizeVideoCreateRequest(&VideoCreateRequest{
-		Model: VideoModelKlingVideoV3Omni, Prompt: "x", Duration: 3,
+		Model: VideoModelKlingV3Omni, Prompt: "x", Duration: 3,
 	})
 	require.NoError(t, err, "可灵的 3 秒应通过")
 
@@ -717,7 +717,7 @@ func TestMikuapiNewModelsRequestValidation(t *testing.T) {
 			ImageURL: &VideoContentURL{URL: fmt.Sprintf("https://cdn/%d.png", i)},
 		})
 	}
-	for _, model := range []string{VideoModelGrokImagineVideo15Preview, VideoModelKlingVideoV3Omni} {
+	for _, model := range []string{VideoModelGrokImagineVideo15, VideoModelKlingV3Omni} {
 		_, err = normalizeVideoCreateRequest(&VideoCreateRequest{
 			Model: model, Prompt: "x", Duration: 5, Content: refs[:7],
 		})
@@ -731,7 +731,7 @@ func TestMikuapiNewModelsRequestValidation(t *testing.T) {
 	// 归一化层对两个新模型不再有其它特例：超长提示词等上游约束不在这里校验，
 	// 与 Seedance 的行为保持一致。
 	_, err = normalizeVideoCreateRequest(&VideoCreateRequest{
-		Model: VideoModelGrokImagineVideo15Preview, Prompt: strings.Repeat("a", 5000), Duration: 5,
+		Model: VideoModelGrokImagineVideo15, Prompt: strings.Repeat("a", 5000), Duration: 5,
 	})
 	require.NoError(t, err, "提示词长度交由上游判定，归一化层不做特例")
 }

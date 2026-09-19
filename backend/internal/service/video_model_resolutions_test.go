@@ -193,11 +193,11 @@ func TestVideoProviderServableResolutionMatrix(t *testing.T) {
 		// grok-imagine 只有 480p/720p/1080p，可灵 omni 是 720p/1080p/4K
 		// （上游目录写小写 4k，请求体里转小写）。
 		videoProviderMikuapi: {
-			VideoModelSeedance20:                {VideoResolution480P, VideoResolution720P, VideoResolution1080P, VideoResolution4K},
-			VideoModelSeedance20Fast:            {VideoResolution480P, VideoResolution720P},
-			VideoModelSeedance25:                {VideoResolution480P, VideoResolution720P, VideoResolution1080P},
-			VideoModelGrokImagineVideo15Preview: {VideoResolution480P, VideoResolution720P, VideoResolution1080P},
-			VideoModelKlingVideoV3Omni:          {VideoResolution720P, VideoResolution1080P, VideoResolution4K},
+			VideoModelSeedance20:         {VideoResolution480P, VideoResolution720P, VideoResolution1080P, VideoResolution4K},
+			VideoModelSeedance20Fast:     {VideoResolution480P, VideoResolution720P},
+			VideoModelSeedance25:         {VideoResolution480P, VideoResolution720P, VideoResolution1080P},
+			VideoModelGrokImagineVideo15: {VideoResolution480P, VideoResolution720P, VideoResolution1080P},
+			VideoModelKlingV3Omni:        {VideoResolution720P, VideoResolution1080P, VideoResolution4K},
 		},
 	}
 

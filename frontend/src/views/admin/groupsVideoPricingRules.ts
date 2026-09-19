@@ -15,8 +15,8 @@ export const VIDEO_PRICING_MODEL_RESOLUTIONS: {
   { model: 'seedance-2.0', resolutions: ['480p', '720p', '1080p', '4K'] },
   { model: 'seedance-2.0-fast', resolutions: ['480p', '720p'] },
   { model: 'seedance-2.5', resolutions: ['480p', '720p', '1080p'] },
-  { model: 'grok-imagine-video-1.5-preview', resolutions: ['480p', '720p', '1080p'] },
-  { model: 'kling-video-v3-omni', resolutions: ['720p', '1080p', '4K'] }
+  { model: 'grok-imagine-video-1.5', resolutions: ['480p', '720p', '1080p'] },
+  { model: 'kling-v3-omni', resolutions: ['720p', '1080p', '4K'] }
 ]
 
 export const VIDEO_PRICING_MODELS = VIDEO_PRICING_MODEL_RESOLUTIONS.map(

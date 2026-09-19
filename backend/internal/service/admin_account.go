@@ -10,6 +10,7 @@ import (
 	"maps"
 	"net/http"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -385,16 +386,25 @@ const VideoProviderExtraKey = "video_provider"
 // 某模型列出后，只有列出的档位会参与该账号的调度。
 const VideoModelResolutionsExtraKey = "video_model_resolutions"
 
+// VideoModelDurationsExtraKey 是视频账号在 extra 中记录「每个模型实际支持哪些
+// 生成时长」的键，形如 {"seedance-2.0-fast":[5,10]}。
+//
+// 同一上游的不同 API key 能服务的时长集合也可能不同，与分辨率白名单同一套语义：
+// 键缺失或某模型未列出 => 不限制（按模型规格表的全范围参与调度）；列出后只有
+// 列出的秒数会调度到该账号。它只做收敛——上游硬约束（例如 mikuapi 2.0-fast
+// 只认 5/10 秒）仍由适配器的渠道闸门把关，这里配出超集也不会被调度过去。
+const VideoModelDurationsExtraKey = "video_model_durations"
+
 // supportedVideoProviders 是视频账号允许配置的上游平台，必须与
 // videoProviderAdapterByName 的实现保持一致。
 var supportedVideoProviders = []string{videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu}
 
-// NormalizeVideoProviderExtra 校验并归一化视频账号的 video_provider 与
-// video_model_resolutions。
+// NormalizeVideoProviderExtra 校验并归一化视频账号的 video_provider、
+// video_model_resolutions 与 video_model_durations。
 // video_provider 空值补默认 aigod；未知取值直接报错，而不是静默回落到 aigod ——
 // 否则拼错上游会把 newtoken 的密钥发到 aigod 的地址上。
-// 分辨率白名单同样严格校验：模型必须是已接入的视频模型、分辨率必须是该模型官方
-// 支持的档位，避免写错一个字符串就把账号在某个分辨率上静默排除。
+// 分辨率/时长白名单同样严格校验：模型必须是已接入的视频模型、取值必须是该模型
+// 官方支持的档位/时长，避免写错一个字符串就把账号在某个维度上静默排除。
 func NormalizeVideoProviderExtra(platform string, extra map[string]any) (map[string]any, error) {
 	if platform != PlatformVideo {
 		return extra, nil
@@ -404,6 +414,9 @@ func NormalizeVideoProviderExtra(platform string, extra map[string]any) (map[str
 		normalized = make(map[string]any, 2)
 	}
 	if err := normalizeVideoModelResolutionsExtra(normalized); err != nil {
+		return nil, err
+	}
+	if err := normalizeVideoModelDurationsExtra(normalized); err != nil {
 		return nil, err
 	}
 	raw, _ := normalized[VideoProviderExtraKey].(string)
@@ -494,6 +507,91 @@ func normalizeVideoModelResolutionsExtra(extra map[string]any) error {
 	return nil
 }
 
+// normalizeVideoModelDurationsExtra 就地校验并归一化时长白名单：模型必须是已接入
+// 的视频模型，取值必须是该模型规格范围内的整数秒（上游对越界时长的处理不统一，
+// 有的是报错、有的静默夹取，因此这里按规格表严格拒绝）。值去重升序排列，空条目
+// 直接删除（空列表等价于不限制，保留它只会让读取方多一种状态要判断）。
+func normalizeVideoModelDurationsExtra(extra map[string]any) error {
+	raw, exists := extra[VideoModelDurationsExtraKey]
+	if !exists || raw == nil {
+		delete(extra, VideoModelDurationsExtraKey)
+		return nil
+	}
+	byModel, ok := raw.(map[string]any)
+	if !ok {
+		return infraerrors.BadRequest(
+			"invalid_video_model_durations",
+			VideoModelDurationsExtraKey+" must be an object mapping model to duration list",
+		)
+	}
+	normalized := make(map[string]any, len(byModel))
+	for rawModel, rawDurations := range byModel {
+		model := strings.TrimSpace(rawModel)
+		if !IsSupportedVideoModel(model) {
+			return infraerrors.BadRequest(
+				"invalid_video_model_durations",
+				"Unsupported video model in "+VideoModelDurationsExtraKey+": "+model,
+			)
+		}
+		list, ok := rawDurations.([]any)
+		if !ok {
+			return infraerrors.BadRequest(
+				"invalid_video_model_durations",
+				VideoModelDurationsExtraKey+"."+model+" must be an array of durations",
+			)
+		}
+		spec, _ := videoSpecForModel(model)
+		seen := make(map[int]struct{}, len(list))
+		durations := make([]int, 0, len(list))
+		for _, item := range list {
+			seconds := numericVideoSeconds(item)
+			if seconds < spec.MinSeconds || seconds > spec.MaxSeconds || float64(seconds) != toFloat(item) {
+				return infraerrors.BadRequest(
+					"invalid_video_model_durations",
+					"Duration "+fmt.Sprintf("%v", item)+" is not supported by "+model,
+				)
+			}
+			if _, dup := seen[seconds]; dup {
+				continue
+			}
+			seen[seconds] = struct{}{}
+			durations = append(durations, seconds)
+		}
+		sort.Ints(durations)
+		if len(durations) == 0 {
+			continue
+		}
+		anyList := make([]any, 0, len(durations))
+		for _, seconds := range durations {
+			anyList = append(anyList, seconds)
+		}
+		normalized[model] = anyList
+	}
+	if len(normalized) == 0 {
+		delete(extra, VideoModelDurationsExtraKey)
+		return nil
+	}
+	extra[VideoModelDurationsExtraKey] = normalized
+	return nil
+}
+
+// toFloat 报告 extra 时长值的原始数值，用于拒绝 4.5 这类非整数秒。
+func toFloat(value any) float64 {
+	switch v := value.(type) {
+	case int:
+		return float64(v)
+	case int64:
+		return float64(v)
+	case float64:
+		return v
+	case json.Number:
+		f, _ := v.Float64()
+		return f
+	default:
+		return -1
+	}
+}
+
 // canonicalVideoResolution 把外部输入匹配到模型官方档位的规范写法。
 // 必须大小写不敏感匹配：4K 的官方写法是大写 K，直接 ToLower 会把合法值判成非法。
 func canonicalVideoResolution(model, resolution string) (string, bool) {
@@ -544,6 +642,54 @@ func videoAccountSupportsResolution(account *Account, model, resolution string) 
 		}
 	}
 	return false
+}
+
+// videoAccountSupportsDuration 报告账号是否被允许服务该 (模型, 时长秒数)。
+// 与分辨率白名单同一套语义：未配置该模型时不限制；配置损坏时放行。
+// 时长白名单只做收敛（模型规格范围内的子集），上游硬约束仍由适配器闸门把关。
+func videoAccountSupportsDuration(account *Account, model string, seconds int) bool {
+	if account == nil || account.Extra == nil {
+		return account != nil
+	}
+	raw := account.Extra[VideoModelDurationsExtraKey]
+	if raw == nil {
+		return true
+	}
+	byModel, ok := raw.(map[string]any)
+	if !ok {
+		return true
+	}
+	value, exists := byModel[strings.TrimSpace(model)]
+	if !exists {
+		return true
+	}
+	list, ok := value.([]any)
+	if !ok || len(list) == 0 {
+		return true
+	}
+	for _, item := range list {
+		if numericVideoSeconds(item) == seconds {
+			return true
+		}
+	}
+	return false
+}
+
+// numericVideoSeconds 把 extra 里的时长值转成整数秒；非法值返回 -1（不可能命中）。
+func numericVideoSeconds(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		i, _ := strconv.Atoi(v.String())
+		return i
+	default:
+		return -1
+	}
 }
 
 func normalizeOpenAILongContextBillingExtra(platform string, extra map[string]any) (map[string]any, error) {

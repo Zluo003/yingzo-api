@@ -9,9 +9,10 @@ const (
 	videoMikuapiSeedance20Model     = "seedance-2-pro"   // seedance 2.0
 	videoMikuapiSeedance20FastModel = "seedance-2-fast"  // seedance 2.0 fast
 	videoMikuapiSeedance25Model     = "seedance-2.5-pro" // seedance 2.5
-	// Grok Imagine 与可灵的下游模型名与上游一致（清晰度/时长同样走请求体字段）。
-	videoMikuapiGrokImagineVideo15PreviewModel = VideoModelGrokImagineVideo15Preview
-	videoMikuapiKlingVideoV3OmniModel          = VideoModelKlingVideoV3Omni
+	// Grok Imagine 与可灵的上游模型名：下游暴露的是网关自定义名（见 video.go，
+	// 映射在 videoMikuapiUpstreamModel），清晰度/时长同样走请求体字段。
+	videoMikuapiGrokImagineVideo15PreviewModel = "grok-imagine-video-1.5-preview"
+	videoMikuapiKlingVideoV3OmniModel          = "kling-video-v3-omni"
 	// mikuapi 的 2.0-fast 只开放 5 秒与 10 秒两档。上游对超范围时长是"夹到允许区间"
 	// 而不是报错，静默夹取会让我们按 A 时长计费、交付 B 时长的片子，因此这里必须
 	// 严格判定；判定不通过时该账号在调度阶段就被排除，请求会落到别的上游。
@@ -65,7 +66,7 @@ func (m mikuapiVideoProviderAdapter) DefaultAPIPath() string {
 func (m mikuapiVideoProviderAdapter) Compatible(model, resolution string) bool {
 	switch strings.TrimSpace(model) {
 	case VideoModelSeedance20, VideoModelSeedance20Fast, VideoModelSeedance25,
-		VideoModelGrokImagineVideo15Preview, VideoModelKlingVideoV3Omni:
+		VideoModelGrokImagineVideo15, VideoModelKlingV3Omni:
 	default:
 		return false
 	}
@@ -77,9 +78,9 @@ func (m mikuapiVideoProviderAdapter) CompatibleRequest(normalized *normalizedVid
 		return false
 	}
 	switch strings.TrimSpace(normalized.Model) {
-	case VideoModelGrokImagineVideo15Preview:
+	case VideoModelGrokImagineVideo15:
 		return mikuapiGrokRequestCompatible(normalized)
-	case VideoModelKlingVideoV3Omni:
+	case VideoModelKlingV3Omni:
 		return mikuapiKlingRequestCompatible(normalized)
 	default:
 		return mikuapiSeedanceRequestCompatible(normalized)
@@ -186,9 +187,9 @@ func videoMikuapiUpstreamModel(model string) string {
 		return videoMikuapiSeedance20FastModel
 	case VideoModelSeedance25:
 		return videoMikuapiSeedance25Model
-	case VideoModelGrokImagineVideo15Preview:
+	case VideoModelGrokImagineVideo15:
 		return videoMikuapiGrokImagineVideo15PreviewModel
-	case VideoModelKlingVideoV3Omni:
+	case VideoModelKlingV3Omni:
 		return videoMikuapiKlingVideoV3OmniModel
 	default:
 		return ""
@@ -212,9 +213,9 @@ func (m mikuapiVideoProviderAdapter) BuildCreateBody(normalized *normalizedVideo
 		return nil
 	}
 	switch strings.TrimSpace(normalized.Model) {
-	case VideoModelGrokImagineVideo15Preview:
+	case VideoModelGrokImagineVideo15:
 		return mikuapiGrokCreateBody(normalized, upstreamModel)
-	case VideoModelKlingVideoV3Omni:
+	case VideoModelKlingV3Omni:
 		return mikuapiKlingCreateBody(normalized, upstreamModel)
 	default:
 		return mikuapiSeedanceCreateBody(normalized, upstreamModel)

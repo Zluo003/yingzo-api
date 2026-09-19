@@ -442,6 +442,10 @@ func (s *VideoService) selectAccountForRequest(ctx context.Context, groupID int6
 		if !videoAccountSupportsResolution(&account, model, normalized.Resolution) {
 			continue
 		}
+		// 账号级时长白名单与分辨率同理：无条件生效，只做规格范围内的收敛。
+		if !videoAccountSupportsDuration(&account, model, normalized.GeneratedSeconds) {
+			continue
+		}
 		if agentGroup {
 			current := agentDiscoverySet(discoverAgentModels([]Account{account}))
 			if _, supported := current[agentModelKey(PlatformVideo, model)]; !supported {

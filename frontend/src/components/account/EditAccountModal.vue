@@ -188,8 +188,8 @@
           </div>
         </div>
         <!--
-          分辨率白名单：模型官方档位 ∩ 当前上游实际可服务档位。
-          三个模型全部展示而非只展示 model_mapping 白名单内的模型：隐藏已保存的条目会让
+          分辨率/时长白名单：按模型勾选该账号实际支持的档位。
+          全部模型都展示而非只展示 model_mapping 白名单内的模型：隐藏已保存的条目会让
           保存时静默丢掉它们，而这里列出的模型即便当下不可调度，配置本身也应保留。
         -->
         <div v-if="account.platform === 'video'">
@@ -203,11 +203,10 @@
                   :key="resolution"
                   type="button"
                   :data-testid="`video-resolution-${model}-${resolution}`"
-                  :disabled="!isVideoResolutionServable(editVideoProvider, model, resolution)"
                   :aria-pressed="editVideoResolutions[model]?.includes(resolution) ? 'true' : 'false'"
                   @click="onEditVideoResolutionToggle(model, resolution)"
                   :class="[
-                    'rounded-lg border px-2.5 py-1 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40',
+                    'rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
                     editVideoResolutions[model]?.includes(resolution)
                       ? 'border-cyan-500 bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300'
                       : 'border-gray-200 text-gray-500 hover:border-cyan-300 dark:border-dark-600 dark:text-gray-400'
@@ -216,21 +215,36 @@
                   {{ resolution }}
                 </button>
               </div>
-              <p
-                v-if="unsupportedVideoResolutions(editVideoProvider, model).length > 0"
-                class="mt-1 text-xs text-gray-400"
-                :data-testid="`video-resolution-hint-${model}`"
-              >
-                {{
-                  t('admin.accounts.video.resolutionUnsupported', {
-                    provider: editVideoProviderLabel,
-                    resolutions: unsupportedVideoResolutions(editVideoProvider, model).join(' / ')
-                  })
-                }}
-              </p>
             </div>
           </div>
           <p class="input-hint">{{ t('admin.accounts.video.resolutionsHint') }}</p>
+        </div>
+        <div v-if="account.platform === 'video'">
+          <label class="input-label">{{ t('admin.accounts.video.durations') }}</label>
+          <div class="mt-2 space-y-3">
+            <div v-for="model in videoDefaultModels" :key="model">
+              <div class="text-xs font-medium text-gray-600 dark:text-gray-400">{{ model }}</div>
+              <div class="mt-1.5 flex flex-wrap gap-2">
+                <button
+                  v-for="seconds in videoModelDurations(model)"
+                  :key="seconds"
+                  type="button"
+                  :data-testid="`video-duration-${model}-${seconds}`"
+                  :aria-pressed="editVideoDurations[model]?.includes(seconds) ? 'true' : 'false'"
+                  @click="onEditVideoDurationToggle(model, seconds)"
+                  :class="[
+                    'rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
+                    editVideoDurations[model]?.includes(seconds)
+                      ? 'border-cyan-500 bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300'
+                      : 'border-gray-200 text-gray-500 hover:border-cyan-300 dark:border-dark-600 dark:text-gray-400'
+                  ]"
+                >
+                  {{ seconds }}s
+                </button>
+              </div>
+            </div>
+          </div>
+          <p class="input-hint">{{ t('admin.accounts.video.durationsHint') }}</p>
         </div>
         <div>
           <label class="input-label">{{ t('admin.accounts.apiKey') }}</label>
@@ -3087,14 +3101,18 @@ import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSetti
 import {
   VIDEO_MODEL_CODES,
   defaultVideoModelResolutions,
-  isVideoResolutionServable,
   parseVideoModelResolutions,
-  pruneVideoModelResolutions,
   serializeVideoModelResolutions,
   toggleVideoResolution,
-  unsupportedVideoResolutions,
   videoModelResolutions
 } from '@/views/admin/videoModelResolutions'
+import {
+  defaultVideoModelDurations,
+  parseVideoModelDurations,
+  serializeVideoModelDurations,
+  toggleVideoDuration,
+  videoModelDurations
+} from '@/views/admin/videoModelDurations'
 import {
   applyAntigravityProjectID,
   applyHeaderOverride,
@@ -3229,25 +3247,32 @@ const editVideoPollTimeoutMs = ref(300000)
 const editVideoRequestTimeoutMs = ref(60000)
 const editVideoConnectTimeoutMs = ref(15000)
 /**
- * 每个模型在本账号实际支持的分辨率，来自 extra.video_model_resolutions。
- * 上游服务不了的官方档位只展示、不可勾选，因此回填时就会被剔除。
+ * 每个模型在本账号实际支持的分辨率/时长，来自 extra.video_model_resolutions
+ * 与 extra.video_model_durations。运营按该 key 实际支持的能力勾选；
+ * 上游硬约束由适配器闸门兜底，这里不做渠道过滤。
  */
 const editVideoResolutions = ref<Record<string, string[]>>(
-  defaultVideoModelResolutions(editVideoProvider.value)
+  defaultVideoModelResolutions()
+)
+const editVideoDurations = ref<Record<string, number[]>>(
+  defaultVideoModelDurations()
 )
 
-/** 上游平台名，用于「该上游不提供 xxx」的提示文案。 */
-const editVideoProviderLabel = computed(() =>
-  t(`admin.accounts.video.providers.${editVideoProvider.value}`)
-)
-
-/** 勾选/取消一个档位；上游服务不了的档位直接忽略（按钮本身也是 disabled）。 */
+/** 勾选/取消一个分辨率档位。 */
 const onEditVideoResolutionToggle = (model: string, resolution: string) => {
   editVideoResolutions.value = toggleVideoResolution(
     editVideoResolutions.value,
-    editVideoProvider.value,
     model,
     resolution
+  )
+}
+
+/** 勾选/取消一个时长档位。 */
+const onEditVideoDurationToggle = (model: string, seconds: number) => {
+  editVideoDurations.value = toggleVideoDuration(
+    editVideoDurations.value,
+    model,
+    seconds
   )
 }
 // 与后端 videoDefaultBaseURLForProvider / videoAccountDefaultDuration 单一来源对齐。
@@ -3965,11 +3990,6 @@ watch(editVideoProvider, (_newProvider, oldProvider) => {
   modelRestrictionMode.value = 'whitelist'
   allowedModels.value = [...videoDefaultModels]
   modelMappings.value = []
-  // 分辨率勾选同样要收敛：新上游服务不了的档位留着也只会被后端忽略。
-  editVideoResolutions.value = pruneVideoModelResolutions(
-    editVideoResolutions.value,
-    editVideoProvider.value
-  )
 })
 
 const normalizePoolModeRetryCount = (value: number) => {
@@ -4360,10 +4380,12 @@ const syncFormFromAccount = (newAccount: Account | null) => {
                 : 'https://api.anthropic.com'
     if (newAccount.platform === 'video') {
       editVideoProvider.value = storedVideoProvider
-      // 分辨率白名单：只保留当前上游真正能服务的官方档位。
+      // 分辨率/时长白名单：按保存的 extra 回填，未配置的模型回落到官方全档。
       editVideoResolutions.value = parseVideoModelResolutions(
-        extra?.video_model_resolutions,
-        storedVideoProvider
+        extra?.video_model_resolutions
+      )
+      editVideoDurations.value = parseVideoModelDurations(
+        extra?.video_model_durations
       )
     }
     if (newAccount.platform === 'video') {
@@ -5236,13 +5258,19 @@ const handleSubmit = async () => {
           request_timeout_ms: Number(editVideoRequestTimeoutMs.value) || editVideoProviderDefaults.value.requestTimeoutMs,
           connect_timeout_ms: Number(editVideoConnectTimeoutMs.value) || editVideoProviderDefaults.value.connectTimeoutMs,
         }
-        // 新增/更新分辨率白名单；清空勾选等价于「不限制分辨率」，必须删除旧键，
+        // 新增/更新分辨率与时长白名单；清空勾选等价于「不限制」，必须删除旧键，
         // 否则 currentExtra 里残留的配置会继续生效。
         const videoResolutions = serializeVideoModelResolutions(editVideoResolutions.value)
         if (videoResolutions) {
           nextExtra.video_model_resolutions = videoResolutions
         } else {
           delete nextExtra.video_model_resolutions
+        }
+        const videoDurations = serializeVideoModelDurations(editVideoDurations.value)
+        if (videoDurations) {
+          nextExtra.video_model_durations = videoDurations
+        } else {
+          delete nextExtra.video_model_durations
         }
         updatePayload.extra = nextExtra
       }

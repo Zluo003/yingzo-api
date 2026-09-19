@@ -522,68 +522,92 @@
         </div>
       </div>
 
-      <!-- Upstream Platform Selection (Video) -->
+      <!-- Upstream Model & Platform Selection (Video)：一级选模型，二级选匹配的上游平台 -->
       <div v-if="form.platform === 'video'">
-        <label class="input-label">{{ t('admin.accounts.video.upstreamPlatform') }}</label>
-        <div class="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2" data-tour="account-form-type">
-          <button
-            v-for="provider in videoProviderOptions"
-            :key="provider.value"
-            type="button"
-            :data-testid="`video-provider-${provider.value}`"
-            @click="videoProvider = provider.value"
-            :class="[
-              'flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-all',
-              videoProvider === provider.value
-                ? 'border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20'
-                : 'border-gray-200 hover:border-cyan-300 dark:border-dark-600 dark:hover:border-cyan-700'
-            ]"
-          >
-            <div
-              :class="[
-                'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
-                videoProvider === provider.value
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-gray-100 text-gray-500 dark:bg-dark-600 dark:text-gray-400'
-              ]"
-            >
-              <Icon name="key" size="sm" />
-            </div>
-            <div>
-              <span class="block text-sm font-medium text-gray-900 dark:text-white">
-                {{ t(provider.labelKey) }}
-              </span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
-                {{ t(provider.hintKey) }}
-              </span>
-            </div>
-          </button>
-        </div>
-
-        <!-- 可用模型：勾选结果写入模型白名单，未勾选的模型不会被调度到该账号 -->
-        <div class="mt-4">
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <!-- 一级：视频模型（多选），勾选结果写入模型白名单，未勾选的模型不会被调度到该账号 -->
+        <div>
           <label class="input-label">{{ t('admin.accounts.video.models') }}</label>
-          <div class="mt-2 flex flex-wrap gap-2">
+          <div class="relative mt-2">
             <button
-              v-for="model in videoDefaultModels"
-              :key="model"
               type="button"
-              :data-testid="`video-model-${model}`"
-              @click="toggleVideoModel(model)"
+              data-testid="video-model-dropdown"
+              :aria-expanded="videoModelDropdownOpen"
+              @click="videoModelDropdownOpen = !videoModelDropdownOpen"
               :class="[
-                'rounded-lg border px-3 py-1.5 text-sm font-medium transition-all',
-                selectedVideoModels.includes(model)
-                  ? 'border-cyan-500 bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300'
-                  : 'border-gray-200 text-gray-500 hover:border-cyan-300 dark:border-dark-600 dark:text-gray-400'
+                'flex w-full items-center justify-between rounded-lg border border-gray-300 bg-white px-3 py-2 text-left text-sm transition-all dark:border-dark-500 dark:bg-dark-700',
+                videoModelDropdownOpen && 'border-cyan-500 dark:border-cyan-600'
               ]"
             >
-              {{ model }}
+              <span class="truncate text-gray-900 dark:text-white">
+                {{
+                  selectedVideoModels.length === 0
+                    ? t('admin.accounts.video.modelDropdownPlaceholder')
+                    : t('admin.accounts.video.selectedModels', {
+                        count: selectedVideoModels.length,
+                        models: selectedVideoModels.join('、')
+                      })
+                }}
+              </span>
+              <svg class="h-5 w-5 shrink-0 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+              </svg>
             </button>
+            <div
+              v-if="videoModelDropdownOpen"
+              class="absolute left-0 right-0 top-full z-30 mt-1 rounded-lg border border-gray-200 bg-white shadow-lg dark:border-dark-600 dark:bg-dark-700"
+            >
+              <div class="max-h-60 overflow-auto p-1">
+                <button
+                  v-for="model in videoDefaultModels"
+                  :key="model"
+                  type="button"
+                  :data-testid="`video-model-${model}`"
+                  @click="toggleVideoModel(model)"
+                  class="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-dark-600"
+                >
+                  <span
+                    :class="[
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                      selectedVideoModels.includes(model)
+                        ? 'border-primary-500 bg-primary-500 text-white'
+                        : 'border-gray-300 dark:border-dark-500'
+                    ]"
+                  >
+                    <svg v-if="selectedVideoModels.includes(model)" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                  <span class="truncate text-gray-900 dark:text-white">{{ model }}</span>
+                </button>
+              </div>
+            </div>
           </div>
           <p class="input-hint">{{ t('admin.accounts.video.modelsHint') }}</p>
         </div>
 
-        <!-- 分辨率白名单：模型官方档位 ∩ 当前上游实际可服务档位 -->
+        <!-- 二级：上游平台，与模型联动（只列出能服务所选模型的平台）；实际调度以适配器闸门为准 -->
+        <div data-tour="account-form-type">
+          <label class="input-label">{{ t('admin.accounts.video.upstreamPlatform') }}</label>
+          <select
+            v-model="videoProvider"
+            data-testid="video-provider-select"
+            class="input mt-2"
+          >
+            <option
+              v-for="provider in availableVideoProviders"
+              :key="provider.value"
+              :value="provider.value"
+            >
+              {{ t(provider.labelKey) }}
+            </option>
+          </select>
+          <p class="input-hint">{{ t('admin.accounts.video.platformFollowsModels') }}</p>
+          <p class="input-hint">{{ selectedVideoProviderHint }}</p>
+        </div>
+        </div>
+
+        <!-- 分辨率白名单：按模型勾选该账号实际支持的档位 -->
         <div v-if="selectedVideoModels.length > 0" class="mt-4">
           <label class="input-label">{{ t('admin.accounts.video.resolutions') }}</label>
           <div class="mt-2 space-y-3">
@@ -595,11 +619,10 @@
                   :key="resolution"
                   type="button"
                   :data-testid="`video-resolution-${model}-${resolution}`"
-                  :disabled="!isVideoResolutionServable(videoProvider, model, resolution)"
                   :aria-pressed="selectedVideoResolutions[model]?.includes(resolution) ? 'true' : 'false'"
                   @click="onVideoResolutionToggle(model, resolution)"
                   :class="[
-                    'rounded-lg border px-2.5 py-1 text-xs font-medium transition-all disabled:cursor-not-allowed disabled:opacity-40',
+                    'rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
                     selectedVideoResolutions[model]?.includes(resolution)
                       ? 'border-cyan-500 bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300'
                       : 'border-gray-200 text-gray-500 hover:border-cyan-300 dark:border-dark-600 dark:text-gray-400'
@@ -608,21 +631,38 @@
                   {{ resolution }}
                 </button>
               </div>
-              <p
-                v-if="unsupportedVideoResolutions(videoProvider, model).length > 0"
-                class="mt-1 text-xs text-gray-400"
-                :data-testid="`video-resolution-hint-${model}`"
-              >
-                {{
-                  t('admin.accounts.video.resolutionUnsupported', {
-                    provider: videoProviderLabel,
-                    resolutions: unsupportedVideoResolutions(videoProvider, model).join(' / ')
-                  })
-                }}
-              </p>
             </div>
           </div>
           <p class="input-hint">{{ t('admin.accounts.video.resolutionsHint') }}</p>
+        </div>
+
+        <!-- 时长白名单：按模型勾选该账号实际支持的生成时长 -->
+        <div v-if="selectedVideoModels.length > 0" class="mt-4">
+          <label class="input-label">{{ t('admin.accounts.video.durations') }}</label>
+          <div class="mt-2 space-y-3">
+            <div v-for="model in selectedVideoModels" :key="model">
+              <div class="text-xs font-medium text-gray-600 dark:text-gray-400">{{ model }}</div>
+              <div class="mt-1.5 flex flex-wrap gap-2">
+                <button
+                  v-for="seconds in videoModelDurations(model)"
+                  :key="seconds"
+                  type="button"
+                  :data-testid="`video-duration-${model}-${seconds}`"
+                  :aria-pressed="selectedVideoDurations[model]?.includes(seconds) ? 'true' : 'false'"
+                  @click="onVideoDurationToggle(model, seconds)"
+                  :class="[
+                    'rounded-lg border px-2.5 py-1 text-xs font-medium transition-all',
+                    selectedVideoDurations[model]?.includes(seconds)
+                      ? 'border-cyan-500 bg-cyan-50 text-cyan-700 dark:bg-cyan-900/20 dark:text-cyan-300'
+                      : 'border-gray-200 text-gray-500 hover:border-cyan-300 dark:border-dark-600 dark:text-gray-400'
+                  ]"
+                >
+                  {{ seconds }}s
+                </button>
+              </div>
+            </div>
+          </div>
+          <p class="input-hint">{{ t('admin.accounts.video.durationsHint') }}</p>
         </div>
       </div>
 
@@ -4060,13 +4100,17 @@ import { VERTEX_LOCATION_OPTIONS } from '@/constants/account'
 import {
   VIDEO_MODEL_CODES,
   defaultVideoModelResolutions,
-  isVideoResolutionServable,
-  pruneVideoModelResolutions,
   serializeVideoModelResolutions,
   toggleVideoResolution,
-  unsupportedVideoResolutions,
-  videoModelResolutions
+  videoModelResolutions,
+  videoProvidersServing
 } from '@/views/admin/videoModelResolutions'
+import {
+  defaultVideoModelDurations,
+  serializeVideoModelDurations,
+  toggleVideoDuration,
+  videoModelDurations
+} from '@/views/admin/videoModelDurations'
 import {
   OPENAI_WS_MODE_CTX_POOL,
   OPENAI_WS_MODE_OFF,
@@ -4506,6 +4550,15 @@ const videoProviderOptions: {
   }
 ]
 
+/** 模型多选下拉的展开状态。 */
+const videoModelDropdownOpen = ref(false)
+const selectedVideoProviderHint = computed(() => {
+  const provider = videoProviderOptions.find(
+    (item) => item.value === videoProvider.value
+  )
+  return provider ? t(provider.hintKey) : ''
+})
+
 const videoDefaultsFor = (provider: VideoProvider) =>
   videoProviderDefaultsMap[provider] ?? videoProviderDefaultsMap.aigod
 
@@ -4551,24 +4604,54 @@ const videoDefaultModels = VIDEO_MODEL_CODES
 const selectedVideoModels = ref<string[]>([...videoDefaultModels])
 /**
  * 每个模型在本账号实际支持的分辨率，提交进 extra.video_model_resolutions。
- * 默认勾上当前上游能服务的全部档位；上游服务不了的官方档位只展示、不可勾选。
+ * 默认勾上模型官方档位的全部档位；运营按该 key 实际支持的能力收敛，
+ * 上游硬约束（某上游根本不提供的档位）由适配器闸门在调度时兜底。
  */
 const selectedVideoResolutions = ref<Record<string, string[]>>(
-  defaultVideoModelResolutions(videoProvider.value)
+  defaultVideoModelResolutions()
+)
+/**
+ * 每个模型在本账号实际支持的生成时长，提交进 extra.video_model_durations。
+ * 语义与分辨率白名单一致：未配置 = 按模型规格全范围参与调度。
+ */
+const selectedVideoDurations = ref<Record<string, number[]>>(
+  defaultVideoModelDurations()
 )
 
-/** 上游平台名，用于「该上游不提供 xxx」的提示文案。 */
-const videoProviderLabel = computed(() =>
-  t(`admin.accounts.video.providers.${videoProvider.value}`)
+/** 上游平台与模型联动：下拉里只保留能服务当前所选全部模型的平台。 */
+const availableVideoProviders = computed(() => {
+  const serving = videoProvidersServing(selectedVideoModels.value)
+  return videoProviderOptions.filter((provider) => serving.includes(provider.value))
+})
+// 所选模型变化后，当前平台若不再匹配则自动切到第一个可服务平台
+// （videoProvider 的 watch 会同步端点与超时默认值）；immediate 保证打开弹窗时
+// 初始平台就与默认全选的模型集一致。
+watch(
+  availableVideoProviders,
+  (providers) => {
+    if (providers.length === 0) return
+    if (!providers.some((provider) => provider.value === videoProvider.value)) {
+      videoProvider.value = providers[0].value
+    }
+  },
+  { immediate: true }
 )
 
-/** 勾选/取消一个档位；上游服务不了的档位直接忽略（按钮本身也是 disabled）。 */
+/** 勾选/取消一个分辨率档位。 */
 const onVideoResolutionToggle = (model: string, resolution: string) => {
   selectedVideoResolutions.value = toggleVideoResolution(
     selectedVideoResolutions.value,
-    videoProvider.value,
     model,
     resolution
+  )
+}
+
+/** 勾选/取消一个时长档位。 */
+const onVideoDurationToggle = (model: string, seconds: number) => {
+  selectedVideoDurations.value = toggleVideoDuration(
+    selectedVideoDurations.value,
+    model,
+    seconds
   )
 }
 
@@ -4576,6 +4659,12 @@ const onVideoResolutionToggle = (model: string, resolution: string) => {
 const videoModelResolutionsPayload = () =>
   serializeVideoModelResolutions(
     selectedVideoResolutions.value,
+    selectedVideoModels.value
+  )
+
+const videoModelDurationsPayload = () =>
+  serializeVideoModelDurations(
+    selectedVideoDurations.value,
     selectedVideoModels.value
   )
 
@@ -4607,16 +4696,12 @@ const toggleVideoModel = (model: string) => {
 
 /**
  * 视频账号一律使用白名单模式：勾选的模型写入 credentials.model_mapping 白名单。
- * 同时把分辨率勾选收敛到当前上游真正能服务的档位（切换上游后旧勾选可能失效）。
+ * 模型/档位与上游解耦，切换上游不再收敛勾选——上游能力差异由适配器闸门兜底。
  */
-const applyVideoProviderModelDefaults = () => {
+const applyVideoModelDefaults = () => {
   modelRestrictionMode.value = 'whitelist'
   allowedModels.value = [...selectedVideoModels.value]
   modelMappings.value = []
-  selectedVideoResolutions.value = pruneVideoModelResolutions(
-    selectedVideoResolutions.value,
-    videoProvider.value
-  )
 }
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
@@ -5051,7 +5136,7 @@ watch(
         videoPollTimeoutMs.value = videoProviderDefaults.value.pollTimeoutMs
         videoRequestTimeoutMs.value = videoProviderDefaults.value.requestTimeoutMs
         videoConnectTimeoutMs.value = videoProviderDefaults.value.connectTimeoutMs
-        applyVideoProviderModelDefaults()
+        applyVideoModelDefaults()
       } else if (isImageMode.value) {
         // 图片账号：平台固定走标准图片接口的 openai / gemini，凭证走 API Key。
         // 模型清单交给原版选择器（「同步上游支持的模型」/ 白名单 / 映射），这里不预置
@@ -5174,14 +5259,15 @@ watch(
       form.load_factor = null
       videoProvider.value = 'aigod'
       selectedVideoModels.value = [...videoDefaultModels]
-      selectedVideoResolutions.value = defaultVideoModelResolutions('aigod')
+      selectedVideoResolutions.value = defaultVideoModelResolutions()
+      selectedVideoDurations.value = defaultVideoModelDurations()
       apiKeyBaseUrl.value = videoProviderDefaults.value.baseUrl
       videoAPIPath.value = videoProviderDefaults.value.apiPath
       videoPollIntervalMs.value = videoProviderDefaults.value.pollIntervalMs
       videoPollTimeoutMs.value = videoProviderDefaults.value.pollTimeoutMs
       videoRequestTimeoutMs.value = videoProviderDefaults.value.requestTimeoutMs
       videoConnectTimeoutMs.value = videoProviderDefaults.value.connectTimeoutMs
-      applyVideoProviderModelDefaults()
+      applyVideoModelDefaults()
     }
     if (newPlatform !== 'gemini' && newPlatform !== 'anthropic' && accountCategory.value === 'service_account') {
       accountCategory.value = 'oauth-based'
@@ -5256,7 +5342,7 @@ watch(videoProvider, (_newProvider, oldProvider) => {
     videoConnectTimeoutMs.value = videoProviderDefaults.value.connectTimeoutMs
   }
   if (form.platform === 'video') {
-    applyVideoProviderModelDefaults()
+    applyVideoModelDefaults()
   }
 })
 
@@ -5686,7 +5772,8 @@ const resetForm = () => {
   videoRequestTimeoutMs.value = videoProviderDefaultsMap.aigod.requestTimeoutMs
   videoConnectTimeoutMs.value = videoProviderDefaultsMap.aigod.connectTimeoutMs
   selectedVideoModels.value = [...videoDefaultModels]
-  selectedVideoResolutions.value = defaultVideoModelResolutions('aigod')
+  selectedVideoResolutions.value = defaultVideoModelResolutions()
+  selectedVideoDurations.value = defaultVideoModelDurations()
   upstreamBillingAutoProbeEnabled.value = true
   editQuotaLimit.value = null
   editQuotaDailyLimit.value = null
@@ -6248,6 +6335,7 @@ const handleSubmit = async () => {
   form.credentials = credentials
   // 分辨率白名单：没有任何勾选时不写该键（键缺失 = 不限制分辨率，与旧行为一致）。
   const videoResolutionsExtra = videoModelResolutionsPayload()
+  const videoDurationsExtra = videoModelDurationsPayload()
   const extra = form.platform === 'video'
     ? {
         video_provider: videoProvider.value,
@@ -6258,6 +6346,7 @@ const handleSubmit = async () => {
         request_timeout_ms: Number(videoRequestTimeoutMs.value) || videoProviderDefaults.value.requestTimeoutMs,
         connect_timeout_ms: Number(videoConnectTimeoutMs.value) || videoProviderDefaults.value.connectTimeoutMs,
         ...(videoResolutionsExtra ? { video_model_resolutions: videoResolutionsExtra } : {}),
+        ...(videoDurationsExtra ? { video_model_durations: videoDurationsExtra } : {}),
       }
     : {
         ...buildAnthropicExtra(buildOpenAIExtra()),

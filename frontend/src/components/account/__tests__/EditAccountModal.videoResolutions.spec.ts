@@ -116,6 +116,9 @@ function mountModal(account: ReturnType<typeof buildVideoAccount>) {
 const resolutionChip = (wrapper: ReturnType<typeof mount>, model: string, resolution: string) =>
   wrapper.get(`[data-testid="video-resolution-${model}-${resolution}"]`)
 
+const durationChip = (wrapper: ReturnType<typeof mount>, model: string, seconds: number) =>
+  wrapper.get(`[data-testid="video-duration-${model}-${seconds}"]`)
+
 async function submitEdit(wrapper: ReturnType<typeof mount>) {
   await wrapper.get('form#edit-account-form').trigger('submit.prevent')
   await flushPromises()
@@ -136,42 +139,53 @@ describe('EditAccountModal video resolutions', () => {
 
     expect(resolutionChip(wrapper, 'seedance-2.0', '720p').attributes('aria-pressed')).toBe('true')
     expect(resolutionChip(wrapper, 'seedance-2.0', '1080p').attributes('aria-pressed')).toBe('true')
-    // newtoken 不提供 480p/4K：禁用且不勾选。
-    expect(resolutionChip(wrapper, 'seedance-2.0', '480p').attributes('disabled')).toBeDefined()
+    // 已保存之外 official 档位未勾选但可点：不再按上游禁用。
+    expect(resolutionChip(wrapper, 'seedance-2.0', '480p').attributes('disabled')).toBeUndefined()
     expect(resolutionChip(wrapper, 'seedance-2.0', '480p').attributes('aria-pressed')).toBe('false')
-    expect(resolutionChip(wrapper, 'seedance-2.0', '4K').attributes('disabled')).toBeDefined()
-    // 未在 extra 中配置的模型 => 后端语义是"不限制"，界面应显示该上游可服务的全部档位。
+    expect(resolutionChip(wrapper, 'seedance-2.0', '4K').attributes('disabled')).toBeUndefined()
+    // 未在 extra 中配置的模型 => 后端语义是"不限制"，界面应显示全部官方档位。
     // 若显示为空，运营会误以为这个账号不支持该模型，与后端行为相反。
     expect(resolutionChip(wrapper, 'seedance-2.5', '720p').attributes('aria-pressed')).toBe('true')
   })
 
   it('saves the edited whitelist back into extra and keeps the other extras', async () => {
     const wrapper = mountModal(
-      buildVideoAccount({ video_model_resolutions: { 'seedance-2.0': ['720p', '1080p'] } })
+      buildVideoAccount({
+        video_model_resolutions: { 'seedance-2.0': ['720p', '1080p'] },
+        video_model_durations: { 'seedance-2.0': [5, 10] },
+      })
     )
     await flushPromises()
 
     await resolutionChip(wrapper, 'seedance-2.0', '1080p').trigger('click')
+    await durationChip(wrapper, 'seedance-2.0', 10).trigger('click')
     await flushPromises()
 
     const payload = await submitEdit(wrapper)
+    // 未配置过的模型按官方全档提交（等价于不限制，但把当前意图显式固化）。
     expect(payload.extra.video_model_resolutions).toEqual({
       'seedance-2.0': ['720p'],
-      // 未配置过的模型按默认全档位提交（等价于不限制，但把当前意图显式固化）。
-      'seedance-2.0-fast': ['720p'],
-      'seedance-2.5': ['720p', '1080p'],
+      'seedance-2.0-fast': ['480p', '720p'],
+      'seedance-2.5': ['480p', '720p', '1080p'],
+      'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
+      'kling-v3-omni': ['720p', '1080p', '4K'],
     })
+    expect(payload.extra.video_model_durations['seedance-2.0']).toEqual([5])
+    expect(payload.extra.video_model_durations['seedance-2.0-fast']).toEqual(
+      [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    )
     expect(payload.extra.video_provider).toBe('newtoken')
     expect(payload.extra.poll_interval_ms).toBe(5000)
   })
 
-  it('defaults an unconfigured account to every servable resolution and can narrow it', async () => {
-    const account = buildVideoAccount({ video_provider: 'aigod' })
+  it('defaults an unconfigured account to every official tier and can narrow it', async () => {
+    const account = buildVideoAccount()
     delete (account.extra as Record<string, unknown>).video_model_resolutions
+    delete (account.extra as Record<string, unknown>).video_model_durations
     const wrapper = mountModal(account)
     await flushPromises()
 
-    // aigod 未配置过 => 官方档位全勾（含 4K：目录里有 seedance-2.0-4k）。
+    // 未配置过 => 官方档位全勾（含 4K）。
     expect(resolutionChip(wrapper, 'seedance-2.0', '480p').attributes('aria-pressed')).toBe('true')
     expect(resolutionChip(wrapper, 'seedance-2.0', '4K').attributes('aria-pressed')).toBe('true')
     expect(resolutionChip(wrapper, 'seedance-2.0', '4K').attributes('disabled')).toBeUndefined()
@@ -187,6 +201,8 @@ describe('EditAccountModal video resolutions', () => {
       'seedance-2.0': ['720p', '1080p', '4K'],
       'seedance-2.0-fast': ['480p', '720p'],
       'seedance-2.5': ['480p', '720p', '1080p'],
+      'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
+      'kling-v3-omni': ['720p', '1080p', '4K'],
     })
   })
 
@@ -205,39 +221,48 @@ describe('EditAccountModal video resolutions', () => {
     const payload = await submitEdit(wrapper)
     expect(payload.extra.video_model_resolutions).toEqual({
       'seedance-2.0': ['720p'],
-      'seedance-2.0-fast': ['720p'],
-      'seedance-2.5': ['720p', '1080p'],
+      'seedance-2.0-fast': ['480p', '720p'],
+      'seedance-2.5': ['480p', '720p', '1080p'],
+      'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
+      'kling-v3-omni': ['720p', '1080p', '4K'],
     })
     expect(payload.extra.video_provider).toBe('newtoken')
   })
 
-  it('re-derives availability when the upstream is switched', async () => {
+  it('keeps resolution checks untouched when the upstream is switched', async () => {
     const wrapper = mountModal(
       buildVideoAccount({ video_model_resolutions: { 'seedance-2.0': ['1080p'] } })
     )
     await flushPromises()
 
-    // newtoken -> aigod：480p/1080p 都可服务，已保存的 1080p 保留。
+    // 模型/档位与上游解耦：切上游只影响端点等默认值，勾选原样保留。
     await wrapper.get('select').setValue('aigod')
     await flushPromises()
-    expect(resolutionChip(wrapper, 'seedance-2.0', '480p').attributes('disabled')).toBeUndefined()
     expect(resolutionChip(wrapper, 'seedance-2.0', '1080p').attributes('aria-pressed')).toBe('true')
+    expect(resolutionChip(wrapper, 'seedance-2.0', '480p').attributes('disabled')).toBeUndefined()
 
-    await resolutionChip(wrapper, 'seedance-2.0', '480p').trigger('click')
-    await flushPromises()
-
-    // aigod -> newtoken：480p 不再可服务，勾选被丢弃。
     await wrapper.get('select').setValue('newtoken')
     await flushPromises()
-    expect(resolutionChip(wrapper, 'seedance-2.0', '480p').attributes('disabled')).toBeDefined()
-    expect(resolutionChip(wrapper, 'seedance-2.0', '480p').attributes('aria-pressed')).toBe('false')
+    expect(resolutionChip(wrapper, 'seedance-2.0', '1080p').attributes('aria-pressed')).toBe('true')
 
     const payload = await submitEdit(wrapper)
     expect(payload.extra.video_provider).toBe('newtoken')
-    expect(payload.extra.video_model_resolutions).toEqual({
-      'seedance-2.0': ['1080p'],
-      'seedance-2.0-fast': ['720p'],
-      'seedance-2.5': ['720p', '1080p'],
-    })
+    expect(payload.extra.video_model_resolutions['seedance-2.0']).toEqual(['1080p'])
+  })
+
+  it('renders duration chips for every model and restores saved durations', async () => {
+    const wrapper = mountModal(
+      buildVideoAccount({ video_model_durations: { 'seedance-2.0-fast': [5, 10] } })
+    )
+    await flushPromises()
+
+    // grok 从 1 秒起、可灵从 3 秒起；已保存之外的可点但未勾选。
+    expect(durationChip(wrapper, 'grok-imagine-video-1.5', 1).attributes('aria-pressed')).toBe('true')
+    expect(durationChip(wrapper, 'kling-v3-omni', 3).attributes('aria-pressed')).toBe('true')
+    expect(wrapper.find('[data-testid="video-duration-kling-v3-omni-1"]').exists()).toBe(false)
+    expect(durationChip(wrapper, 'seedance-2.0-fast', 5).attributes('aria-pressed')).toBe('true')
+    expect(durationChip(wrapper, 'seedance-2.0-fast', 10).attributes('aria-pressed')).toBe('true')
+    expect(durationChip(wrapper, 'seedance-2.0-fast', 8).attributes('aria-pressed')).toBe('false')
+    expect(durationChip(wrapper, 'seedance-2.0-fast', 8).attributes('disabled')).toBeUndefined()
   })
 })
