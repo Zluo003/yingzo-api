@@ -40,6 +40,12 @@ const getUserTimezone = (): string => {
 
 apiClient.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
+    // Let the browser add the multipart boundary for file uploads. The Axios
+    // instance has a JSON default, but keeping that header on FormData makes
+    // Gin treat the request as JSON and silently drops PostForm/FormFile.
+    if (typeof FormData !== 'undefined' && config.data instanceof FormData && config.headers) {
+      delete config.headers['Content-Type']
+    }
     // Attach token from localStorage
     const token = localStorage.getItem('auth_token')
     if (token && config.headers) {
