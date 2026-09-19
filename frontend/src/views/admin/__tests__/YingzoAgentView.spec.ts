@@ -35,6 +35,12 @@ vi.mock('vue-router', () => ({
   RouterLink: { template: '<a><slot /></a>' },
 }))
 
+// AppLayout 会拉起完整的 i18n/stores 初始化，与上面的 vue-i18n mock 冲突；
+// 布局壳不参与本页断言，直接透传 slot。
+vi.mock('@/components/layout/AppLayout.vue', () => ({
+  default: { template: '<div><slot /></div>' },
+}))
+
 const AGENT_GROUP = {
   id: 7,
   name: 'Yingzo Agent',

@@ -1,5 +1,6 @@
 <template>
-  <div class="space-y-6" data-testid="yingzo-agent-view">
+  <AppLayout>
+    <div class="space-y-6" data-testid="yingzo-agent-view">
     <!-- 分组概览 -->
     <div class="card p-6">
       <div class="flex flex-wrap items-start justify-between gap-4">
@@ -280,12 +281,14 @@
       </div>
     </div>
 
-  </div>
+    </div>
+  </AppLayout>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import AppLayout from '@/components/layout/AppLayout.vue'
 import { adminAPI } from '@/api'
 import {
   agentModelsAPI,
