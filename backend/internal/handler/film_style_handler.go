@@ -57,6 +57,21 @@ func (h *AgentHandler) styleTemplatesDir() string {
 	return h.styleDir
 }
 
+// withinStyleDir 报告 path 是否严格位于 base 目录内部（含路径清洗，拒绝
+// 绝对路径与 .. 上跳），用于把持久化 storage_key 约束在样式目录之内。
+func withinStyleDir(base, path string) bool {
+	if base == "" || path == "" {
+		return false
+	}
+	cleanBase := filepath.Clean(base)
+	cleanPath := filepath.Clean(path)
+	rel, err := filepath.Rel(cleanBase, cleanPath)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 func (h *AgentHandler) queryFilmStyles(includeArchived bool) ([]filmStyleTemplate, error) {
 	if h == nil || h.db == nil {
 		return nil, fmt.Errorf("film style storage is unavailable")
@@ -69,7 +84,7 @@ func (h *AgentHandler) queryFilmStyles(includeArchived bool) ([]filmStyleTemplat
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	styles := make([]filmStyleTemplate, 0)
 	for rows.Next() {
 		var item filmStyleTemplate
@@ -134,7 +149,7 @@ func (h *AgentHandler) ServeFilmStylePreview(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	stat, err := file.Stat()
 	if err != nil {
 		c.Status(http.StatusNotFound)
@@ -168,7 +183,7 @@ func (h *AgentHandler) AdminCreateFilmStyleTemplate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": "preview image is required"}})
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	item, err := h.saveFilmStyleTemplate(c, "", category, name, prompt, 0, file, header.Filename)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"message": err.Error()}})
@@ -197,7 +212,7 @@ func (h *AgentHandler) AdminUpdateFilmStyleTemplate(c *gin.Context) {
 	var file io.Reader
 	var filename string
 	if upload, header, uploadErr := c.Request.FormFile("preview"); uploadErr == nil {
-		defer upload.Close()
+		defer func() { _ = upload.Close() }()
 		file, filename = upload, header.Filename
 	}
 	item, err := h.saveFilmStyleTemplate(c, current.ID, category, name, prompt, current.Revision, file, filename)
@@ -288,8 +303,15 @@ func (h *AgentHandler) saveFilmStyleTemplate(c *gin.Context, id, category, name,
 			ext = "png"
 		}
 		storageKey = filepath.ToSlash(filepath.Join(id, strconv.Itoa(revision), "preview."+ext))
-		oldPath := filepath.Join(h.styleTemplatesDir(), filepath.FromSlash(current.StorageKey))
-		newPath := filepath.Join(h.styleTemplatesDir(), filepath.FromSlash(storageKey))
+		base := h.styleTemplatesDir()
+		oldPath := filepath.Join(base, filepath.FromSlash(current.StorageKey))
+		newPath := filepath.Join(base, filepath.FromSlash(storageKey))
+		// storage_key 理论上只由服务端生成（id/revision/preview.ext），这里仍然
+		// 校验解析结果不逃出样式目录，防止任何持久化数据被篡改后越界读写。
+		if !withinStyleDir(base, oldPath) || !withinStyleDir(base, newPath) {
+			return filmStyleTemplate{}, fmt.Errorf("preview storage key escapes the style directory")
+		}
+		//nolint:gosec // storage key 由服务端生成且已通过 withinStyleDir 包含性校验
 		if data, readErr := os.ReadFile(oldPath); readErr == nil {
 			if err := os.MkdirAll(filepath.Dir(newPath), 0700); err != nil {
 				return filmStyleTemplate{}, err

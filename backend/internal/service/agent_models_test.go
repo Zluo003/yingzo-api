@@ -97,7 +97,7 @@ func (r *agentModelMemoryRepo) SyncDiscovered(_ context.Context, groupID int64, 
 		if model == nil {
 			model = &AgentGroupModel{
 				ID: r.nextID, GroupID: groupID, Platform: item.Platform, ModelCode: item.ModelCode,
-				MediaType: item.MediaType, Enabled: true, DiscoveredAt: seenAt, CreatedAt: seenAt,
+				MediaType: item.MediaType, Enabled: false, DiscoveredAt: seenAt, CreatedAt: seenAt,
 				Prices: []AgentModelPrice{},
 			}
 			r.nextID++
@@ -117,7 +117,7 @@ func (r *agentModelMemoryRepo) EnsureDiscovered(_ context.Context, groupID int64
 		if model == nil {
 			model = &AgentGroupModel{
 				ID: r.nextID, GroupID: groupID, Platform: item.Platform, ModelCode: item.ModelCode,
-				MediaType: item.MediaType, Enabled: true, DiscoveredAt: seenAt, CreatedAt: seenAt,
+				MediaType: item.MediaType, Enabled: false, DiscoveredAt: seenAt, CreatedAt: seenAt,
 				Prices: []AgentModelPrice{},
 			}
 			r.nextID++
@@ -187,14 +187,10 @@ func (r *agentModelMemoryRepo) UpdateModelConfig(_ context.Context, groupID, mod
 	return sql.ErrNoRows
 }
 
-func (r *agentModelMemoryRepo) ExcludeModel(_ context.Context, groupID, modelID int64, excludedAt time.Time) error {
-	for _, model := range r.models {
-		if model.GroupID == groupID && model.ID == modelID && !model.Excluded {
-			model.Enabled = false
-			model.Available = false
-			model.Excluded = true
-			model.ExcludedAt = &excludedAt
-			model.Prices = []AgentModelPrice{}
+func (r *agentModelMemoryRepo) DeleteModel(_ context.Context, groupID, modelID int64) error {
+	for key, model := range r.models {
+		if model.GroupID == groupID && model.ID == modelID {
+			delete(r.models, key)
 			return nil
 		}
 	}
@@ -224,6 +220,15 @@ func setAgentTextModelRate(t *testing.T, repo *agentModelMemoryRepo, groupID int
 	model.RateMultiplier = &value
 }
 
+// enableAllAgentModelsForTest 把内存仓库里的模型全部置为启用：同步/自愈新建的
+// 行默认未启用（下游可见性由管理端启用开关把关），目录结构类测试只关心发现与
+// 下发链路，不关心逐个启用的流程。
+func enableAllAgentModelsForTest(repo *agentModelMemoryRepo) {
+	for _, model := range repo.models {
+		model.Enabled = true
+	}
+}
+
 func newAgentCatalogForTest(accounts *agentCatalogAccountRepoStub) (*AgentModelCatalogService, *agentModelMemoryRepo) {
 	models := newAgentModelMemoryRepo()
 	group := &agentCatalogGroupRepoStub{group: &Group{ID: 9, Kind: "agent", SystemCode: "yingzo"}}
@@ -248,9 +253,10 @@ func TestAgentModelCatalogSyncsAssignedAccountMappingsAcrossNativeProviders(t *t
 		{ID: 8, Platform: PlatformZhipu, Credentials: map[string]any{"model_mapping": map[string]any{"glm-5": "glm-5"}}},
 		{ID: 9, Platform: PlatformMiniMax, Credentials: map[string]any{"model_mapping": map[string]any{"MiniMax-M3": "MiniMax-M3"}}},
 	}}
-	catalogService, _ := newAgentCatalogForTest(accounts)
+	catalogService, models := newAgentCatalogForTest(accounts)
 	_, err := catalogService.Sync(context.Background(), 9)
 	require.NoError(t, err)
+	enableAllAgentModelsForTest(models)
 
 	catalog, err := catalogService.ListAvailable(context.Background(), 9)
 	require.NoError(t, err)
@@ -292,9 +298,10 @@ func TestZhipuGLM53CatalogAdvertisesChatAndAnthropicMessages(t *testing.T) {
 			"glm-5.3": "glm-5.3", "glm-5.3-flash": "glm-5.3-flash",
 		}},
 	}}}
-	catalogService, _ := newAgentCatalogForTest(accounts)
+	catalogService, models := newAgentCatalogForTest(accounts)
 	_, err := catalogService.Sync(context.Background(), 9)
 	require.NoError(t, err)
+	enableAllAgentModelsForTest(models)
 	catalog, err := catalogService.ListAvailable(context.Background(), 9)
 	require.NoError(t, err)
 	byID := map[string]AgentModelCatalogEntry{}
@@ -339,6 +346,7 @@ func TestAgentModelCatalogResolvesModelPlatform(t *testing.T) {
 	catalogService, models := newAgentCatalogForTest(accounts)
 	_, err := catalogService.Sync(context.Background(), 9)
 	require.NoError(t, err)
+	enableAllAgentModelsForTest(models)
 
 	platform, found, err := catalogService.ResolveModelPlatform(context.Background(), 9, "deepseek-v4-pro")
 	require.NoError(t, err)
@@ -381,9 +389,10 @@ func TestAgentModelCatalogDiscoversSeedanceFastFromAccountMapping(t *testing.T) 
 			VideoModelSeedance20Fast: "seedance-upstream-fast",
 		}},
 	}}}
-	catalogService, _ := newAgentCatalogForTest(accounts)
+	catalogService, models := newAgentCatalogForTest(accounts)
 	_, err := catalogService.Sync(context.Background(), 9)
 	require.NoError(t, err)
+	enableAllAgentModelsForTest(models)
 
 	catalog, err := catalogService.ListAvailable(context.Background(), 9)
 	require.NoError(t, err)
@@ -398,15 +407,18 @@ func TestAgentModelCatalogExpandsLanguageAndImageWildcardsAgainstProviderDefault
 		Platform:    PlatformOpenAI,
 		Credentials: map[string]any{"model_mapping": map[string]any{"gpt-image-*": "upstream-image"}},
 	}}}
-	catalogService, _ := newAgentCatalogForTest(accounts)
+	catalogService, models := newAgentCatalogForTest(accounts)
 	_, err := catalogService.Sync(context.Background(), 9)
 	require.NoError(t, err)
+	enableAllAgentModelsForTest(models)
 	catalog, err := catalogService.ListAvailable(context.Background(), 9)
 	require.NoError(t, err)
 	require.Equal(t, []string{"gpt-image-1", "gpt-image-1.5", "gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"}, agentCatalogIDsForTest(catalog))
 }
 
-func TestAgentModelCatalogPreservesExclusionAcrossSync(t *testing.T) {
+// 删除 = 真删除，不是永久排除：行被删掉后，账号仍声明该模型时，下一次同步
+// 会把它作为"未启用"的新行带回来；管理员重新启用前，下游目录始终看不到它。
+func TestAgentModelCatalogDeletedModelReturnsAsDisabledOnNextSync(t *testing.T) {
 	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
 		Platform:    PlatformOpenAI,
 		Credentials: map[string]any{"model_mapping": map[string]any{"gpt-5.4": "gpt-5.4"}},
@@ -415,18 +427,31 @@ func TestAgentModelCatalogPreservesExclusionAcrossSync(t *testing.T) {
 	config, err := catalogService.Sync(context.Background(), 9)
 	require.NoError(t, err)
 	require.Len(t, config.Models, 1)
-	_, err = catalogService.ExcludeModel(context.Background(), 9, config.Models[0].ID)
+	modelID := config.Models[0].ID
+
+	_, err = catalogService.DeleteModel(context.Background(), 9, modelID)
 	require.NoError(t, err)
-	_, err = catalogService.Sync(context.Background(), 9)
+	all, err := models.ListModels(context.Background(), 9, true)
 	require.NoError(t, err)
+	require.Empty(t, all, "deleted row must be gone from the table, not soft-excluded")
+
+	config, err = catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	require.Len(t, config.Models, 1)
+	require.False(t, config.Models[0].Enabled, "re-synced model returns as a disabled row")
 
 	visible, err := catalogService.ListAvailable(context.Background(), 9)
 	require.NoError(t, err)
-	require.Empty(t, visible)
-	all, err := models.ListModels(context.Background(), 9, true)
+	require.Empty(t, visible, "a model that was never enabled must not be advertised")
+
+	rate := 1.0
+	_, err = catalogService.UpdateModel(context.Background(), 9, config.Models[0].ID, AgentModelConfigInput{
+		MediaType: AgentMediaTypeText, Enabled: true, RateMultiplier: &rate,
+	})
 	require.NoError(t, err)
-	require.True(t, all[0].Excluded)
-	require.False(t, all[0].Enabled)
+	visible, err = catalogService.ListAvailable(context.Background(), 9)
+	require.NoError(t, err)
+	require.Equal(t, []string{"gpt-5.4"}, agentCatalogIDsForTest(visible))
 }
 
 func TestAgentModelPricingSupportsExplicitZeroModelPrices(t *testing.T) {
@@ -487,6 +512,7 @@ func TestAgentVideoModelsRemainVisibleWhenAccountIsTemporarilyUnschedulable(t *t
 	require.Len(t, config.Models, 1)
 	video := models.models[agentModelKey(PlatformVideo, VideoModelSeedance20)]
 	require.NotNil(t, video)
+	video.Enabled = true
 	video.Prices = []AgentModelPrice{{Resolution: VideoResolution720P, BillingUnit: AgentBillingUnitSecond, UnitPrice: 2}}
 
 	visible, err := catalogService.ListAvailable(context.Background(), 9)
@@ -673,6 +699,8 @@ func TestEnsureAgentImageModelPriced(t *testing.T) {
 	catalogService, repo := newAgentCatalogForTest(accounts)
 	_, err := catalogService.Sync(context.Background(), 9)
 	require.NoError(t, err)
+	// 入口检查针对"已启用并开始接流"的模型：先把账号声明的图片模型启用。
+	repo.models[agentModelKey(PlatformGemini, "gemini-3-pro-image")].Enabled = true
 
 	isImage, err := catalogService.EnsureAgentImageModelPriced(context.Background(), 9, PlatformGemini, "gemini-3-pro-image")
 	require.True(t, isImage)
@@ -701,6 +729,7 @@ func TestValidateAgentRequestPricingUsesImageRulesForImageModels(t *testing.T) {
 	require.NoError(t, err)
 	imageModel := repo.models[agentModelKey(PlatformGemini, "gemini-3-pro-image")]
 	require.NotNil(t, imageModel)
+	imageModel.Enabled = true
 	imageModel.Prices = agentTestImagePrices("1K")
 
 	svc := &GatewayService{resolver: &ModelPricingResolver{agentModelCatalog: catalogService}}
@@ -823,29 +852,59 @@ func image25CatalogIDs(catalog []AgentModelCatalogEntry) []string {
 	return ids
 }
 
-// 图片账号绑进 Agent 分组后，即便从没跑过管理端"同步"，下一次目录读取也必须
-// 返回它声明的模型（读路径自愈补行）。
+// 图片账号绑进 Agent 分组后，即便从没跑过管理端"同步"，管理页和目录读路径
+// 也会自愈补行。但补回的行默认未启用：管理页能看到并配价启用，下游目录在
+// 管理员启用之前始终看不到。
 func TestListAvailableHealsMissingModelRowsWithoutManualSync(t *testing.T) {
 	catalogService, models := newAgentCatalogForTest(newImage25AccountStub())
 
-	catalog, err := catalogService.ListAvailable(context.Background(), 9)
-	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"}, image25CatalogIDs(catalog))
-
-	// 自愈必须落库：后续 GetConfig 直接能看到同一批行（启用且可用）。
 	config, err := catalogService.GetConfig(context.Background(), 9)
 	require.NoError(t, err)
 	require.Len(t, config.Models, 2)
 	for _, model := range config.Models {
 		require.Equal(t, AgentMediaTypeImage, model.MediaType)
-		require.True(t, model.Enabled)
+		require.False(t, model.Enabled, "healed rows start disabled until the admin enables them")
 		require.True(t, model.Available)
 	}
 	require.Len(t, models.models, 2)
+
+	visible, err := catalogService.ListAvailable(context.Background(), 9)
+	require.NoError(t, err)
+	require.Empty(t, visible)
+
+	// 管理员配价 + 启用（走 UpdateModel 的服务层校验）后才对下游可见。
+	for _, model := range config.Models {
+		_, err = catalogService.UpdateModel(context.Background(), 9, model.ID, AgentModelConfigInput{
+			MediaType: AgentMediaTypeImage, Enabled: true,
+			Prices: []AgentModelPrice{
+				{Resolution: ImageBillingSize1K, UnitPrice: 0.2},
+				{Resolution: ImageBillingSize2K, UnitPrice: 0.3},
+				{Resolution: ImageBillingSize4K, UnitPrice: 0.4},
+			},
+		})
+		require.NoError(t, err)
+	}
+	visible, err = catalogService.ListAvailable(context.Background(), 9)
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"}, image25CatalogIDs(visible))
+
+	// 删除 = 真删除：行消失后，节流窗口一过，读取自愈把它作为未启用的新行带回。
+	for _, model := range config.Models {
+		_, err = catalogService.DeleteModel(context.Background(), 9, model.ID)
+		require.NoError(t, err)
+	}
+	visible, err = catalogService.ListAvailable(context.Background(), 9)
+	require.NoError(t, err)
+	require.Empty(t, image25CatalogIDs(visible), "a deleted model must not be advertised until re-enabled")
+	catalogService.lastHealAt = nil
+	config, err = catalogService.GetConfig(context.Background(), 9)
+	require.NoError(t, err)
+	require.Len(t, config.Models, 2, "the healing read path must bring deleted rows back")
+	require.False(t, config.Models[0].Enabled)
 }
 
-// 自愈只增不减：管理员停用（enabled=false）与人工排除（excluded）的行永远
-// 不会被自愈翻回启用，目录也不得重新收录它们。
+// 自愈只增不减：管理员停用（enabled=false）与排除（excluded，防御性保留）的
+// 行永远不会被自愈翻回启用，目录也不得重新收录它们。
 func TestListAvailableHealNeverResurrectsExcludedOrDisabledRows(t *testing.T) {
 	catalogService, models := newAgentCatalogForTest(newImage25AccountStub())
 	models.models[agentModelKey(PlatformOpenAI, "gpt-image-2.5-flare")] = &AgentGroupModel{

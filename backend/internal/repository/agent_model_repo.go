@@ -39,7 +39,7 @@ INSERT INTO agent_group_models (
     group_id, platform, model_code, media_type, enabled, available,
     excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at
 )
-VALUES ($1, $2, $3, $4, TRUE, TRUE, FALSE, NULL, $5, $5, $5, $5)
+VALUES ($1, $2, $3, $4, FALSE, TRUE, FALSE, NULL, $5, $5, $5, $5)
 ON CONFLICT (group_id, platform, model_code) DO UPDATE
 SET available = CASE WHEN agent_group_models.excluded THEN FALSE ELSE TRUE END,
     last_seen_at = EXCLUDED.last_seen_at,
@@ -69,7 +69,7 @@ INSERT INTO agent_group_models (
     group_id, platform, model_code, media_type, enabled, available,
     excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at
 )
-VALUES ($1, $2, $3, $4, TRUE, TRUE, FALSE, NULL, $5, $5, $5, $5)
+VALUES ($1, $2, $3, $4, FALSE, TRUE, FALSE, NULL, $5, $5, $5, $5)
 ON CONFLICT (group_id, platform, model_code) DO UPDATE
 SET available = CASE WHEN agent_group_models.excluded THEN FALSE ELSE TRUE END,
     last_seen_at = EXCLUDED.last_seen_at,
@@ -197,7 +197,11 @@ VALUES ($1, $2, $3, $4)
 	return tx.Commit()
 }
 
-func (r *agentModelRepository) ExcludeModel(ctx context.Context, groupID, modelID int64, excludedAt time.Time) error {
+// DeleteModel 把模型行从分组目录里硬删除（价格行经外键 ON DELETE CASCADE 一并
+// 清除）。删除是管理员的明确意图，但不是永久记忆：账号仍声明该模型时，下一次
+// 同步或读路径自愈会把它作为未启用的新行带回来，由管理员重新启用。需要"保留
+// 配置但下游不可见"请用启用开关（enabled=FALSE）。
+func (r *agentModelRepository) DeleteModel(ctx context.Context, groupID, modelID int64) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -205,11 +209,9 @@ func (r *agentModelRepository) ExcludeModel(ctx context.Context, groupID, modelI
 	defer func() { _ = tx.Rollback() }()
 
 	result, err := tx.ExecContext(ctx, `
-UPDATE agent_group_models
-SET enabled = FALSE, available = FALSE, excluded = TRUE,
-    excluded_at = $3, updated_at = $3
-WHERE group_id = $1 AND id = $2 AND excluded = FALSE
-`, groupID, modelID, excludedAt)
+DELETE FROM agent_group_models
+WHERE group_id = $1 AND id = $2
+`, groupID, modelID)
 	if err != nil {
 		return err
 	}
@@ -219,9 +221,6 @@ WHERE group_id = $1 AND id = $2 AND excluded = FALSE
 	}
 	if affected != 1 {
 		return sql.ErrNoRows
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM agent_model_prices WHERE agent_model_id = $1`, modelID); err != nil {
-		return err
 	}
 	return tx.Commit()
 }

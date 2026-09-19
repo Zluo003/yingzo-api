@@ -118,11 +118,11 @@ export default {
         },
         image: {
           title: 'Image models',
-          hint: 'Images are billed per image: fill in the 1K/2K/4K unit price for each model; an empty tier counts as unpriced.',
+          hint: 'Images are billed per image: fill in the 1K/2K/4K unit price for each model. A price tier doubles as the capability switch: configured tiers are advertised downstream; empty tiers stay disabled and are never sent.',
         },
         video: {
           title: 'Video models',
-          hint: 'Video is billed as generated seconds × per-second price: fill in the per-second price for each resolution; reference-video seconds are not billed.',
+          hint: 'Video is billed as generated seconds × per-second price: fill in the per-second price for each resolution; reference-video seconds are not billed. A price tier doubles as the capability switch: configured resolutions are advertised downstream; empty ones stay disabled and are never sent.',
         },
       },
     },

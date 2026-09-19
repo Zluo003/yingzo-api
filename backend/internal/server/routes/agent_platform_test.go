@@ -36,7 +36,7 @@ func (r *agentPlatformModelRepoStub) GetEnabledModel(context.Context, int64, str
 func (r *agentPlatformModelRepoStub) UpdateModelConfig(context.Context, int64, int64, string, bool, *float64, []service.AgentModelPrice) error {
 	return nil
 }
-func (r *agentPlatformModelRepoStub) ExcludeModel(context.Context, int64, int64, time.Time) error {
+func (r *agentPlatformModelRepoStub) DeleteModel(context.Context, int64, int64) error {
 	return nil
 }
 func agentPlatformCatalogForTest(models ...service.AgentGroupModel) *service.AgentModelCatalogService {

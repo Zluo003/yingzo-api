@@ -102,7 +102,7 @@ type AgentModelRepository interface {
 	GetModelByID(ctx context.Context, groupID, modelID int64) (*AgentGroupModel, error)
 	GetEnabledModel(ctx context.Context, groupID int64, platform, modelCode string) (*AgentGroupModel, error)
 	UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, prices []AgentModelPrice) error
-	ExcludeModel(ctx context.Context, groupID, modelID int64, excludedAt time.Time) error
+	DeleteModel(ctx context.Context, groupID, modelID int64) error
 }
 
 // agentModelDriftHealer 是 AgentModelRepository 的可选能力：只增不减的目录
@@ -238,6 +238,22 @@ func (s *AgentModelCatalogService) healAgentModelRows(ctx context.Context, group
 
 // healDiscoveredModelRows 在发现清单与现有行之间找漂移并补齐。补写受每分组
 // 节流约束，成功后失效平台缓存并重读行。
+// markHeal 记录某分组最近一次自愈/删除的时间戳，返回 false 表示距上次记录
+// 不足一个节流窗口，调用方应跳过本次自愈（DeleteModel 借此抑制紧接着的
+// GetConfig 把刚删的行立刻补回来）。
+func (s *AgentModelCatalogService) markHeal(groupID int64, at time.Time) bool {
+	s.healMu.Lock()
+	defer s.healMu.Unlock()
+	if s.lastHealAt == nil {
+		s.lastHealAt = make(map[int64]time.Time)
+	}
+	if at.Sub(s.lastHealAt[groupID]) < agentModelHealInterval {
+		return false
+	}
+	s.lastHealAt[groupID] = at
+	return true
+}
+
 func (s *AgentModelCatalogService) healDiscoveredModelRows(ctx context.Context, groupID int64, discovered []AgentModelDiscovery, models []AgentGroupModel) []AgentGroupModel {
 	healer, ok := s.modelRepo.(agentModelDriftHealer)
 	if !ok {
@@ -260,16 +276,9 @@ func (s *AgentModelCatalogService) healDiscoveredModelRows(ctx context.Context, 
 		return models
 	}
 	now := time.Now()
-	s.healMu.Lock()
-	if s.lastHealAt == nil {
-		s.lastHealAt = make(map[int64]time.Time)
-	}
-	if now.Sub(s.lastHealAt[groupID]) < agentModelHealInterval {
-		s.healMu.Unlock()
+	if !s.markHeal(groupID, now) {
 		return models
 	}
-	s.lastHealAt[groupID] = now
-	s.healMu.Unlock()
 	if err := healer.EnsureDiscovered(ctx, groupID, drift, now.UTC()); err != nil {
 		slog.Error("agent_model_catalog_heal_failed", "group_id", groupID, "error", err)
 		return models
@@ -313,16 +322,23 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 	return s.GetConfig(ctx, groupID)
 }
 
-func (s *AgentModelCatalogService) ExcludeModel(ctx context.Context, groupID, modelID int64) (*AgentModelCatalogConfig, error) {
+// DeleteModel 把模型从分组目录删除。删除不是永久排除：账号仍声明该模型时，
+// 下一次同步或读路径自愈会以未启用状态把它带回来，由管理员重新启用后下游
+// 才可见。需要"保留配置但下游不可见"应改用启用开关。
+func (s *AgentModelCatalogService) DeleteModel(ctx context.Context, groupID, modelID int64) (*AgentModelCatalogConfig, error) {
 	if err := s.requireAgentGroup(ctx, groupID); err != nil {
 		return nil, err
 	}
 	if _, err := s.modelRepo.GetModelByID(ctx, groupID, modelID); err != nil {
 		return nil, fmt.Errorf("get Agent model: %w", err)
 	}
-	if err := s.modelRepo.ExcludeModel(ctx, groupID, modelID, time.Now().UTC()); err != nil {
-		return nil, fmt.Errorf("exclude Agent model: %w", err)
+	if err := s.modelRepo.DeleteModel(ctx, groupID, modelID); err != nil {
+		return nil, fmt.Errorf("delete Agent model: %w", err)
 	}
+	// 删除后立即抑制本组的读路径自愈：否则本次返回的 GetConfig 会把刚删的行
+	// 马上补回来，删除形同无效。节流窗口过后，账号仍声明该模型时自愈才会以
+	// 未启用状态把它带回来。
+	s.markHeal(groupID, time.Now())
 	s.invalidateModelPlatforms(groupID)
 	return s.GetConfig(ctx, groupID)
 }

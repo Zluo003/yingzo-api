@@ -1252,7 +1252,7 @@ func (h *GroupHandler) DeleteAgentModel(c *gin.Context) {
 		response.BadRequest(c, "Invalid model ID")
 		return
 	}
-	if _, err := h.agentModels.ExcludeModel(c.Request.Context(), groupID, modelID); err != nil {
+	if _, err := h.agentModels.DeleteModel(c.Request.Context(), groupID, modelID); err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}

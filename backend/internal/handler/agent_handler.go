@@ -176,7 +176,9 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 		streaming = false
 		capabilities["max_input_images"] = 16
 		capabilities["supported_aspect_ratios"] = []string{"1:1", "16:9", "9:16"}
-		capabilities["supported_image_sizes"] = []string{"1K", "2K", "4K"}
+		// 与视频分辨率同一原则：只下发管理端配过价（=启用）的尺寸档位，未配置
+		// 的档位不下发，避免下游拿到上游不支持、也无法计费的能力参数。
+		capabilities["supported_image_sizes"] = configuredAgentModelResolutions(entry, config, service.AgentMediaTypeImage)
 	}
 	if containsAgentMediaType(entry.MediaTypes, service.AgentMediaTypeVideo) {
 		input = appendUniqueStrings(input, "text", "image", "video", "audio")
@@ -184,7 +186,7 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 		operations = appendUniqueStrings(operations, "video.generate")
 		streaming = false
 		asynchronous = true
-		capabilities["supported_video_resolutions"] = configuredAgentVideoResolutions(entry, config)
+		capabilities["supported_video_resolutions"] = configuredAgentModelResolutions(entry, config, service.AgentMediaTypeVideo)
 		// Duration is a per-model upstream constraint, not a fixed three-tier
 		// menu: the 2.0 family accepts 4-15s and 2.5 accepts 4-30s. Deriving it
 		// from the video spec keeps the catalog aligned with request validation.
@@ -273,15 +275,18 @@ func removeString(values []string, target string) []string {
 	return result
 }
 
-func configuredAgentVideoResolutions(entry service.AgentModelCatalogEntry, config *service.AgentModelCatalogConfig) []string {
+// configuredAgentModelResolutions 返回该模型在管理端显式配过价的分辨率/尺寸
+// 档位。价格档位就是能力开关：配置了 = 启用并下发；留空 = 未定价也不下发，
+// 下游永远不会拿到没有计费、上游可能不支持的能力参数。
+func configuredAgentModelResolutions(entry service.AgentModelCatalogEntry, config *service.AgentModelCatalogConfig, mediaType string) []string {
 	// The public aggregate entry intentionally omits pricing internals. When a
 	// configured model record is available, expose its explicitly priced tiers;
-	// the client will consequently never select an unpriced video resolution.
+	// the client will consequently never select an unpriced resolution.
 	seen := map[string]struct{}{}
 	result := make([]string, 0)
 	if config != nil {
 		for _, model := range config.Models {
-			if model.ModelCode != entry.ID || model.MediaType != service.AgentMediaTypeVideo || !model.Enabled || !model.Available || model.Excluded {
+			if model.ModelCode != entry.ID || model.MediaType != mediaType || !model.Enabled || !model.Available || model.Excluded {
 				continue
 			}
 			for _, price := range model.Prices {

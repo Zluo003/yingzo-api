@@ -67,22 +67,18 @@ func TestAgentModelRepositoryUpdateReplacesPricesInOneTransaction(t *testing.T) 
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestAgentModelRepositoryExcludeDisablesModelAndDeletesPricesAtomically(t *testing.T) {
+func TestAgentModelRepositoryDeleteRemovesModelRowAtomically(t *testing.T) {
 	repo, mock := newAgentModelRepositoryMock(t)
 	groupID := int64(5)
 	modelID := int64(19)
-	excludedAt := time.Date(2026, 7, 24, 4, 5, 6, 0, time.UTC)
 
 	mock.ExpectBegin()
-	mock.ExpectExec(`(?s)UPDATE agent_group_models\s+SET enabled = FALSE, available = FALSE, excluded = TRUE,\s+excluded_at = \$3, updated_at = \$3\s+WHERE group_id = \$1 AND id = \$2 AND excluded = FALSE`).
-		WithArgs(groupID, modelID, excludedAt).
+	mock.ExpectExec(`(?s)DELETE FROM agent_group_models\s+WHERE group_id = \$1 AND id = \$2`).
+		WithArgs(groupID, modelID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`DELETE FROM agent_model_prices WHERE agent_model_id = \$1`).
-		WithArgs(modelID).
-		WillReturnResult(sqlmock.NewResult(0, 3))
 	mock.ExpectCommit()
 
-	require.NoError(t, repo.ExcludeModel(context.Background(), groupID, modelID, excludedAt))
+	require.NoError(t, repo.DeleteModel(context.Background(), groupID, modelID))
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

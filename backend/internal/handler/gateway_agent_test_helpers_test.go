@@ -37,7 +37,7 @@ func (r *gatewayAgentModelRepoStub) GetEnabledModel(_ context.Context, groupID i
 func (r *gatewayAgentModelRepoStub) UpdateModelConfig(context.Context, int64, int64, string, bool, *float64, []service.AgentModelPrice) error {
 	return nil
 }
-func (r *gatewayAgentModelRepoStub) ExcludeModel(context.Context, int64, int64, time.Time) error {
+func (r *gatewayAgentModelRepoStub) DeleteModel(context.Context, int64, int64) error {
 	return nil
 }
 func enabledGatewayAgentModel(platform, modelCode, mediaType string) service.AgentGroupModel {
