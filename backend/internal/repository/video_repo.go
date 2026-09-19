@@ -133,6 +133,12 @@ func applyVideoTaskUpdate(builder *dbent.VideoTaskUpdate, update service.VideoTa
 	if update.RefundedAt != nil {
 		builder.SetRefundedAt(*update.RefundedAt)
 	}
+	if update.AccountID != nil {
+		builder.SetAccountID(*update.AccountID)
+	}
+	if update.UpstreamModel != nil {
+		builder.SetUpstreamModel(*update.UpstreamModel)
+	}
 }
 
 func (r *videoTaskRepository) MarkBilled(ctx context.Context, publicID string, billedAt time.Time) (bool, error) {

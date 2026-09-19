@@ -192,9 +192,13 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 	if isGrokVideoCreateEndpoint(endpoint) {
 		videoCreateStartedAt = service.GrokVideoPendingCreatedAtNow()
 	}
+	// Grok 媒体（图片/视频）遵循媒体故障转移上限：最多尝试 MediaFailoverMaxAccounts 个上游。
 	maxAccountSwitches := h.maxAccountSwitches
+	if maxAccountSwitches > service.MediaFailoverMaxSwitches {
+		maxAccountSwitches = service.MediaFailoverMaxSwitches
+	}
 	if maxAccountSwitches <= 0 {
-		maxAccountSwitches = 3
+		maxAccountSwitches = service.MediaFailoverMaxSwitches
 	}
 	routingStart := time.Now()
 	requiredCapability := grokMediaRequiredCapability(endpoint)

@@ -378,6 +378,11 @@ type VideoTaskLifecycleInput struct {
 	InboundEndpoint     string
 	UpstreamEndpoint    string
 	ResultPublicBaseURL string
+	// 媒体故障转移用：创建上游任务失败时按这些信息排除已失败账号重选下一个
+	// 满足能力要求的上游。Normalized 为 nil 时（如测试直构的 input）不切换。
+	GroupID    int64
+	AgentGroup bool
+	Normalized *normalizedVideoRequest
 }
 
 type VideoTaskCreateInput struct {
@@ -408,6 +413,9 @@ type VideoTaskUpdate struct {
 	CompletedAt    *time.Time
 	BilledAt       *time.Time
 	RefundedAt     *time.Time
+	// 媒体故障转移切换上游时修正任务归属。
+	AccountID     *int64
+	UpstreamModel *string
 }
 
 type VideoTaskRepository interface {

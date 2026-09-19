@@ -245,6 +245,9 @@ func (s *VideoService) createTask(ctx context.Context, input *VideoCreateInput) 
 		InboundEndpoint:     inboundEndpoint,
 		UpstreamEndpoint:    upstreamEndpoint,
 		ResultPublicBaseURL: input.ResultPublicBaseURL,
+		GroupID:             input.APIKey.Group.ID,
+		AgentGroup:          input.APIKey.Group.IsAgent(),
+		Normalized:          normalized,
 	}
 	if s.startLifecycleFunc != nil {
 		s.startLifecycleFunc(lifecycleInput)
@@ -417,6 +420,19 @@ func (s *VideoService) GetTask(ctx context.Context, publicID string, apiKey *API
 }
 
 func (s *VideoService) selectAccountForRequest(ctx context.Context, groupID int64, normalized *normalizedVideoRequest, agentGroup bool) (*Account, error) {
+	return s.selectAccountForRequestWithExclusion(ctx, groupID, normalized, agentGroup, nil)
+}
+
+// selectAccountForRequestWithExclusion 在常规选号基础上排除指定账号（媒体故障
+// 转移切换上游时使用）。能力过滤（模型、分辨率、时长白名单、Agent 目录、请求
+// 兼容性）对重选同样生效，保证切换到的上游满足本次请求的能力要求。
+func (s *VideoService) selectAccountForRequestWithExclusion(
+	ctx context.Context,
+	groupID int64,
+	normalized *normalizedVideoRequest,
+	agentGroup bool,
+	excluded map[int64]struct{},
+) (*Account, error) {
 	if normalized == nil {
 		return nil, ErrVideoAccountNotFound
 	}
@@ -431,6 +447,9 @@ func (s *VideoService) selectAccountForRequest(ctx context.Context, groupID int6
 			continue
 		}
 		if strings.TrimSpace(account.GetCredential("api_key")) == "" {
+			continue
+		}
+		if _, skip := excluded[account.ID]; skip {
 			continue
 		}
 		if !account.IsModelSupported(model) {
@@ -603,28 +622,118 @@ func (s *VideoService) startLifecycle(input VideoTaskLifecycleInput) {
 			}
 		}()
 
-		created, err := s.createUpstreamTask(context.Background(), input.Account, input.UpstreamBody)
-		if err != nil {
-			clientErr := mapVideoUpstreamError(err, false)
-			s.recordVideoAccountFailure(context.Background(), input.Account, clientErr, err)
-			task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
-				Status:    stringPtr(VideoTaskStatusFailed),
-				ErrorJSON: videoErrorJSON(clientErr.VideoClientError),
-			})
-			_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
-			return
+		// 媒体故障转移：创建上游任务失败且属于可切换故障（401/402/403/404/408/
+		// 425/429/5xx/网络错误）时，排除已失败账号重选下一个满足能力要求的上游
+		// 重新创建，最多尝试 MediaFailoverMaxAccounts 个；内容类错误（400/451，
+		// 换上游结果相同）或没有更多候选时，直接按最后一个上游的错误判失败并退费。
+		account := input.Account
+		upstreamBody := input.UpstreamBody
+		upstreamEndpoint := input.UpstreamEndpoint
+		excluded := make(map[int64]struct{})
+		switchedUpstream := false
+		var lastCreateErr error
+		for attempt := 1; ; attempt++ {
+			created, err := s.createUpstreamTask(context.Background(), account, upstreamBody)
+			if err == nil {
+				if switchedUpstream {
+					s.reattributeVideoTaskAfterFailover(context.Background(), input, account)
+				}
+				processingStatus := VideoTaskStatusProcessing
+				if _, err := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
+					Status:         &processingStatus,
+					UpstreamTaskID: &created.ID,
+				}); err != nil {
+					slog.Warn("video task submit state update failed", "task_id", input.PublicID, "error", err)
+					return
+				}
+				s.pollLifecycle(input, created.ID)
+				return
+			}
+			lastCreateErr = err
+			s.recordVideoAccountFailure(context.Background(), account, mapVideoUpstreamError(err, false), err)
+			if attempt >= MediaFailoverMaxAccounts || input.Normalized == nil || !isVideoCreateFailoverError(err) {
+				break
+			}
+			excluded[account.ID] = struct{}{}
+			next, selErr := s.selectAccountForRequestWithExclusion(context.Background(), input.GroupID, input.Normalized, input.AgentGroup, excluded)
+			if selErr != nil {
+				// 没有更多满足能力要求的上游：按最后一个上游的错误判失败。
+				slog.Info("video create failover exhausted: no more capable accounts",
+					"task_id", input.PublicID,
+					"model", input.Normalized.Model,
+					"tried_accounts", len(excluded),
+					"error", err)
+				break
+			}
+			upstreamModel := videoUpstreamModelForAccount(next, input.Normalized)
+			upstreamBody = videoUpstreamBodyForAccount(next, input.Normalized, upstreamModel)
+			if accountEndpoint := videoAccountAPIPath(next); accountEndpoint != "" {
+				upstreamEndpoint = normalizedVideoEndpoint(accountEndpoint)
+			}
+			account = next
+			input.Account = account
+			input.UpstreamEndpoint = upstreamEndpoint
+			switchedUpstream = true
+			slog.Warn("video create failover switching account",
+				"task_id", input.PublicID,
+				"model", input.Normalized.Model,
+				"next_account_id", account.ID,
+				"attempt", attempt+1,
+				"max_attempts", MediaFailoverMaxAccounts,
+				"error", err)
 		}
 
-		processingStatus := VideoTaskStatusProcessing
-		if _, err := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
-			Status:         &processingStatus,
-			UpstreamTaskID: &created.ID,
-		}); err != nil {
-			slog.Warn("video task submit state update failed", "task_id", input.PublicID, "error", err)
-			return
+		clientErr := mapVideoUpstreamError(lastCreateErr, false)
+		if switchedUpstream {
+			s.reattributeVideoTaskAfterFailover(context.Background(), input, account)
 		}
-		s.pollLifecycle(input, created.ID)
+		task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
+			Status:    stringPtr(VideoTaskStatusFailed),
+			ErrorJSON: videoErrorJSON(clientErr.VideoClientError),
+		})
+		_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 	}()
+}
+
+// reattributeVideoTaskAfterFailover 在创建阶段切换上游后，把任务记录与计费流水
+// 的账号/上游模型归属修正为实际服务本任务的上游。
+func (s *VideoService) reattributeVideoTaskAfterFailover(ctx context.Context, input VideoTaskLifecycleInput, account *Account) {
+	if s == nil || input.APIKey == nil {
+		return
+	}
+	upstreamModel := videoUpstreamModelForAccount(account, input.Normalized)
+	accountID := account.ID
+	if _, err := s.taskRepo.UpdateByPublicID(ctx, input.PublicID, VideoTaskUpdate{
+		AccountID:     &accountID,
+		UpstreamModel: &upstreamModel,
+	}); err != nil {
+		slog.Warn("video failover task reattribution failed", "task_id", input.PublicID, "error", err)
+	}
+	if updater, ok := s.usageLogRepo.(VideoUsageResultUpdater); ok {
+		if err := updater.UpdateVideoResult(ctx, "video:"+input.PublicID, input.APIKey.ID, VideoUsageResultUpdate{
+			AccountID:     &accountID,
+			UpstreamModel: &upstreamModel,
+		}); err != nil {
+			slog.Warn("video failover usage log reattribution failed", "task_id", input.PublicID, "error", err)
+		}
+	}
+}
+
+// isVideoCreateFailoverError 判断创建上游任务的错误是否值得切换到下一个上游：
+// 网络层失败、可切换的状态码，以及 2xx 但响应不合法（缺任务 ID/JSON 损坏）都
+// 算上游侧故障；本地构造错误（非 videoUpstreamError）不切换。
+func isVideoCreateFailoverError(err error) bool {
+	var upstreamErr *videoUpstreamError
+	if !errors.As(err, &upstreamErr) {
+		return false
+	}
+	if upstreamErr.StatusCode == 0 {
+		return true
+	}
+	if upstreamErr.StatusCode >= 200 && upstreamErr.StatusCode < 300 && upstreamErr.Err != nil {
+		return true
+	}
+	return IsMediaFailoverStatus(upstreamErr.StatusCode)
 }
 
 func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTaskID string) {
@@ -651,7 +760,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 	for {
 		select {
 		case <-ctx.Done():
-			clientErr := videoClientError("video_service_unavailable", "Video service is temporarily unavailable. Please retry later.")
+			clientErr := videoClientError("video_service_unavailable", upstreamClientMessageService)
 			task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
 				Status:    stringPtr(VideoTaskStatusFailed),
 				ErrorJSON: videoErrorJSON(clientErr),
@@ -706,7 +815,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 				}
 				return
 			case VideoTaskStatusFailed, VideoTaskStatusCancelled:
-				clientErr := videoClientError("video_generation_failed", "Video generation failed. Please retry with a different prompt or input.")
+				clientErr := videoClientError("video_generation_failed", "视频生成失败，请更换提示词或素材后重试")
 				task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
 					Status:    &result.Status,
 					ErrorJSON: videoErrorJSON(clientErr),
@@ -1523,17 +1632,25 @@ func mapVideoUpstreamError(err error, polling bool) mappedVideoClientError {
 	var upstreamErr *videoUpstreamError
 	if errors.As(err, &upstreamErr) {
 		switch upstreamErr.StatusCode {
-		case http.StatusUnauthorized, http.StatusForbidden:
-			return mappedVideoClientError{VideoClientError: videoClientError("video_provider_unavailable", "Video service is temporarily unavailable. Please contact support if the issue persists."), StatusCode: upstreamErr.StatusCode}
+		case http.StatusUnauthorized:
+			return mappedVideoClientError{VideoClientError: videoClientError("video_provider_unavailable", upstreamClientMessageService), StatusCode: upstreamErr.StatusCode}
+		case http.StatusForbidden:
+			return mappedVideoClientError{VideoClientError: videoClientError("video_provider_unavailable", upstreamClientMessageCapacity), StatusCode: upstreamErr.StatusCode}
 		case http.StatusTooManyRequests:
-			return mappedVideoClientError{VideoClientError: videoClientError("video_service_busy", "Video service is busy. Please retry later."), StatusCode: upstreamErr.StatusCode, Retryable: polling}
+			return mappedVideoClientError{VideoClientError: videoClientError("video_service_busy", upstreamClientMessageBusy), StatusCode: upstreamErr.StatusCode, Retryable: polling}
+		case http.StatusRequestTimeout, http.StatusTooEarly:
+			return mappedVideoClientError{VideoClientError: videoClientError("video_service_unavailable", upstreamClientMessageTimeout), StatusCode: upstreamErr.StatusCode, Retryable: polling}
 		}
 		if upstreamErr.StatusCode >= 500 || upstreamErr.StatusCode == 0 || (polling && upstreamErr.PollRetryable) {
-			return mappedVideoClientError{VideoClientError: videoClientError("video_service_unavailable", "Video service is temporarily unavailable. Please retry later."), StatusCode: upstreamErr.StatusCode, Retryable: polling}
+			return mappedVideoClientError{VideoClientError: videoClientError("video_service_unavailable", upstreamClientMessageService), StatusCode: upstreamErr.StatusCode, Retryable: polling}
 		}
-		return mappedVideoClientError{VideoClientError: videoClientError("video_service_unavailable", "Video service is temporarily unavailable. Please retry later."), StatusCode: upstreamErr.StatusCode}
+		// 404/451 等其余命中文案库的状态码用对应文案，其余一律归为服务暂不可用。
+		if message, ok := MappedUpstreamClientMessage(upstreamErr.StatusCode); ok {
+			return mappedVideoClientError{VideoClientError: videoClientError("video_service_unavailable", message), StatusCode: upstreamErr.StatusCode}
+		}
+		return mappedVideoClientError{VideoClientError: videoClientError("video_service_unavailable", upstreamClientMessageService), StatusCode: upstreamErr.StatusCode}
 	}
-	return mappedVideoClientError{VideoClientError: videoClientError("video_service_unavailable", "Video service is temporarily unavailable. Please retry later.")}
+	return mappedVideoClientError{VideoClientError: videoClientError("video_service_unavailable", upstreamClientMessageService)}
 }
 
 func (s *VideoService) recordVideoAccountFailure(ctx context.Context, account *Account, mapped mappedVideoClientError, cause error) {
@@ -1617,7 +1734,7 @@ func videoResponseFromTask(task *VideoTask) *VideoResponse {
 	if task.Status == VideoTaskStatusFailed {
 		resp.Error = videoErrorFromJSON(task.ErrorJSON)
 		if resp.Error == nil {
-			err := videoClientError("video_generation_failed", "Video generation failed. Please retry later.")
+			err := videoClientError("video_generation_failed", "视频生成失败，请稍后再试")
 			resp.Error = &err
 		}
 	}
@@ -1652,7 +1769,7 @@ func SanitizeVideoClientError(code, message string) (string, string) {
 		code = "video_service_unavailable"
 	}
 	if message == "" {
-		message = "Video service is temporarily unavailable. Please retry later."
+		message = upstreamClientMessageService
 	}
 	joined := strings.ToLower(code + " " + message)
 	forbidden := []string{
@@ -1671,7 +1788,7 @@ func SanitizeVideoClientError(code, message string) (string, string) {
 	}
 	for _, token := range forbidden {
 		if strings.Contains(joined, token) {
-			return "video_service_unavailable", "Video service is temporarily unavailable. Please retry later."
+			return "video_service_unavailable", upstreamClientMessageService
 		}
 	}
 	return code, message

@@ -176,7 +176,11 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 	sessionHash := h.gatewayService.GenerateExplicitSessionHash(c, body)
 	requestCtx := service.WithOpenAIImagesEndpoint(service.WithOpenAIImageGenerationIntent(c.Request.Context()))
 
+	// 图片生成遵循媒体故障转移上限：最多尝试 MediaFailoverMaxAccounts 个上游。
 	maxAccountSwitches := h.maxAccountSwitches
+	if maxAccountSwitches > service.MediaFailoverMaxSwitches {
+		maxAccountSwitches = service.MediaFailoverMaxSwitches
+	}
 	switchCount := 0
 	profitVetoCount := 0
 	failedAccountIDs := make(map[int64]struct{})
@@ -301,6 +305,29 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				var imageUpstreamErr *service.OpenAIImagesUpstreamError
 				if errors.As(err, &imageUpstreamErr) {
 					retryableServerError := service.IsOpenAIImagesRetryableUpstreamError(imageUpstreamErr)
+					// 媒体故障转移：5xx 类上游故障且尚未向客户端写出响应时（如
+					// OAuth responses 桥接路径只返回错误不写响应），换下一个满足
+					// 能力要求的账号重试；内容/参数类 4xx 为终态，直接返回。
+					if retryableServerError &&
+						service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c) == writerSizeBeforeForward &&
+						!failoverClientGone(c) {
+						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, requestModel, false, result), false, nil, err)
+						h.gatewayService.RecordOpenAIAccountSwitch()
+						failedAccountIDs[account.ID] = struct{}{}
+						lastFailoverErr = &service.UpstreamFailoverError{StatusCode: imageUpstreamErr.StatusCode}
+						if switchCount >= maxAccountSwitches {
+							h.handleFailoverExhausted(c, lastFailoverErr, streamStarted)
+							return
+						}
+						switchCount++
+						reqLog.Warn("openai.images.upstream_error_failover_switching",
+							zap.Int64("account_id", account.ID),
+							zap.Int("status_code", imageUpstreamErr.StatusCode),
+							zap.Int("switch_count", switchCount),
+							zap.Int("max_switches", maxAccountSwitches),
+						)
+						continue
+					}
 					if retryableServerError {
 						h.gatewayService.ReportOpenAIAccountScheduleResult(account, openAIAccountScheduleModel(c, account, requestModel, false, result), false, nil, err)
 					} else {

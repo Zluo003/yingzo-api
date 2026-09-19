@@ -834,18 +834,20 @@ func validOpenAIPassthroughRetryAfter(raw string, now time.Time) bool {
 }
 
 func writeSanitizedOpenAIPassthroughError(c *gin.Context, upstreamStatus int, upstreamHeaders http.Header) {
+	// 透传模式的净化信封沿用既有状态码语义（仅 401/403 折叠为 502，其余保留
+	// 原状态码），文案换用中文报错信息库，不透传上游原始报错。
 	downstreamStatus := upstreamStatus
-	message := "Upstream request failed"
+	message := upstreamClientMessageFailed
 	switch upstreamStatus {
 	case http.StatusUnauthorized:
 		downstreamStatus = http.StatusBadGateway
-		message = "Upstream authentication failed"
+		message = upstreamClientMessageAuth
 	case http.StatusForbidden:
 		downstreamStatus = http.StatusBadGateway
-		message = "Upstream access denied"
+		message = upstreamClientMessageCapacity
 	default:
-		if upstreamStatus >= http.StatusInternalServerError {
-			message = "Upstream service temporarily unavailable"
+		if mappedMsg, ok := MappedUpstreamClientMessage(upstreamStatus); ok {
+			message = mappedMsg
 		}
 	}
 	writeOpenAIPassthroughErrorEnvelope(c, downstreamStatus, upstreamHeaders, message)

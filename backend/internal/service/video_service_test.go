@@ -1585,6 +1585,12 @@ func (r *videoTaskMemoryRepo) UpdateByPublicID(ctx context.Context, publicID str
 	if update.RefundedAt != nil {
 		task.RefundedAt = update.RefundedAt
 	}
+	if update.AccountID != nil {
+		task.AccountID = *update.AccountID
+	}
+	if update.UpstreamModel != nil {
+		task.UpstreamModel = *update.UpstreamModel
+	}
 	task.UpdatedAt = time.Now().UTC()
 	return cloneVideoTaskForTest(task), nil
 }

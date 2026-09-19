@@ -710,32 +710,8 @@ func (s *OpenAIGatewayService) handleErrorResponse(
 		return nil, fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)
 	}
 
-	// Return appropriate error response
-	var errType, errMsg string
-	var statusCode int
-
-	switch resp.StatusCode {
-	case 401:
-		statusCode = http.StatusBadGateway
-		errType = "upstream_error"
-		errMsg = "Upstream authentication failed, please contact administrator"
-	case 402:
-		statusCode = http.StatusBadGateway
-		errType = "upstream_error"
-		errMsg = "Upstream payment required: insufficient balance or billing issue"
-	case 403:
-		statusCode = http.StatusBadGateway
-		errType = "upstream_error"
-		errMsg = "Upstream access forbidden, please contact administrator"
-	case 429:
-		statusCode = http.StatusTooManyRequests
-		errType = "rate_limit_error"
-		errMsg = "Upstream rate limit exceeded, please retry later"
-	default:
-		statusCode = http.StatusBadGateway
-		errType = "upstream_error"
-		errMsg = "Upstream request failed"
-	}
+	// Return appropriate error response（4xx/5xx 不透传上游详细信息，按中文报错信息库映射）
+	statusCode, errType, errMsg := MapUpstreamStatusToClientError(resp.StatusCode)
 	if isOpenAIContextWindowError(upstreamMsg, body) && upstreamMsg != "" {
 		errMsg = upstreamMsg
 	}
@@ -891,7 +867,14 @@ func (s *OpenAIGatewayService) handleCompatErrorResponse(
 
 	MarkResponseCommitted(c)
 
-	// Map status code to error type and write response
+	// Map status code to error type and write response.
+	// 命中中文报错信息库的状态码（429/403/404/425/451/5xx 等）不透传上游原文；
+	// 400 等请求类错误保留原文，下游需要具体字段信息才能修复请求。
+	if _, ok := MappedUpstreamClientMessage(resp.StatusCode); ok {
+		statusCode, errType, errMsg := MapUpstreamStatusToClientError(resp.StatusCode)
+		writeError(c, statusCode, errType, errMsg)
+		return nil, fmt.Errorf("upstream error: %d message=%s", resp.StatusCode, upstreamMsg)
+	}
 	errType := "api_error"
 	switch {
 	case resp.StatusCode == 400:

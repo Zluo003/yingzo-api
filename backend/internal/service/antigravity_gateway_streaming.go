@@ -738,23 +738,27 @@ func (s *AntigravityGatewayService) writeMappedClaudeError(c *gin.Context, accou
 	case 401:
 		statusCode = http.StatusBadGateway
 		errType = "authentication_error"
-		errMsg = "Upstream authentication failed"
+		errMsg = upstreamClientMessageAuth
 	case 403:
 		statusCode = http.StatusBadGateway
 		errType = "permission_error"
-		errMsg = "Upstream access forbidden"
+		errMsg = upstreamClientMessageCapacity
 	case 429:
 		statusCode = http.StatusTooManyRequests
 		errType = "rate_limit_error"
-		errMsg = "Upstream rate limit exceeded"
+		errMsg = upstreamClientMessageBusy
 	case 529:
 		statusCode = http.StatusServiceUnavailable
 		errType = "overloaded_error"
-		errMsg = "Upstream service overloaded"
+		errMsg = upstreamClientMessageBusy
 	default:
 		statusCode = http.StatusBadGateway
 		errType = "upstream_error"
-		errMsg = "Upstream request failed"
+		if mappedMsg, ok := MappedUpstreamClientMessage(upstreamStatus); ok {
+			errMsg = mappedMsg
+		} else {
+			errMsg = upstreamClientMessageFailed
+		}
 	}
 
 	c.JSON(statusCode, gin.H{

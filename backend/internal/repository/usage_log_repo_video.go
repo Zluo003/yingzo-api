@@ -46,13 +46,19 @@ func (r *usageLogRepository) UpdateVideoResult(
 		    video_billable_seconds = CASE WHEN $8 > 0 THEN $8 ELSE video_billable_seconds END,
 		    duration_ms = COALESCE($9, duration_ms),
 		    inbound_endpoint = COALESCE(NULLIF($10, ''), inbound_endpoint),
-		    upstream_endpoint = COALESCE(NULLIF($11, ''), upstream_endpoint)
+		    upstream_endpoint = COALESCE(NULLIF($11, ''), upstream_endpoint),
+		    account_id = COALESCE($12, account_id),
+		    upstream_model = COALESCE(NULLIF($13, ''), upstream_model)
 		WHERE request_id = $1 AND api_key_id = $2
 	`
 
 	var durationMs sql.NullInt64
 	if update.DurationMs != nil {
 		durationMs = sql.NullInt64{Int64: int64(*update.DurationMs), Valid: true}
+	}
+	var accountID sql.NullInt64
+	if update.AccountID != nil {
+		accountID = sql.NullInt64{Int64: *update.AccountID, Valid: true}
 	}
 
 	_, err := r.sql.ExecContext(
@@ -69,6 +75,8 @@ func (r *usageLogRepository) UpdateVideoResult(
 		durationMs,
 		update.InboundEndpoint,
 		update.UpstreamEndpoint,
+		accountID,
+		update.UpstreamModel,
 	)
 	return err
 }

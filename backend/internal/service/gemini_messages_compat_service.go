@@ -1881,6 +1881,21 @@ func (s *GeminiMessagesCompatService) writeGeminiMappedError(c *gin.Context, acc
 		return fmt.Errorf("upstream error: %d (passthrough rule matched) message=%s", upstreamStatus, upstreamMsg)
 	}
 
+	// 命中中文报错信息库的状态码（429/403/404/425/451/5xx 等）不透传上游原文，
+	// 统一按映射库给出面向下游的状态码与文案；400 是确定性请求错误，走下方
+	// 原逻辑保留上游 message（已脱敏），客户端据此定位非法字段。
+	if _, ok := MappedUpstreamClientMessage(upstreamStatus); ok {
+		statusCode, errType, errMsg := MapUpstreamStatusToClientError(upstreamStatus)
+		c.JSON(statusCode, gin.H{
+			"type":  "error",
+			"error": gin.H{"type": errType, "message": errMsg},
+		})
+		if upstreamMsg == "" {
+			return fmt.Errorf("upstream error: %d", upstreamStatus)
+		}
+		return fmt.Errorf("upstream error: %d message=%s", upstreamStatus, upstreamMsg)
+	}
+
 	var statusCode int
 	var errType, errMsg string
 

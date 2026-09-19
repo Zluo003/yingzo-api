@@ -847,6 +847,14 @@ func (s *GeminiMessagesCompatService) writeGeminiChatCompletionsMappedError(
 		return s.writeChatCompletionsError(c, status, errType, errMsg)
 	}
 
+	// 命中中文报错信息库的状态码（429/403/404/425/451/5xx 等）不透传上游原文，
+	// 统一按映射库给出面向下游的状态码与文案；400 等请求类错误走下方原逻辑
+	// 保留上游 message（已脱敏），客户端据此定位非法字段。
+	if _, ok := MappedUpstreamClientMessage(upstreamStatus); ok {
+		statusCode, errType, errMsg := MapUpstreamStatusToClientError(upstreamStatus)
+		return s.writeChatCompletionsError(c, statusCode, errType, errMsg)
+	}
+
 	statusCode := http.StatusBadGateway
 	errType := "upstream_error"
 	errMsg := "Upstream request failed"

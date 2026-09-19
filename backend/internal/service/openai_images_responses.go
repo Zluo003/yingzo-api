@@ -952,6 +952,54 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 		return nil, upErr
 	}
 
+	// 内容审核类报错（451）换上游结果相同：不参与媒体故障转移，直接按中文
+	// 报错信息库给出安全审核提示，让下游检查提示词或参考图。
+	if resp.StatusCode == http.StatusUnavailableForLegalReasons {
+		statusCode, errType, errMsg := MapUpstreamStatusToClientError(resp.StatusCode)
+		upErr := &OpenAIImagesUpstreamError{
+			StatusCode:        statusCode,
+			ErrorType:         errType,
+			Message:           errMsg,
+			UpstreamRequestID: strings.TrimSpace(resp.Header.Get("x-request-id")),
+		}
+		writeOpenAIImagesUpstreamErrorResponse(c, upErr)
+		return nil, upErr
+	}
+
+	// 媒体故障转移：账号侧/容量侧故障（401/402/403/404/408/425/429/5xx）不向
+	// 客户端写出响应，返回 failover 错误让 handler 换下一个满足能力要求的账号
+	// 重试，最多尝试 MediaFailoverMaxAccounts 个上游；请求内容侧故障（400 等）
+	// 换上游结果相同，走下方原逻辑。
+	if IsMediaFailoverStatus(resp.StatusCode) {
+		var modelForCooldown string
+		if len(requestedModel) > 0 {
+			modelForCooldown = strings.TrimSpace(requestedModel[0])
+		}
+		shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, modelForCooldown)
+		failoverErr := s.newOpenAIAccountFailoverError(
+			account,
+			resp.StatusCode,
+			resp.Header,
+			body,
+			upstreamMsg,
+			shouldDisable,
+			false,
+		)
+		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
+			ProxyID:            opsUpstreamProxyID(account),
+			ProxyName:          opsUpstreamProxyName(account),
+			Platform:           account.Platform,
+			AccountID:          account.ID,
+			AccountName:        account.Name,
+			UpstreamStatusCode: resp.StatusCode,
+			UpstreamRequestID:  resp.Header.Get("x-request-id"),
+			Kind:               "failover",
+			Message:            upstreamMsg,
+			Detail:             upstreamDetail,
+		})
+		return nil, failoverErr
+	}
+
 	// If the account is not configured to handle this status code, fall back to
 	// a generic gateway error without exposing upstream internals (mirrors
 	// handleCompatErrorResponse).

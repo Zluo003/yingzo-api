@@ -96,6 +96,9 @@ type VideoUsageResultUpdate struct {
 	VideoDurationSeconds     int
 	ReferenceDurationSeconds int
 	BillableSeconds          int
+	// 媒体故障转移切换上游时修正该条流水的账号与上游模型归属；nil 表示不修改。
+	AccountID     *int64
+	UpstreamModel *string
 }
 
 type accountWindowStatsBatchReader interface {
