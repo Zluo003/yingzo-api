@@ -41,6 +41,7 @@ import (
 type AgentHandler struct {
 	db             *sql.DB
 	dataDir        string
+	styleDir       string
 	objectStore    service.BackupObjectStore
 	fileStorage    *service.FileStorageService
 	billingService *service.BillingService
@@ -60,13 +61,16 @@ func NewAgentHandler(
 	agentModels *service.AgentModelCatalogService,
 ) *AgentHandler {
 	dir := filepath.Join(cfg.Pricing.DataDir, "agent-assets")
+	styleDir := filepath.Join(cfg.Pricing.DataDir, "style-library")
 	if fileStorage != nil {
 		dir = fileStorage.LocalPath()
 	}
 	_ = os.MkdirAll(dir, 0700)
+	_ = os.MkdirAll(styleDir, 0700)
 	h := &AgentHandler{
 		db:             db,
 		dataDir:        dir,
+		styleDir:       styleDir,
 		billingService: billingService,
 		videoService:   videoService,
 		agentModels:    agentModels,

@@ -72,6 +72,9 @@ func RegisterAdminRoutes(
 		// 公共文件服务
 		registerFileStorageRoutes(admin, h)
 
+		// 影视风格模板（永久资源，与临时素材分离）
+		registerFilmStyleTemplateRoutes(admin, h)
+
 		// 数据管理
 		registerDataManagementRoutes(admin, h, stepUpAuth)
 
@@ -122,6 +125,17 @@ func RegisterAdminRoutes(
 
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
+	}
+}
+
+func registerFilmStyleTemplateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	styles := admin.Group("/film-style-templates")
+	{
+		styles.GET("", h.Agent.AdminListFilmStyleTemplates)
+		styles.GET("/:id/preview", h.Agent.ServeFilmStylePreview)
+		styles.POST("", h.Agent.AdminCreateFilmStyleTemplate)
+		styles.PUT("/:id", h.Agent.AdminUpdateFilmStyleTemplate)
+		styles.DELETE("/:id", h.Agent.AdminDeleteFilmStyleTemplate)
 	}
 }
 

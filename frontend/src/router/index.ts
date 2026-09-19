@@ -481,6 +481,12 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/film-style-templates',
+    name: 'AdminFilmStyleTemplates',
+    component: () => import('@/views/admin/FilmStyleTemplatesView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Film Style Templates' }
+  },
+  {
     path: '/admin/channels',
     redirect: '/admin/channels/pricing'
   },

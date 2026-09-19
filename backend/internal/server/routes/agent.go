@@ -17,6 +17,8 @@ func RegisterAgentRoutes(r *gin.Engine, v1 *gin.RouterGroup, h *handler.Handlers
 	g.GET("/generation/estimates/:id", h.Agent.GetGenerationEstimate)
 	g.POST("/assets", h.Agent.UploadTemporaryAsset)
 	g.POST("/assets/resolve", h.Agent.ResolveTemporaryAssets)
+	g.GET("/film-style-templates", h.Agent.ListFilmStyleTemplates)
+	g.GET("/film-style-templates/:id/preview", h.Agent.ServeFilmStylePreview)
 
 	// Compatibility adapters for the desktop client's pre-Agent endpoint
 	// contract. They share the Agent authentication and storage pipeline; no

@@ -177,6 +177,7 @@ export default {
     profile: 'Profile',
     users: 'Users',
     groups: 'Groups',
+    filmStyleTemplates: 'Film Style Templates',
     channels: 'Channels',
     availableChannels: 'Available Channels',
     modelPlaza: 'Model Plaza',
