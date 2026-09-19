@@ -39,7 +39,7 @@ const loadPreview = async (id: string) => { const response = await apiClient.get
 const previewUrl = (id: string) => previews[id] || ''
 const label = (category: string) => ({ realistic: '写实', '3d': '3D', '2d': '2D' }[category] || category)
 const edit = (item: FilmStyleTemplate) => { editing.value = item; form.category = item.category; form.name = item.name; form.prompt = item.prompt }
-const submit = async () => { const file = fileInput.value?.files?.[0]; saving.value = true; error.value = ''; try { if (editing.value) await filmStylesAdminApi.update(editing.value.id, { ...form, preview: file }); else { if (!file) throw new Error('请选择样片'); await filmStylesAdminApi.create({ ...form, preview: file }) }; editing.value = null; form.name = ''; form.prompt = ''; await load() } catch (e) { error.value = e instanceof Error ? e.message : '保存失败' } finally { saving.value = false } }
+const submit = async () => { const file = fileInput.value?.files?.[0]; saving.value = true; error.value = ''; try { if (editing.value) await filmStylesAdminApi.update(editing.value.id, { ...form, preview: file }); else { if (!file) throw new Error('请选择样片'); await filmStylesAdminApi.create({ ...form, preview: file }) } editing.value = null; form.name = ''; form.prompt = ''; await load() } catch (e) { error.value = e instanceof Error ? e.message : '保存失败' } finally { saving.value = false } }
 const archiveItem = async (item: FilmStyleTemplate) => { if (!window.confirm(`确认下架「${item.name}」？`)) return; await filmStylesAdminApi.archive(item.id); await load() }
 onMounted(() => void load())
 </script>

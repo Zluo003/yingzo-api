@@ -133,6 +133,11 @@ func TestAgentCatalogDiscoversCNProviderModelsAndResolvesTextRate(t *testing.T) 
 		byCode[model.ModelCode] = model
 	}
 
+	// 新目录行默认未启用（下游可见性由管理端启用开关把关）；本测试关注发现与
+	// 分发链路，先把账号声明的模型置为启用。
+	_, err = integrationDB.ExecContext(ctx, `UPDATE agent_group_models SET enabled = TRUE WHERE group_id = $1`, groupID)
+	require.NoError(t, err)
+
 	// 入口要能按模型解析出 deepseek，否则请求会被派到 openai 账号池。
 	platform, found, err := catalog.ResolveModelPlatform(ctx, groupID, "deepseek-v4-pro")
 	require.NoError(t, err)

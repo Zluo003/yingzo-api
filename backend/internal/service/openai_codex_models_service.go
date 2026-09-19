@@ -1470,6 +1470,7 @@ func isRetryableCodexModelsManifestTransportError(err error) bool {
 	if errors.As(err, &dnsErr) {
 		return true
 	}
+	//nolint:staticcheck // GoAwayError 在 x/net v0.59 被标记弃用，但它仍是上游 GOAWAY 错误的实际类型
 	var goAwayErr http2.GoAwayError
 	if errors.As(err, &goAwayErr) {
 		return true
