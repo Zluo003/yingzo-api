@@ -23,8 +23,11 @@
 .profile-actions-row{margin-top:-76px;margin-bottom:38px;position:relative;z-index:2}.profile-actions-row .profile-logout{transform:translateY(-2px)}
 @media(max-width:900px){.profile-actions-row{margin-top:-28px;margin-bottom:24px}}
 .home header{max-width:1400px;margin:0 auto}.home{padding-left:5vw;padding-right:5vw}
-/* Usage page: per-model cost bars + list pagination */
-.panel-title{align-items:center;gap:12px}.chart-range{font:13px 'DM Sans';color:#6f6259;border:1px solid var(--line);background:#fffaf5;border-radius:8px;padding:6px 10px}
+/* Usage page: hourly trend bars + model share pie + list pagination */
+.chart-duo{display:grid;grid-template-columns:1.25fr 1fr;gap:18px;margin-bottom:18px}.chart-sub{font:12px 'DM Sans';color:var(--muted)}
+@media(max-width:1100px){.chart-duo{grid-template-columns:1fr}}
+.pie-wrap{display:flex;align-items:center;gap:22px;margin-top:20px}.pie{width:170px;height:170px;transform:rotate(0deg);flex:none}.pie circle{fill:none}
+.pie-legend{display:flex;flex-direction:column;gap:8px;min-width:0;flex:1}.pie-legend-item{display:flex;align-items:center;gap:8px;font-size:13px}.pie-legend-item .dot{width:10px;height:10px;border-radius:50%;flex:none}.pie-model{color:#655950;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pie-share{margin-left:auto;color:var(--muted);font-size:12px}
 .bars{height:auto;margin-top:22px;gap:12px}
 .bars .bar-item{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:8px}
 .bars .bar-figure{height:190px;width:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px}
