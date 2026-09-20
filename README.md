@@ -142,7 +142,7 @@ curl -sSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/insta
 | `REDIS_HOST` / `PORT` / `PASSWORD` / `DB` | Redis 连接 |
 | `JWT_SECRET` | 签发凭证用密钥，**生产必须设置且不可随意更换** |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | 初始管理员账号（仅首次初始化使用） |
-| `TOTP_ENCRYPTION_KEY` | 两步验证密钥加密用 |
+| `TOTP_ENCRYPTION_KEY` | 秘密加密密钥（TOTP、S3 备份等落库敏感信息），可选；留空时首次启动自动生成并持久化到数据库 |
 | `AGENT_ASSETS_HOST_DIR` | 素材目录在宿主机上的绝对路径；容器按**同路径**挂载，面板里填容器内路径 |
 | `TZ` | 时区（影响日汇总与高峰时段判定） |
 | `UPDATE_GITHUB_TOKEN` | 面板内检查更新用的 GitHub Token（可选，避免限流） |

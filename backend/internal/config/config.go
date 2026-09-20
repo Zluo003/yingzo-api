@@ -1645,11 +1645,13 @@ type JWTConfig struct {
 
 // TotpConfig TOTP 双因素认证配置
 type TotpConfig struct {
-	// EncryptionKey 用于加密 TOTP 密钥的 AES-256 密钥（32 字节 hex 编码）
-	// 如果为空，将自动生成一个随机密钥（仅适用于开发环境）
+	// EncryptionKey 秘密加密用的 AES-256 密钥（32 字节 hex 编码），除 TOTP 密钥外
+	// 还用于 S3 备份密钥、支付配置、插件凭据等落库敏感信息的加密。
+	// 未配置时先给随机会话内占位值，启动阶段由数据库中的持久化密钥覆盖。
 	EncryptionKey string `mapstructure:"encryption_key"`
-	// EncryptionKeyConfigured 标记加密密钥是否为手动配置（非自动生成）
-	// 只有手动配置了密钥才允许在管理后台启用 TOTP 功能
+	// EncryptionKeyConfigured 标记加密密钥是否已持久（环境变量显式配置，或已
+	// 持久化到数据库 security_secrets 表）。只有持久密钥才允许启用 TOTP、保存
+	// S3 备份等持久化秘密，否则重启后密文将无法解密。
 	EncryptionKeyConfigured bool `mapstructure:"-"`
 }
 
@@ -1922,7 +1924,10 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		cfg.Gateway.UserMessageQueue.Mode = ""
 	}
 
-	// Auto-generate TOTP encryption key if not set (32 bytes = 64 hex chars for AES-256)
+	// TOTP/秘密加密密钥未显式配置时先给一个随机会话内占位值（32 字节 = 64 hex，
+	// AES-256）。数据库初始化阶段 ensureBootstrapSecrets 会用 security_secrets
+	// 表中持久化的密钥覆盖它（首次启动生成并落库，此后跨重启/升级/实例一致），
+	// 并把 EncryptionKeyConfigured 置为 true。
 	cfg.Totp.EncryptionKey = strings.TrimSpace(cfg.Totp.EncryptionKey)
 	if cfg.Totp.EncryptionKey == "" {
 		key, err := generateJWTSecret(32) // Reuse the same random generation function
@@ -1931,7 +1936,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		}
 		cfg.Totp.EncryptionKey = key
 		cfg.Totp.EncryptionKeyConfigured = false
-		slog.Warn("TOTP encryption key auto-generated. Consider setting a fixed key for production.")
+		slog.Info("TOTP encryption key not configured; using the key persisted in the database (generated on first boot). Set TOTP_ENCRYPTION_KEY to manage it explicitly.")
 	} else {
 		cfg.Totp.EncryptionKeyConfigured = true
 	}

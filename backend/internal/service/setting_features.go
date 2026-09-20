@@ -231,8 +231,9 @@ func (s *SettingService) passkeySettingEnabled(settings map[string]string) bool 
 	return value == "true"
 }
 
-// IsTotpEncryptionKeyConfigured 检查 TOTP 加密密钥是否已手动配置
-// 只有手动配置了密钥才允许在管理后台启用 TOTP 功能
+// IsTotpEncryptionKeyConfigured 检查秘密加密密钥是否已持久（环境变量显式配置，
+// 或启动时已持久化到数据库 security_secrets 表）。
+// 只有持久密钥才允许在管理后台启用 TOTP 功能，否则重启后密文无法解密
 func (s *SettingService) IsTotpEncryptionKeyConfigured() bool {
 	return s.cfg.Totp.EncryptionKeyConfigured
 }

@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	securitySecretKeyJWT        = "jwt_secret"
-	securitySecretReadRetryMax  = 5
-	securitySecretReadRetryWait = 10 * time.Millisecond
+	securitySecretKeyJWT              = "jwt_secret"
+	securitySecretKeySecretEncryption = "secret_encryption_key"
+	securitySecretReadRetryMax        = 5
+	securitySecretReadRetryWait       = 10 * time.Millisecond
 )
 
 var readRandomBytes = rand.Read
@@ -32,6 +33,13 @@ func ensureBootstrapSecrets(ctx context.Context, client *ent.Client, cfg *config
 		return fmt.Errorf("nil config")
 	}
 
+	if err := ensureJWTSecret(ctx, client, cfg); err != nil {
+		return err
+	}
+	return ensureSecretEncryptionKey(ctx, client, cfg)
+}
+
+func ensureJWTSecret(ctx context.Context, client *ent.Client, cfg *config.Config) error {
 	cfg.JWT.Secret = strings.TrimSpace(cfg.JWT.Secret)
 	if cfg.JWT.Secret != "" {
 		storedSecret, err := createSecuritySecretIfAbsent(ctx, client, securitySecretKeyJWT, cfg.JWT.Secret)
@@ -53,6 +61,63 @@ func ensureBootstrapSecrets(ctx context.Context, client *ent.Client, cfg *config
 
 	if created {
 		log.Println("Warning: JWT secret auto-generated and persisted to database. Consider rotating to a managed secret for production.")
+	}
+	return nil
+}
+
+// ensureSecretEncryptionKey 保证秘密加密密钥（cfg.Totp.EncryptionKey）在重启、
+// 升级和多实例间保持一致。该密钥用于 AES 加密落库的敏感配置（S3 备份密钥、
+// TOTP 密钥、支付配置、插件凭据等），历史上一旦未显式配置 TOTP_ENCRYPTION_KEY
+// 就每次启动随机生成，导致所有持久化秘密在重启后无法解密，备份 S3 配置等写入
+// 被迫拒绝（#4524）。现在与 jwt_secret 相同：首次启动生成一次并持久化到
+// security_secrets 表，之后每次启动复用；显式配置的环境变量值会作为种子写入
+// （与库里已有值冲突时以库内值为准）。密钥持久化后 EncryptionKeyConfigured
+// 置为 true，解除各处持久化秘密的写入限制。
+func ensureSecretEncryptionKey(ctx context.Context, client *ent.Client, cfg *config.Config) error {
+	cfg.Totp.EncryptionKey = strings.TrimSpace(cfg.Totp.EncryptionKey)
+	if cfg.Totp.EncryptionKey != "" {
+		if err := validateSecretEncryptionKey(cfg.Totp.EncryptionKey); err != nil {
+			return err
+		}
+		storedKey, err := createSecuritySecretIfAbsent(ctx, client, securitySecretKeySecretEncryption, cfg.Totp.EncryptionKey)
+		if err != nil {
+			return fmt.Errorf("persist secret encryption key: %w", err)
+		}
+		if err := validateSecretEncryptionKey(storedKey); err != nil {
+			return err
+		}
+		if storedKey != cfg.Totp.EncryptionKey {
+			log.Println("Warning: configured TOTP encryption key mismatches persisted value; using persisted key so previously encrypted secrets stay decryptable.")
+		}
+		cfg.Totp.EncryptionKey = storedKey
+		cfg.Totp.EncryptionKeyConfigured = true
+		return nil
+	}
+
+	key, created, err := getOrCreateGeneratedSecuritySecret(ctx, client, securitySecretKeySecretEncryption, 32)
+	if err != nil {
+		return fmt.Errorf("ensure secret encryption key: %w", err)
+	}
+	if err := validateSecretEncryptionKey(key); err != nil {
+		return err
+	}
+	cfg.Totp.EncryptionKey = key
+	cfg.Totp.EncryptionKeyConfigured = true
+	if created {
+		log.Println("Warning: secret encryption key auto-generated and persisted to database; set TOTP_ENCRYPTION_KEY to manage it explicitly.")
+	}
+	return nil
+}
+
+// validateSecretEncryptionKey 校验密钥值能被 AESEncryptor 使用：64 位 hex，
+// 解码后恰好 32 字节（AES-256）。在启动阶段提前失败，避免服务起来后加密器报错。
+func validateSecretEncryptionKey(value string) error {
+	raw, err := hex.DecodeString(value)
+	if err != nil {
+		return fmt.Errorf("secret encryption key must be hex-encoded: %w", err)
+	}
+	if len(raw) != 32 {
+		return fmt.Errorf("secret encryption key must decode to 32 bytes (64 hex chars), got %d bytes", len(raw))
 	}
 	return nil
 }

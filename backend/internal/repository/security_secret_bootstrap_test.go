@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/hex"
@@ -334,4 +335,94 @@ func TestGenerateHexSecretLengths(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotEqual(t, v1, v2)
+}
+
+func testHexKey(seed byte) string {
+	key := bytes.Repeat([]byte("0123456789abcdef"), 4)
+	key[0] = seed // seed 取 '0'-'9'，替换首字符后仍是合法 hex
+	return string(key)
+}
+
+func TestEnsureBootstrapSecretsGenerateAndPersistEncryptionKey(t *testing.T) {
+	client := newSecuritySecretTestClient(t)
+	cfg := &config.Config{}
+
+	err := ensureBootstrapSecrets(context.Background(), client, cfg)
+	require.NoError(t, err)
+	require.Len(t, cfg.Totp.EncryptionKey, 64)
+	decoded, err := hex.DecodeString(cfg.Totp.EncryptionKey)
+	require.NoError(t, err)
+	require.Len(t, decoded, 32)
+	require.True(t, cfg.Totp.EncryptionKeyConfigured)
+
+	stored, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ(securitySecretKeySecretEncryption)).Only(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, cfg.Totp.EncryptionKey, stored.Value)
+
+	// 模拟重启：新的配置实例必须拿到同一个持久化密钥。
+	restarted := &config.Config{}
+	err = ensureBootstrapSecrets(context.Background(), client, restarted)
+	require.NoError(t, err)
+	require.Equal(t, cfg.Totp.EncryptionKey, restarted.Totp.EncryptionKey)
+	require.True(t, restarted.Totp.EncryptionKeyConfigured)
+}
+
+func TestEnsureBootstrapSecretsPersistConfiguredEncryptionKey(t *testing.T) {
+	client := newSecuritySecretTestClient(t)
+	configuredKey := testHexKey('1')
+	cfg := &config.Config{Totp: config.TotpConfig{EncryptionKey: configuredKey}}
+
+	err := ensureBootstrapSecrets(context.Background(), client, cfg)
+	require.NoError(t, err)
+	require.Equal(t, configuredKey, cfg.Totp.EncryptionKey)
+	require.True(t, cfg.Totp.EncryptionKeyConfigured)
+
+	stored, err := client.SecuritySecret.Query().Where(securitysecret.KeyEQ(securitySecretKeySecretEncryption)).Only(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, configuredKey, stored.Value)
+}
+
+func TestEnsureBootstrapSecretsEncryptionKeyStoredValueWins(t *testing.T) {
+	client := newSecuritySecretTestClient(t)
+	storedKey := testHexKey('2')
+	_, err := client.SecuritySecret.Create().
+		SetKey(securitySecretKeySecretEncryption).
+		SetValue(storedKey).
+		Save(context.Background())
+	require.NoError(t, err)
+
+	cfg := &config.Config{Totp: config.TotpConfig{EncryptionKey: testHexKey('3')}}
+	err = ensureBootstrapSecrets(context.Background(), client, cfg)
+	require.NoError(t, err)
+	require.Equal(t, storedKey, cfg.Totp.EncryptionKey)
+	require.True(t, cfg.Totp.EncryptionKeyConfigured)
+}
+
+func TestEnsureBootstrapSecretsRejectInvalidConfiguredEncryptionKey(t *testing.T) {
+	client := newSecuritySecretTestClient(t)
+
+	cfg := &config.Config{Totp: config.TotpConfig{EncryptionKey: "not-hex-at-all"}}
+	err := ensureBootstrapSecrets(context.Background(), client, cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "hex")
+
+	shortKey := strings.Repeat("ab", 8) // 32 hex chars = 16 bytes
+	cfg = &config.Config{Totp: config.TotpConfig{EncryptionKey: shortKey}}
+	err = ensureBootstrapSecrets(context.Background(), client, cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "32 bytes")
+}
+
+func TestEnsureBootstrapSecretsRejectInvalidStoredEncryptionKey(t *testing.T) {
+	client := newSecuritySecretTestClient(t)
+	_, err := client.SecuritySecret.Create().
+		SetKey(securitySecretKeySecretEncryption).
+		SetValue("garbage-value-that-is-long-enough-32b").
+		Save(context.Background())
+	require.NoError(t, err)
+
+	cfg := &config.Config{}
+	err = ensureBootstrapSecrets(context.Background(), client, cfg)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "hex")
 }
