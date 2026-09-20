@@ -23,3 +23,18 @@
 .profile-actions-row{margin-top:-76px;margin-bottom:38px;position:relative;z-index:2}.profile-actions-row .profile-logout{transform:translateY(-2px)}
 @media(max-width:900px){.profile-actions-row{margin-top:-28px;margin-bottom:24px}}
 .home header{max-width:1400px;margin:0 auto}.home{padding-left:5vw;padding-right:5vw}
+/* Usage page: per-model cost bars + list pagination */
+.panel-title{align-items:center;gap:12px}.chart-range{font:13px 'DM Sans';color:#6f6259;border:1px solid var(--line);background:#fffaf5;border-radius:8px;padding:6px 10px}
+.bars{height:auto;margin-top:22px;gap:12px}
+.bars .bar-item{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:8px}
+.bars .bar-figure{height:190px;width:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px}
+.bars .bar-figure i{width:min(48px,72%);background:#bca99b;border-radius:4px 4px 0 0}
+.bars .bar-item:hover .bar-figure i{background:#a8937f}
+.bars .bar-value{font-size:12px;color:#6f6259;white-space:nowrap}
+.bars .bar-label{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--muted)}
+.chart-empty{padding:70px 20px;text-align:center;color:var(--muted)}
+.usage-foot{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:16px 10px 4px;color:var(--muted);font-size:13px;flex-wrap:wrap}
+.usage-foot .pager{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.usage-foot .pager button{border:1px solid var(--line);border-radius:8px;padding:6px 12px;background:#fffaf5}
+.usage-foot .pager button:disabled{opacity:.45;cursor:default}
+.usage-foot .page-size select{border:1px solid var(--line);background:#fffaf5;border-radius:8px;padding:6px 8px;margin-left:4px}

@@ -24,8 +24,10 @@ type userUsageRepoCapture struct {
 	groupFilters usagestats.UsageLogFilters
 	listRows     []service.UsageLog
 	stats        *usagestats.UsageStats
-	modelStats   []usagestats.ModelStat
-	groupStats   []usagestats.GroupStat
+	modelStats      []usagestats.ModelStat
+	groupStats      []usagestats.GroupStat
+	modelStatsStart time.Time
+	modelStatsEnd   time.Time
 }
 
 func (s *userUsageRepoCapture) ListWithFilters(ctx context.Context, params pagination.PaginationParams, filters usagestats.UsageLogFilters) ([]service.UsageLog, *pagination.PaginationResult, error) {
@@ -62,7 +64,18 @@ func (s *userUsageRepoCapture) GetUsageTrendWithFilters(ctx context.Context, sta
 }
 
 func (s *userUsageRepoCapture) GetModelStatsWithFilters(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, requestType *int16, stream *bool, billingType *int8) ([]usagestats.ModelStat, error) {
+	s.modelStatsStart, s.modelStatsEnd = startTime, endTime
 	return s.modelStats, nil
+}
+
+// modelStatsWindow 返回模型统计查询捕获的时间窗口（未传时间时为零值）。
+func (s *userUsageRepoCapture) modelStatsWindow() (time.Time, time.Time) {
+	return s.modelStatsStart, s.modelStatsEnd
+}
+
+// listTimeWindow 返回列表查询捕获的时间窗口（未传时间时为零值）。
+func (s *userUsageRepoCapture) listTimeWindow() (time.Time, time.Time) {
+	return derefTime(s.listFilters.StartTime), derefTime(s.listFilters.EndTime)
 }
 
 func (s *userUsageRepoCapture) GetGroupStatsWithFilters(ctx context.Context, startTime, endTime time.Time, userID, apiKeyID, accountID, groupID int64, requestType *int16, stream *bool, billingType *int8) ([]usagestats.GroupStat, error) {

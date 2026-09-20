@@ -179,6 +179,21 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 		endPtr = &endTime
 	}
 
+	// hours=N：精确的滚动时间窗（如最近 24 小时）。提供时优先于 start_date/
+	// end_date/period，start 为 now-N 小时、end 为 now，供趋势/模型统计等
+	// 面板展示"最近 N 小时"这类按小时对齐的消耗视图。
+	if hoursStr := strings.TrimSpace(c.Query("hours")); hoursStr != "" {
+		hours, err := strconv.Atoi(hoursStr)
+		if err != nil || hours <= 0 || hours > 24*90 {
+			response.BadRequest(c, "Invalid hours, use an integer between 1 and 2160")
+			return nil, false
+		}
+		startTime = now.Add(-time.Duration(hours) * time.Hour)
+		startPtr = &startTime
+		endTime = now
+		endPtr = &endTime
+	}
+
 	if requireRange {
 		if startPtr == nil {
 			switch c.DefaultQuery("period", "") {
