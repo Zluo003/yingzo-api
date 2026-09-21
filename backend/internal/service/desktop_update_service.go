@@ -155,17 +155,6 @@ func (s *DesktopUpdateService) UpdateStorage(ctx context.Context, input DesktopU
 		if err := os.MkdirAll(s.effectiveLocalDir(normalized), 0o750); err != nil {
 			return nil, infraerrors.BadRequest("DESKTOP_UPDATE_LOCAL_DIR_UNAVAILABLE", err.Error())
 		}
-	} else {
-		if s.storeFactory == nil {
-			return nil, errors.New("desktop update object storage is unavailable")
-		}
-		store, err := s.storeForConfig(ctx, normalized)
-		if err != nil {
-			return nil, infraerrors.BadRequest("DESKTOP_UPDATE_R2_INVALID", err.Error())
-		}
-		if err := store.HeadBucket(ctx); err != nil {
-			return nil, infraerrors.BadRequest("DESKTOP_UPDATE_R2_UNAVAILABLE", err.Error())
-		}
 	}
 	if normalized.R2.SecretAccessKey != "" {
 		if s.encryptor == nil {
@@ -187,6 +176,38 @@ func (s *DesktopUpdateService) UpdateStorage(ctx context.Context, input DesktopU
 		return nil, err
 	}
 	return s.GetStorage(ctx)
+}
+
+// TestStorage checks that the configured storage is reachable without saving
+// the supplied credentials or other settings. This keeps a transient S3/R2
+// connectivity error from preventing an administrator from saving a config
+// that can be corrected or tested again later.
+func (s *DesktopUpdateService) TestStorage(ctx context.Context, input DesktopUpdateStorageConfig) error {
+	current, _ := s.loadStorage(ctx)
+	if strings.TrimSpace(input.R2.SecretAccessKey) == "" {
+		input.R2.SecretAccessKey = current.R2.SecretAccessKey
+	}
+	normalized, err := normalizeDesktopUpdateStorage(input, s.defaultDir)
+	if err != nil {
+		return infraerrors.BadRequest("DESKTOP_UPDATE_STORAGE_INVALID", err.Error())
+	}
+	if normalized.Backend == "local" {
+		if err := os.MkdirAll(s.effectiveLocalDir(normalized), 0o750); err != nil {
+			return infraerrors.BadRequest("DESKTOP_UPDATE_LOCAL_DIR_UNAVAILABLE", err.Error())
+		}
+		return nil
+	}
+	if s.storeFactory == nil {
+		return errors.New("desktop update object storage is unavailable")
+	}
+	store, err := s.storeForConfig(ctx, normalized)
+	if err != nil {
+		return infraerrors.BadRequest("DESKTOP_UPDATE_R2_INVALID", err.Error())
+	}
+	if err := store.HeadBucket(ctx); err != nil {
+		return infraerrors.BadRequest("DESKTOP_UPDATE_R2_UNAVAILABLE", err.Error())
+	}
+	return nil
 }
 
 func (s *DesktopUpdateService) List(ctx context.Context) ([]DesktopRelease, error) {

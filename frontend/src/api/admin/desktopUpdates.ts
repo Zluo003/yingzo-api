@@ -61,6 +61,11 @@ export async function updateStorage(input: Partial<DesktopUpdateStorage>): Promi
   return data
 }
 
+export async function testStorage(input: Partial<DesktopUpdateStorage>): Promise<{ ok: boolean; message: string }> {
+  const { data } = await apiClient.post<{ ok: boolean; message: string }>('/admin/desktop-updates/storage/test', input)
+  return data
+}
+
 export async function upload(input: {
   version: string
   platform: DesktopUpdatePlatform
@@ -90,4 +95,4 @@ export async function remove(id: string): Promise<{ deleted: boolean }> {
   return data
 }
 
-export default { list, getStorage, updateStorage, upload, publish, remove }
+export default { list, getStorage, updateStorage, testStorage, upload, publish, remove }

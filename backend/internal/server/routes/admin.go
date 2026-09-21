@@ -184,6 +184,7 @@ func registerDesktopUpdateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	{
 		updates.GET("", h.Admin.DesktopUpdate.List)
 		updates.GET("/storage", h.Admin.DesktopUpdate.Storage)
+		updates.POST("/storage/test", h.Admin.DesktopUpdate.TestStorage)
 		updates.PUT("/storage", h.Admin.DesktopUpdate.UpdateStorage)
 		updates.POST("", h.Admin.DesktopUpdate.Upload)
 		updates.POST("/:id/publish", h.Admin.DesktopUpdate.Publish)

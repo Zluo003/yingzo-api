@@ -16,17 +16,17 @@
           <label class="field"><span>升级服务公网域名（8081）</span><input v-model="storage.public_base_url" placeholder="https://updata.yingzo.art" /><small>用于访问升级 API；Nginx 应将此域名转发到 8081。</small></label>
           <label v-if="storage.backend === 'local'" class="field md:col-span-2"><span>本地目录（可选）</span><input v-model="storage.local_dir" placeholder="数据目录下 desktop-updates" /><small>当前生效：{{ storage.effective_local_dir }}</small></label>
           <template v-else>
-            <label class="field"><span>Endpoint</span><input v-model="storage.r2.endpoint" /></label>
+            <label class="field"><span>Endpoint</span><input v-model="storage.r2.endpoint" /><small>填写账户级 S3 API 地址，例如 https://&lt;account_id&gt;.r2.cloudflarestorage.com，不要附加 Bucket 路径。</small></label>
             <label class="field"><span>Bucket</span><input v-model="storage.r2.bucket" /></label>
             <label class="field"><span>Prefix</span><input v-model="storage.r2.prefix" /></label>
-            <label class="field"><span>Region</span><input v-model="storage.r2.region" /></label>
+            <label class="field"><span>Region</span><input v-model="storage.r2.region" /><small>Cloudflare R2 通常填写 auto。</small></label>
             <label class="field"><span>Access Key ID</span><input v-model="storage.r2.access_key_id" /></label>
             <label class="field"><span>Secret Access Key</span><input v-model="storage.r2.secret_access_key" type="password" placeholder="留空沿用已保存密钥" /></label>
             <label class="field md:col-span-2"><span>R2 自定义域名</span><input v-model="storage.r2.custom_domain" placeholder="https://downloads.example.com" /><small>可选；填写后，安装包下载地址会直接使用该域名，否则通过升级服务生成临时下载地址。</small></label>
             <label class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300"><input v-model="storage.r2.force_path_style" type="checkbox" /> 使用 path-style</label>
           </template>
         </div>
-        <div class="mt-4 flex items-center gap-3"><button class="btn btn-primary" :disabled="saving" @click="saveStorage">{{ saving ? '保存中…' : '保存存储配置' }}</button><span v-if="storage.secret_access_key_configured" class="text-xs text-gray-500">R2 密钥已配置</span></div>
+        <div class="mt-4 flex items-center gap-3"><button class="btn btn-primary" :disabled="saving || testing" @click="saveStorage">{{ saving ? '保存中…' : '保存存储配置' }}</button><button v-if="storage.backend === 'r2'" class="btn btn-secondary" :disabled="saving || testing" @click="testStorageConnection">{{ testing ? '测试中…' : '测试连接' }}</button><span v-if="storage.secret_access_key_configured" class="text-xs text-gray-500">R2 密钥已配置</span></div>
       </section>
 
       <section class="card p-5">
@@ -58,6 +58,7 @@ import { useAppStore } from '@/stores'
 const appStore = useAppStore()
 const loading = ref(false)
 const saving = ref(false)
+const testing = ref(false)
 const uploading = ref(false)
 const releases = ref<DesktopRelease[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
@@ -67,6 +68,7 @@ const form = reactive({ version: '', platform: 'win32' as 'win32' | 'darwin', re
 
 async function load() { loading.value = true; try { Object.assign(storage, await desktopUpdatesAPI.getStorage()); releases.value = await desktopUpdatesAPI.list() } catch (error) { appStore.showError(errorMessage(error, '加载升级配置失败')) } finally { loading.value = false } }
 async function saveStorage() { saving.value = true; try { Object.assign(storage, await desktopUpdatesAPI.updateStorage(storage)); appStore.showSuccess('存储配置已保存') } catch (error) { appStore.showError(errorMessage(error, '保存存储配置失败')) } finally { saving.value = false } }
+async function testStorageConnection() { testing.value = true; try { const result = await desktopUpdatesAPI.testStorage(storage); if (result.ok) appStore.showSuccess('R2 连接成功'); else appStore.showError(result.message || 'R2 连接失败') } catch (error) { appStore.showError(errorMessage(error, '测试 R2 连接失败')) } finally { testing.value = false } }
 function onFile(event: Event) { form.package = (event.target as HTMLInputElement).files?.[0] || null }
 function onInstallerFile(event: Event) { form.installerPackage = (event.target as HTMLInputElement).files?.[0] || null }
 async function uploadRelease() { if (!form.package || (form.platform === 'darwin' && !form.installerPackage)) return; uploading.value = true; try { await desktopUpdatesAPI.upload({ version: form.version, platform: form.platform, arch: form.platform === 'darwin' ? 'arm64' : 'x64', release_notes: form.release_notes, package: form.package, installerPackage: form.installerPackage || undefined }); appStore.showSuccess('版本上传成功'); form.version = ''; form.release_notes = ''; form.package = null; form.installerPackage = null; if (fileInput.value) fileInput.value.value = ''; if (installerInput.value) installerInput.value.value = ''; await load() } catch (error) { appStore.showError(errorMessage(error, '上传版本失败')) } finally { uploading.value = false } }

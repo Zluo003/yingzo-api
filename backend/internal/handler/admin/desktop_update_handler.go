@@ -52,6 +52,19 @@ func (h *DesktopUpdateHandler) UpdateStorage(c *gin.Context) {
 	response.Success(c, settings)
 }
 
+func (h *DesktopUpdateHandler) TestStorage(c *gin.Context) {
+	var input service.DesktopUpdateStorageConfig
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	if err := h.service.TestStorage(c.Request.Context(), input); err != nil {
+		response.Success(c, gin.H{"ok": false, "message": err.Error()})
+		return
+	}
+	response.Success(c, gin.H{"ok": true, "message": "connection successful"})
+}
+
 func (h *DesktopUpdateHandler) Upload(c *gin.Context) {
 	subject, ok := middleware2.GetAuthSubjectFromContext(c)
 	if !ok {

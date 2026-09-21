@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"io"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,5 +93,87 @@ func TestNormalizeDesktopUpdateR2CustomDomain(t *testing.T) {
 	cfg.R2.CustomDomain = "ftp://downloads.example.com"
 	if _, err := normalizeDesktopUpdateStorage(cfg, defaultDir); err == nil {
 		t.Fatal("invalid R2 custom domain was accepted")
+	}
+}
+
+type desktopUpdateTestStore struct {
+	headBucketErr   error
+	headBucketCalls int
+}
+
+func (s *desktopUpdateTestStore) Upload(context.Context, string, io.Reader, string) (int64, error) {
+	return 0, nil
+}
+
+func (s *desktopUpdateTestStore) UploadFile(context.Context, string, string, string) (int64, error) {
+	return 0, nil
+}
+
+func (s *desktopUpdateTestStore) Download(context.Context, string) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("")), nil
+}
+
+func (s *desktopUpdateTestStore) Delete(context.Context, string) error { return nil }
+
+func (s *desktopUpdateTestStore) PresignURL(context.Context, string, time.Duration) (string, error) {
+	return "", nil
+}
+
+func (s *desktopUpdateTestStore) HeadBucket(context.Context) error {
+	s.headBucketCalls++
+	return s.headBucketErr
+}
+
+func TestDesktopUpdateTestStorage(t *testing.T) {
+	store := &desktopUpdateTestStore{}
+	var captured BackupS3Config
+	svc := &DesktopUpdateService{
+		defaultDir: t.TempDir(),
+		storeFactory: func(_ context.Context, cfg *BackupS3Config) (BackupObjectStore, error) {
+			captured = *cfg
+			return store, nil
+		},
+	}
+
+	err := svc.TestStorage(context.Background(), DesktopUpdateStorageConfig{
+		Backend: "r2",
+		R2: DesktopUpdateR2Config{
+			Endpoint:        "https://account.r2.cloudflarestorage.com",
+			Bucket:          "releases",
+			AccessKeyID:     "access",
+			SecretAccessKey: "secret",
+		},
+	})
+	if err != nil {
+		t.Fatalf("TestStorage returned error: %v", err)
+	}
+	if store.headBucketCalls != 1 {
+		t.Fatalf("expected one HeadBucket call, got %d", store.headBucketCalls)
+	}
+	if captured.Region != "auto" || captured.Bucket != "releases" || captured.SecretAccessKey != "secret" {
+		t.Fatalf("unexpected storage config passed to factory: %+v", captured)
+	}
+}
+
+func TestDesktopUpdateTestStorageReturnsConnectionError(t *testing.T) {
+	store := &desktopUpdateTestStore{headBucketErr: context.DeadlineExceeded}
+	svc := &DesktopUpdateService{
+		defaultDir: t.TempDir(),
+		storeFactory: func(context.Context, *BackupS3Config) (BackupObjectStore, error) {
+			return store, nil
+		},
+	}
+
+	err := svc.TestStorage(context.Background(), DesktopUpdateStorageConfig{
+		Backend: "r2",
+		R2: DesktopUpdateR2Config{
+			Endpoint:        "https://account.r2.cloudflarestorage.com",
+			Bucket:          "releases",
+			AccessKeyID:     "access",
+			SecretAccessKey: "secret",
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "context deadline exceeded") {
+		t.Fatalf("expected connection error, got %v", err)
 	}
 }
