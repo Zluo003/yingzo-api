@@ -72,6 +72,11 @@ func RegisterAdminRoutes(
 		// 公共文件服务
 		registerFileStorageRoutes(admin, h)
 
+		// 桌面端软件升级
+		if h.Admin.DesktopUpdate != nil {
+			registerDesktopUpdateRoutes(admin, h)
+		}
+
 		// 影视风格模板（永久资源，与临时素材分离）
 		registerFilmStyleTemplateRoutes(admin, h)
 
@@ -171,6 +176,18 @@ func registerFileStorageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		files.GET("/settings", h.Admin.FileStorage.GetSettings)
 		files.PUT("/settings", h.Admin.FileStorage.UpdateSettings)
 		files.POST("/test", h.Admin.FileStorage.TestSettings)
+	}
+}
+
+func registerDesktopUpdateRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	updates := admin.Group("/desktop-updates")
+	{
+		updates.GET("", h.Admin.DesktopUpdate.List)
+		updates.GET("/storage", h.Admin.DesktopUpdate.Storage)
+		updates.PUT("/storage", h.Admin.DesktopUpdate.UpdateStorage)
+		updates.POST("", h.Admin.DesktopUpdate.Upload)
+		updates.POST("/:id/publish", h.Admin.DesktopUpdate.Publish)
+		updates.DELETE("/:id", h.Admin.DesktopUpdate.Delete)
 	}
 }
 

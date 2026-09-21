@@ -854,6 +854,7 @@ var ProviderSet = wire.NewSet(
 	wire.Bind(new(OpenAIImageResultPublisher), new(*TemporaryAssetPublisher)),
 	wire.Bind(new(VideoResultPublisher), new(*TemporaryAssetPublisher)),
 	ProvideBackupService,
+	NewDesktopUpdateService,
 	ProvideOpsSystemLogSink,
 	ProvideOpsService,
 	ProvideOpsIngressRejectAggregator,

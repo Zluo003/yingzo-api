@@ -481,6 +481,12 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/desktop-updates',
+    name: 'AdminDesktopUpdates',
+    component: () => import('@/views/admin/DesktopUpdatesView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Desktop Updates' }
+  },
+  {
     path: '/admin/film-style-templates',
     name: 'AdminFilmStyleTemplates',
     component: () => import('@/views/admin/FilmStyleTemplatesView.vue'),

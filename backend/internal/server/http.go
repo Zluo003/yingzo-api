@@ -23,6 +23,7 @@ import (
 var ProviderSet = wire.NewSet(
 	ProvideRouter,
 	ProvideHTTPServer,
+	ProvideUpdateHTTPServer,
 )
 
 // ProvideRouter 提供路由器

@@ -14,6 +14,7 @@ type AdminHandlers struct {
 	Announcement           *admin.AnnouncementHandler
 	DataManagement         *admin.DataManagementHandler
 	FileStorage            *admin.FileStorageHandler
+	DesktopUpdate          *admin.DesktopUpdateHandler
 	Backup                 *admin.BackupHandler
 	OAuth                  *admin.OAuthHandler
 	OpenAIOAuth            *admin.OpenAIOAuthHandler

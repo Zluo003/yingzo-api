@@ -766,6 +766,7 @@ const adminNavItems = computed((): NavItem[] => {
     { path: '/admin/users', label: t('nav.users'), icon: UsersIcon, hideInSimpleMode: true },
     { path: '/admin/groups', label: t('nav.groups'), icon: FolderIcon },
     { path: '/admin/yingzo-agent', label: t('nav.yingzoAgent'), icon: FolderIcon },
+    { path: '/admin/desktop-updates', label: t('nav.desktopUpdates'), icon: ChartIcon },
     { path: '/admin/film-style-templates', label: t('nav.filmStyleTemplates'), icon: FolderIcon },
     {
       path: '/admin/channels',

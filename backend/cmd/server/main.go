@@ -185,8 +185,14 @@ func runMainServer() {
 			log.Fatalf("Failed to start server: %v", err)
 		}
 	}()
+	go func() {
+		if err := app.UpdateServer.Server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("Failed to start update server on %s: %v", app.UpdateServer.Server.Addr, err)
+		}
+	}()
 
 	log.Printf("Server started on %s", app.Server.Addr)
+	log.Printf("Update server started on %s", app.UpdateServer.Server.Addr)
 
 	// 等待中断信号
 	quit := make(chan os.Signal, 1)
@@ -200,6 +206,9 @@ func runMainServer() {
 
 	if err := app.Server.Shutdown(ctx); err != nil {
 		log.Printf("Server forced to shutdown: %v", err)
+	}
+	if err := app.UpdateServer.Server.Shutdown(ctx); err != nil {
+		log.Printf("Update server forced to shutdown: %v", err)
 	}
 
 	log.Println("Server exited")
