@@ -30,7 +30,7 @@ function DownloadPage({user,setPage}){
         const response=await fetch(`${UPDATE_API}/check?version=0.0.0&platform=${target.platform}&arch=${target.arch}`,{headers:{Accept:'application/json'}})
         const data=await response.json().catch(()=>({}))
         if(!response.ok||!data.update) return {...target,status:'unavailable'}
-        return {...target,status:'available',version:data.version,notes:data.notes,downloadUrl:data.download_url,size:data.size_bytes,sha256:data.sha256}
+        return {...target,status:'available',version:data.version,notes:data.notes,downloadUrl:data.installer_url||data.download_url,size:data.installer_size_bytes||data.size_bytes,sha256:data.installer_sha256||data.sha256}
       }catch{return {...target,status:'error'}}
     })).then(next=>{if(active)setReleases(next)})
     return()=>{active=false;document.title=previousTitle}

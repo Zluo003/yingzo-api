@@ -17,13 +17,13 @@ import (
 
 type userUsageRepoCapture struct {
 	service.UsageLogRepository
-	listParams   pagination.PaginationParams
-	listFilters  usagestats.UsageLogFilters
-	statsFilters usagestats.UsageLogFilters
-	trendFilters usagestats.UsageLogFilters
-	groupFilters usagestats.UsageLogFilters
-	listRows     []service.UsageLog
-	stats        *usagestats.UsageStats
+	listParams      pagination.PaginationParams
+	listFilters     usagestats.UsageLogFilters
+	statsFilters    usagestats.UsageLogFilters
+	trendFilters    usagestats.UsageLogFilters
+	groupFilters    usagestats.UsageLogFilters
+	listRows        []service.UsageLog
+	stats           *usagestats.UsageStats
 	modelStats      []usagestats.ModelStat
 	groupStats      []usagestats.GroupStat
 	modelStatsStart time.Time

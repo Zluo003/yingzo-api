@@ -60,40 +60,49 @@ type DesktopUpdateStorageView struct {
 }
 
 type DesktopRelease struct {
-	ID              string     `json:"id"`
-	Version         string     `json:"version"`
-	Platform        string     `json:"platform"`
-	Arch            string     `json:"arch"`
-	Status          string     `json:"status"`
-	PackageFilename string     `json:"package_filename"`
-	StorageBackend  string     `json:"storage_backend"`
-	PackageSize     int64      `json:"package_size_bytes"`
-	SHA256          string     `json:"sha256"`
-	SHA512          string     `json:"sha512"`
-	ReleaseNotes    string     `json:"release_notes"`
-	DownloadURL     string     `json:"download_url"`
-	MetadataURL     string     `json:"metadata_url"`
-	StorageKey      string     `json:"-"`
-	MetadataKey     string     `json:"-"`
-	CreatedAt       time.Time  `json:"created_at"`
-	PublishedAt     *time.Time `json:"published_at,omitempty"`
+	ID                  string     `json:"id"`
+	Version             string     `json:"version"`
+	Platform            string     `json:"platform"`
+	Arch                string     `json:"arch"`
+	Status              string     `json:"status"`
+	PackageFilename     string     `json:"package_filename"`
+	StorageBackend      string     `json:"storage_backend"`
+	PackageSize         int64      `json:"package_size_bytes"`
+	SHA256              string     `json:"sha256"`
+	SHA512              string     `json:"sha512"`
+	ReleaseNotes        string     `json:"release_notes"`
+	DownloadURL         string     `json:"download_url"`
+	MetadataURL         string     `json:"metadata_url"`
+	InstallerFilename   string     `json:"installer_filename,omitempty"`
+	InstallerSize       int64      `json:"installer_size_bytes,omitempty"`
+	InstallerSHA256     string     `json:"installer_sha256,omitempty"`
+	InstallerSHA512     string     `json:"-"`
+	InstallerURL        string     `json:"installer_url,omitempty"`
+	StorageKey          string     `json:"-"`
+	MetadataKey         string     `json:"-"`
+	InstallerStorageKey string     `json:"-"`
+	CreatedAt           time.Time  `json:"created_at"`
+	PublishedAt         *time.Time `json:"published_at,omitempty"`
 }
 
 type DesktopUpdateCheck struct {
-	Update      bool   `json:"update"`
-	Version     string `json:"version,omitempty"`
-	Notes       string `json:"notes,omitempty"`
-	DownloadURL string `json:"download_url,omitempty"`
-	SHA256      string `json:"sha256,omitempty"`
-	SizeBytes   int64  `json:"size_bytes,omitempty"`
+	Update             bool   `json:"update"`
+	Version            string `json:"version,omitempty"`
+	Notes              string `json:"notes,omitempty"`
+	DownloadURL        string `json:"download_url,omitempty"`
+	SHA256             string `json:"sha256,omitempty"`
+	SizeBytes          int64  `json:"size_bytes,omitempty"`
+	InstallerURL       string `json:"installer_url,omitempty"`
+	InstallerSizeBytes int64  `json:"installer_size_bytes,omitempty"`
 }
 
 type DesktopReleaseInput struct {
-	Version      string
-	Platform     string
-	Arch         string
-	ReleaseNotes string
-	Filename     string
+	Version           string
+	Platform          string
+	Arch              string
+	ReleaseNotes      string
+	Filename          string
+	InstallerFilename string
 }
 
 type DesktopUpdateService struct {
@@ -181,11 +190,11 @@ func (s *DesktopUpdateService) UpdateStorage(ctx context.Context, input DesktopU
 }
 
 func (s *DesktopUpdateService) List(ctx context.Context) ([]DesktopRelease, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, version, platform, arch, status, package_filename, storage_backend, storage_key, metadata_key, package_size_bytes, sha256, sha512, release_notes, download_url, metadata_url, created_at, published_at FROM yingzo_desktop_releases WHERE deleted_at IS NULL ORDER BY created_at DESC`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, version, platform, arch, status, package_filename, storage_backend, storage_key, metadata_key, package_size_bytes, sha256, sha512, release_notes, download_url, metadata_url, installer_filename, installer_storage_key, installer_size_bytes, installer_sha256, installer_sha512, installer_download_url, created_at, published_at FROM yingzo_desktop_releases WHERE deleted_at IS NULL ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	items := make([]DesktopRelease, 0)
 	for rows.Next() {
 		item, err := scanDesktopRelease(rows)
@@ -198,11 +207,19 @@ func (s *DesktopUpdateService) List(ctx context.Context) ([]DesktopRelease, erro
 }
 
 func (s *DesktopUpdateService) CreateFromFile(ctx context.Context, input DesktopReleaseInput, filePath string, actorID int64) (*DesktopRelease, error) {
+	return s.CreateFromFiles(ctx, input, filePath, "", actorID)
+}
+
+// CreateFromFiles stores the updater artifact and, for macOS, an optional DMG
+// used for first-time installs. The updater artifact remains the ZIP package
+// consumed by electron-updater.
+func (s *DesktopUpdateService) CreateFromFiles(ctx context.Context, input DesktopReleaseInput, filePath, installerPath string, actorID int64) (*DesktopRelease, error) {
 	input.Version = strings.TrimSpace(input.Version)
 	input.Version = strings.TrimPrefix(input.Version, "v")
 	input.Platform = strings.TrimSpace(input.Platform)
 	input.Arch = strings.TrimSpace(input.Arch)
 	input.Filename = strings.TrimSpace(input.Filename)
+	input.InstallerFilename = strings.TrimSpace(input.InstallerFilename)
 	if err := validateDesktopReleaseInput(input); err != nil {
 		return nil, infraerrors.BadRequest("DESKTOP_UPDATE_INPUT_INVALID", err.Error())
 	}
@@ -215,6 +232,9 @@ func (s *DesktopUpdateService) CreateFromFile(ctx context.Context, input Desktop
 	}
 	if input.Platform == "darwin" && !strings.HasSuffix(strings.ToLower(input.Filename), ".zip") {
 		return nil, infraerrors.BadRequest("DESKTOP_UPDATE_PACKAGE_INVALID", "macOS 自动更新包必须是 .zip")
+	}
+	if installerPath != "" && input.Platform == "darwin" && !strings.HasSuffix(strings.ToLower(input.InstallerFilename), ".dmg") {
+		return nil, infraerrors.BadRequest("DESKTOP_UPDATE_INSTALLER_INVALID", "macOS 首次安装包必须是 .dmg")
 	}
 	sha256Hex, sha512Base64, err := hashFile(filePath)
 	if err != nil {
@@ -234,6 +254,33 @@ func (s *DesktopUpdateService) CreateFromFile(ctx context.Context, input Desktop
 	if err := s.storePackage(ctx, cfg, storageKey, filePath); err != nil {
 		return nil, err
 	}
+	installerFilename := filename
+	installerStorageKey := storageKey
+	installerSize := info.Size()
+	installerSHA256 := sha256Hex
+	installerSHA512 := sha512Base64
+	if installerPath != "" {
+		installerInfo, statErr := os.Stat(installerPath)
+		if statErr != nil || !installerInfo.Mode().IsRegular() || installerInfo.Size() <= 0 {
+			_ = s.deleteObject(ctx, cfg, storageKey)
+			return nil, infraerrors.BadRequest("DESKTOP_UPDATE_INSTALLER_INVALID", "首次安装包为空或不可读取")
+		}
+		installerFilename = filepath.Base(strings.ReplaceAll(input.InstallerFilename, "\\", "/"))
+		installerSHA256, installerSHA512, err = hashFile(installerPath)
+		if err != nil {
+			_ = s.deleteObject(ctx, cfg, storageKey)
+			return nil, err
+		}
+		installerStorageKey = path.Join(strings.Trim(cfg.R2.Prefix, "/"), input.Version, input.Platform, input.Arch, "installer", installerFilename)
+		if cfg.Backend == "local" {
+			installerStorageKey = path.Join(input.Version, input.Platform, input.Arch, "installer", installerFilename)
+		}
+		if err := s.storePackage(ctx, cfg, installerStorageKey, installerPath); err != nil {
+			_ = s.deleteObject(ctx, cfg, storageKey)
+			return nil, err
+		}
+		installerSize = installerInfo.Size()
+	}
 	base := effectivePublicBaseURL(cfg)
 	if cfg.Backend == "r2" {
 		// R2 packages are either served from the configured custom domain or
@@ -245,10 +292,17 @@ func (s *DesktopUpdateService) CreateFromFile(ctx context.Context, input Desktop
 	if cfg.Backend == "r2" && hasCustomDesktopUpdateDomain(cfg) {
 		downloadURL = r2CustomDomain(cfg) + "/" + escapedDesktopUpdateKey(storageKey)
 	}
+	installerURL := fmt.Sprintf("%s/v1/updates/download/%s?artifact=installer", strings.TrimRight(base, "/"), id.String())
+	if cfg.Backend == "r2" && hasCustomDesktopUpdateDomain(cfg) {
+		installerURL = r2CustomDomain(cfg) + "/" + escapedDesktopUpdateKey(installerStorageKey)
+	}
 	metadataURL := fmt.Sprintf("%s/v1/updates/metadata/%s", strings.TrimRight(desktopUpdatePublicBaseURL, "/"), id.String())
-	_, err = s.db.ExecContext(ctx, `INSERT INTO yingzo_desktop_releases (id,version,platform,arch,status,package_filename,storage_backend,storage_key,metadata_key,package_size_bytes,sha256,sha512,release_notes,download_url,metadata_url,created_by) VALUES ($1,$2,$3,$4,'draft',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, id, input.Version, input.Platform, input.Arch, filename, cfg.Backend, storageKey, metadataKey, info.Size(), sha256Hex, sha512Base64, input.ReleaseNotes, downloadURL, metadataURL, actorID)
+	_, err = s.db.ExecContext(ctx, `INSERT INTO yingzo_desktop_releases (id,version,platform,arch,status,package_filename,storage_backend,storage_key,metadata_key,package_size_bytes,sha256,sha512,release_notes,download_url,metadata_url,installer_filename,installer_storage_key,installer_size_bytes,installer_sha256,installer_sha512,installer_download_url,created_by) VALUES ($1,$2,$3,$4,'draft',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`, id, input.Version, input.Platform, input.Arch, filename, cfg.Backend, storageKey, metadataKey, info.Size(), sha256Hex, sha512Base64, input.ReleaseNotes, downloadURL, metadataURL, installerFilename, installerStorageKey, installerSize, installerSHA256, installerSHA512, installerURL, actorID)
 	if err != nil {
 		_ = s.deleteObject(ctx, cfg, storageKey)
+		if installerStorageKey != storageKey {
+			_ = s.deleteObject(ctx, cfg, installerStorageKey)
+		}
 		return nil, err
 	}
 	item, err := s.getByID(ctx, id.String())
@@ -258,6 +312,9 @@ func (s *DesktopUpdateService) CreateFromFile(ctx context.Context, input Desktop
 	metadata := generateDesktopUpdateMetadata(item)
 	if err := s.storeMetadata(ctx, cfg, metadataKey, metadata); err != nil {
 		_ = s.deleteObject(ctx, cfg, storageKey)
+		if installerStorageKey != storageKey {
+			_ = s.deleteObject(ctx, cfg, installerStorageKey)
+		}
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM yingzo_desktop_releases WHERE id=$1`, id)
 		return nil, err
 	}
@@ -273,7 +330,7 @@ func (s *DesktopUpdateService) Publish(ctx context.Context, id string, actorID i
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var platform, arch, status string
 	if err := tx.QueryRowContext(ctx, `SELECT platform, arch, status FROM yingzo_desktop_releases WHERE id=$1 AND deleted_at IS NULL`, parsed).Scan(&platform, &arch, &status); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -317,6 +374,11 @@ func (s *DesktopUpdateService) Delete(ctx context.Context, id string) error {
 	if err := s.deleteObject(ctx, cfg, item.MetadataKey); err != nil {
 		return err
 	}
+	if item.InstallerStorageKey != "" && item.InstallerStorageKey != item.StorageKey {
+		if err := s.deleteObject(ctx, cfg, item.InstallerStorageKey); err != nil {
+			return err
+		}
+	}
 	_, err = s.db.ExecContext(ctx, `DELETE FROM yingzo_desktop_releases WHERE id=$1`, id)
 	return err
 }
@@ -341,7 +403,7 @@ func (s *DesktopUpdateService) Check(ctx context.Context, currentVersion, platfo
 	if err := s.refreshReleaseDownloadURL(ctx, item); err != nil {
 		return DesktopUpdateCheck{}, err
 	}
-	return DesktopUpdateCheck{Update: true, Version: item.Version, Notes: item.ReleaseNotes, DownloadURL: item.DownloadURL, SHA256: item.SHA256, SizeBytes: item.PackageSize}, nil
+	return DesktopUpdateCheck{Update: true, Version: item.Version, Notes: item.ReleaseNotes, DownloadURL: item.DownloadURL, SHA256: item.SHA256, SizeBytes: item.PackageSize, InstallerURL: item.InstallerURL, InstallerSizeBytes: item.InstallerSize}, nil
 }
 
 func (s *DesktopUpdateService) Metadata(ctx context.Context, platform, arch string) ([]byte, error) {
@@ -372,7 +434,7 @@ func (s *DesktopUpdateService) MetadataByID(ctx context.Context, id string) ([]b
 	return generateDesktopUpdateMetadata(item), nil
 }
 
-func (s *DesktopUpdateService) LocalPackagePath(ctx context.Context, id string) (string, bool, error) {
+func (s *DesktopUpdateService) LocalPackagePath(ctx context.Context, id string, artifact ...string) (string, bool, error) {
 	item, err := s.getByID(ctx, id)
 	if err != nil {
 		return "", false, err
@@ -387,14 +449,18 @@ func (s *DesktopUpdateService) LocalPackagePath(ctx context.Context, id string) 
 	if err != nil {
 		return "", false, err
 	}
-	dest, err := safeDesktopUpdatePath(s.effectiveLocalDir(cfg), item.StorageKey)
+	key, _, err := desktopReleaseArtifact(item, artifact...)
+	if err != nil {
+		return "", false, err
+	}
+	dest, err := safeDesktopUpdatePath(s.effectiveLocalDir(cfg), key)
 	if err != nil {
 		return "", false, fmt.Errorf("desktop update path invalid: %w", err)
 	}
 	return dest, true, nil
 }
 
-func (s *DesktopUpdateService) RedirectURL(ctx context.Context, id string) (string, error) {
+func (s *DesktopUpdateService) RedirectURL(ctx context.Context, id string, artifact ...string) (string, error) {
 	item, err := s.getByID(ctx, id)
 	if err != nil {
 		return "", err
@@ -402,19 +468,23 @@ func (s *DesktopUpdateService) RedirectURL(ctx context.Context, id string) (stri
 	if item.Status != "published" {
 		return "", infraerrors.NotFound("DESKTOP_UPDATE_NOT_FOUND", "没有已发布的升级包")
 	}
+	key, _, err := desktopReleaseArtifact(item, artifact...)
+	if err != nil {
+		return "", err
+	}
 	if item.StorageBackend == "r2" {
 		cfg, err := s.loadStorage(ctx)
 		if err != nil {
 			return "", err
 		}
 		if hasCustomDesktopUpdateDomain(cfg) {
-			return r2CustomDomain(cfg) + "/" + escapedDesktopUpdateKey(item.StorageKey), nil
+			return r2CustomDomain(cfg) + "/" + escapedDesktopUpdateKey(key), nil
 		}
 		store, err := s.storeForConfig(ctx, cfg)
 		if err != nil {
 			return "", err
 		}
-		return store.PresignURL(ctx, item.StorageKey, 15*time.Minute)
+		return store.PresignURL(ctx, key, 15*time.Minute)
 	}
 	return "", nil
 }
@@ -429,13 +499,19 @@ func (s *DesktopUpdateService) refreshReleaseDownloadURL(ctx context.Context, it
 	}
 	if hasCustomDesktopUpdateDomain(cfg) {
 		item.DownloadURL = r2CustomDomain(cfg) + "/" + escapedDesktopUpdateKey(item.StorageKey)
+		if item.InstallerStorageKey != "" {
+			item.InstallerURL = r2CustomDomain(cfg) + "/" + escapedDesktopUpdateKey(item.InstallerStorageKey)
+		}
 	} else {
 		item.DownloadURL = fmt.Sprintf("%s/v1/updates/download/%s", desktopUpdatePublicBaseURL, item.ID)
+		if item.InstallerStorageKey != "" {
+			item.InstallerURL = fmt.Sprintf("%s/v1/updates/download/%s?artifact=installer", desktopUpdatePublicBaseURL, item.ID)
+		}
 	}
 	return nil
 }
 
-func (s *DesktopUpdateService) OpenPackage(ctx context.Context, id string) (io.ReadCloser, *DesktopRelease, error) {
+func (s *DesktopUpdateService) OpenPackage(ctx context.Context, id string, artifact ...string) (io.ReadCloser, *DesktopRelease, error) {
 	item, err := s.getByID(ctx, id)
 	if err != nil {
 		return nil, nil, err
@@ -443,12 +519,16 @@ func (s *DesktopUpdateService) OpenPackage(ctx context.Context, id string) (io.R
 	if item.Status != "published" {
 		return nil, nil, infraerrors.NotFound("DESKTOP_UPDATE_NOT_FOUND", "没有已发布的升级包")
 	}
+	key, filename, err := desktopReleaseArtifact(item, artifact...)
+	if err != nil {
+		return nil, nil, err
+	}
 	if item.StorageBackend == "local" {
 		cfg, err := s.loadStorage(ctx)
 		if err != nil {
 			return nil, nil, err
 		}
-		packagePath, err := safeDesktopUpdatePath(s.effectiveLocalDir(cfg), item.StorageKey)
+		packagePath, err := safeDesktopUpdatePath(s.effectiveLocalDir(cfg), key)
 		if err != nil {
 			return nil, nil, fmt.Errorf("desktop update path invalid: %w", err)
 		}
@@ -456,6 +536,7 @@ func (s *DesktopUpdateService) OpenPackage(ctx context.Context, id string) (io.R
 		if err != nil {
 			return nil, nil, err
 		}
+		item.PackageFilename = filename
 		return file, item, nil
 	}
 	cfg, err := s.loadStorage(ctx)
@@ -466,11 +547,25 @@ func (s *DesktopUpdateService) OpenPackage(ctx context.Context, id string) (io.R
 	if err != nil {
 		return nil, nil, err
 	}
-	body, err := store.Download(ctx, item.StorageKey)
+	body, err := store.Download(ctx, key)
 	if err != nil {
 		return nil, nil, err
 	}
+	item.PackageFilename = filename
 	return body, item, nil
+}
+
+func desktopReleaseArtifact(item *DesktopRelease, artifact ...string) (string, string, error) {
+	if item == nil {
+		return "", "", infraerrors.NotFound("DESKTOP_UPDATE_NOT_FOUND", "没有已发布的升级包")
+	}
+	if len(artifact) > 0 && strings.TrimSpace(artifact[0]) == "installer" {
+		if item.InstallerStorageKey == "" || item.InstallerFilename == "" {
+			return "", "", infraerrors.NotFound("DESKTOP_UPDATE_INSTALLER_NOT_FOUND", "没有可用的首次安装包")
+		}
+		return item.InstallerStorageKey, item.InstallerFilename, nil
+	}
+	return item.StorageKey, item.PackageFilename, nil
 }
 
 type desktopReleaseScanner interface{ Scan(dest ...any) error }
@@ -479,7 +574,7 @@ func scanDesktopRelease(scanner desktopReleaseScanner) (DesktopRelease, error) {
 	var item DesktopRelease
 	var published sql.NullTime
 	var idText string
-	if err := scanner.Scan(&idText, &item.Version, &item.Platform, &item.Arch, &item.Status, &item.PackageFilename, &item.StorageBackend, &item.StorageKey, &item.MetadataKey, &item.PackageSize, &item.SHA256, &item.SHA512, &item.ReleaseNotes, &item.DownloadURL, &item.MetadataURL, &item.CreatedAt, &published); err != nil {
+	if err := scanner.Scan(&idText, &item.Version, &item.Platform, &item.Arch, &item.Status, &item.PackageFilename, &item.StorageBackend, &item.StorageKey, &item.MetadataKey, &item.PackageSize, &item.SHA256, &item.SHA512, &item.ReleaseNotes, &item.DownloadURL, &item.MetadataURL, &item.InstallerFilename, &item.InstallerStorageKey, &item.InstallerSize, &item.InstallerSHA256, &item.InstallerSHA512, &item.InstallerURL, &item.CreatedAt, &published); err != nil {
 		return item, err
 	}
 	item.ID = idText
@@ -495,7 +590,7 @@ func (s *DesktopUpdateService) getByID(ctx context.Context, id string) (*Desktop
 	if err != nil {
 		return nil, infraerrors.BadRequest("DESKTOP_UPDATE_ID_INVALID", "版本 ID 无效")
 	}
-	row := s.db.QueryRowContext(ctx, `SELECT id, version, platform, arch, status, package_filename, storage_backend, storage_key, metadata_key, package_size_bytes, sha256, sha512, release_notes, download_url, metadata_url, created_at, published_at FROM yingzo_desktop_releases WHERE id=$1 AND deleted_at IS NULL`, parsed)
+	row := s.db.QueryRowContext(ctx, `SELECT id, version, platform, arch, status, package_filename, storage_backend, storage_key, metadata_key, package_size_bytes, sha256, sha512, release_notes, download_url, metadata_url, installer_filename, installer_storage_key, installer_size_bytes, installer_sha256, installer_sha512, installer_download_url, created_at, published_at FROM yingzo_desktop_releases WHERE id=$1 AND deleted_at IS NULL`, parsed)
 	item, err := scanDesktopRelease(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, infraerrors.NotFound("DESKTOP_UPDATE_NOT_FOUND", "版本不存在")
@@ -507,11 +602,11 @@ func (s *DesktopUpdateService) getByID(ctx context.Context, id string) (*Desktop
 }
 
 func (s *DesktopUpdateService) latest(ctx context.Context, platform, arch string) (*DesktopRelease, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, version, platform, arch, status, package_filename, storage_backend, storage_key, metadata_key, package_size_bytes, sha256, sha512, release_notes, download_url, metadata_url, created_at, published_at FROM yingzo_desktop_releases WHERE platform=$1 AND status='published' AND deleted_at IS NULL AND ($2='' OR arch=$2 OR arch='universal') ORDER BY CASE WHEN $2<>'' AND arch=$2 THEN 0 WHEN arch='universal' THEN 1 ELSE 2 END, published_at DESC`, platform, arch)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, version, platform, arch, status, package_filename, storage_backend, storage_key, metadata_key, package_size_bytes, sha256, sha512, release_notes, download_url, metadata_url, installer_filename, installer_storage_key, installer_size_bytes, installer_sha256, installer_sha512, installer_download_url, created_at, published_at FROM yingzo_desktop_releases WHERE platform=$1 AND status='published' AND deleted_at IS NULL AND ($2='' OR arch=$2 OR arch='universal') ORDER BY CASE WHEN $2<>'' AND arch=$2 THEN 0 WHEN arch='universal' THEN 1 ELSE 2 END, published_at DESC`, platform, arch)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var best *DesktopRelease
 	for rows.Next() {
 		item, err := scanDesktopRelease(rows)
@@ -665,12 +760,12 @@ func (s *DesktopUpdateService) storePackage(ctx context.Context, cfg DesktopUpda
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o640)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 	_, err = io.Copy(out, in)
 	return err
 }
@@ -725,7 +820,7 @@ func validateDesktopReleaseInput(input DesktopReleaseInput) error {
 		return errors.New("arch must be x64, arm64 or universal")
 	}
 	if input.Platform == "win32" && input.Arch != "x64" {
-		return errors.New("Windows currently supports x64 only")
+		return errors.New("windows currently supports x64 only")
 	}
 	if strings.TrimSpace(input.Filename) == "" {
 		return errors.New("package filename is required")
@@ -779,7 +874,7 @@ func hashFile(filePath string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	h1, h2 := sha256.New(), sha512.New()
 	if _, err := io.Copy(io.MultiWriter(h1, h2), f); err != nil {
 		return "", "", err

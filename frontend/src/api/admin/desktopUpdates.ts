@@ -38,6 +38,10 @@ export interface DesktopRelease {
   release_notes: string
   download_url: string
   metadata_url: string
+  installer_filename: string
+  installer_size_bytes: number
+  installer_sha256: string
+  installer_url: string
   created_at: string
   published_at?: string
 }
@@ -63,6 +67,7 @@ export async function upload(input: {
   arch: DesktopUpdateArch
   release_notes: string
   package: File
+  installerPackage?: File
 }): Promise<DesktopRelease> {
   const form = new FormData()
   form.append('version', input.version)
@@ -70,6 +75,7 @@ export async function upload(input: {
   form.append('arch', input.arch)
   form.append('release_notes', input.release_notes)
   form.append('package', input.package)
+  if (input.installerPackage) form.append('installer_package', input.installerPackage)
   const { data } = await apiClient.post<DesktopRelease>('/admin/desktop-updates', form)
   return data
 }

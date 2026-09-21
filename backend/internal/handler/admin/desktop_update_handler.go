@@ -67,14 +67,22 @@ func (h *DesktopUpdateHandler) Upload(c *gin.Context) {
 		response.BadRequest(c, "package is required")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
+	installerFile, installerHeader, installerErr := c.Request.FormFile("installer_package")
+	if installerErr != nil && installerErr != http.ErrMissingFile {
+		response.BadRequest(c, "installer_package is invalid")
+		return
+	}
+	if installerFile != nil {
+		defer func() { _ = installerFile.Close() }()
+	}
 	tmp, err := os.CreateTemp("", "yingzo-desktop-update-*")
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
 	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
+	defer func() { _ = os.Remove(tmpPath) }()
 	if _, err := tmp.ReadFrom(file); err != nil {
 		_ = tmp.Close()
 		response.ErrorFrom(c, err)
@@ -84,7 +92,30 @@ func (h *DesktopUpdateHandler) Upload(c *gin.Context) {
 		response.ErrorFrom(c, err)
 		return
 	}
-	item, err := h.service.CreateFromFile(c.Request.Context(), service.DesktopReleaseInput{Version: version, Platform: platform, Arch: arch, ReleaseNotes: notes, Filename: header.Filename}, tmpPath, subject.UserID)
+	installerPath := ""
+	if installerFile != nil {
+		installerTmp, createErr := os.CreateTemp("", "yingzo-desktop-installer-*")
+		if createErr != nil {
+			response.ErrorFrom(c, createErr)
+			return
+		}
+		installerPath = installerTmp.Name()
+		defer func() { _ = os.Remove(installerPath) }()
+		if _, copyErr := installerTmp.ReadFrom(installerFile); copyErr != nil {
+			_ = installerTmp.Close()
+			response.ErrorFrom(c, copyErr)
+			return
+		}
+		if closeErr := installerTmp.Close(); closeErr != nil {
+			response.ErrorFrom(c, closeErr)
+			return
+		}
+	}
+	installerFilename := ""
+	if installerHeader != nil {
+		installerFilename = installerHeader.Filename
+	}
+	item, err := h.service.CreateFromFiles(c.Request.Context(), service.DesktopReleaseInput{Version: version, Platform: platform, Arch: arch, ReleaseNotes: notes, Filename: header.Filename, InstallerFilename: installerFilename}, tmpPath, installerPath, subject.UserID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -145,7 +176,8 @@ func (h *DesktopUpdateHandler) PublicMetadata(c *gin.Context) {
 
 func (h *DesktopUpdateHandler) PublicDownload(c *gin.Context) {
 	id := strings.TrimSpace(c.Param("id"))
-	redirect, err := h.service.RedirectURL(c.Request.Context(), id)
+	artifact := c.Query("artifact")
+	redirect, err := h.service.RedirectURL(c.Request.Context(), id, artifact)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -154,7 +186,7 @@ func (h *DesktopUpdateHandler) PublicDownload(c *gin.Context) {
 		c.Redirect(http.StatusFound, redirect)
 		return
 	}
-	path, local, err := h.service.LocalPackagePath(c.Request.Context(), id)
+	path, local, err := h.service.LocalPackagePath(c.Request.Context(), id, artifact)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -164,12 +196,12 @@ func (h *DesktopUpdateHandler) PublicDownload(c *gin.Context) {
 		c.File(path)
 		return
 	}
-	body, item, err := h.service.OpenPackage(c.Request.Context(), id)
+	body, item, err := h.service.OpenPackage(c.Request.Context(), id, artifact)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 	c.Header("Content-Disposition", `attachment; filename="`+strings.ReplaceAll(item.PackageFilename, `"`, "")+`"`)
 	c.DataFromReader(http.StatusOK, item.PackageSize, "application/octet-stream", body, nil)
 }
