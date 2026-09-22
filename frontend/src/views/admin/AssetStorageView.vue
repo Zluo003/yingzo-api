@@ -289,6 +289,19 @@
             </label>
             <input v-model="form.s3.prefix" class="input w-full" placeholder="model-assets/" />
           </div>
+          <div class="md:col-span-2" data-testid="asset-storage-s3-custom-domain">
+            <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              {{ t('admin.assetStorage.s3.customDomain') }}
+            </label>
+            <input
+              v-model="form.s3.custom_domain"
+              class="input w-full"
+              placeholder="https://cdn.example.com"
+            />
+            <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              {{ t('admin.assetStorage.s3.customDomainHint') }}
+            </p>
+          </div>
           <div>
             <label class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
               {{ t('admin.assetStorage.s3.accessKeyId') }}
@@ -723,6 +736,7 @@ function emptyConfig(): FileStorageConfig {
       access_key_id: '',
       secret_access_key: '',
       prefix: 'model-assets/',
+      custom_domain: '',
       force_path_style: false,
     },
   }
@@ -908,7 +922,7 @@ function applySettings(data: FileStorageSettings): void {
     // 产物配额缺失/非法时按 0（不限制）处理，绝不把交付物挡在配额之外
     result_daily_max_count: normalizeResultDailyCount(data.result_daily_max_count),
     result_daily_max_bytes: normalizeResultDailyBytes(data.result_daily_max_bytes),
-    s3: { ...base.s3, ...data.s3, secret_access_key: '' },
+    s3: { ...base.s3, ...data.s3, secret_access_key: '', custom_domain: typeof data.s3?.custom_domain === 'string' ? data.s3.custom_domain : '' },
   }
   maxTotalBytesUnit.value = preferredByteUnit(form.value.max_total_bytes)
   dailyMaxBytesUnit.value = preferredByteUnit(form.value.daily_max_bytes)
@@ -1072,6 +1086,7 @@ function buildConfig(): FileStorageConfig | null {
     access_key_id: form.value.s3.access_key_id.trim(),
     secret_access_key: form.value.s3.secret_access_key ?? '',
     prefix: form.value.s3.prefix.trim() || 'model-assets/',
+    custom_domain: (form.value.s3.custom_domain ?? '').trim(),
     force_path_style: Boolean(form.value.s3.force_path_style),
   }
   if (
@@ -1081,6 +1096,11 @@ function buildConfig(): FileStorageConfig | null {
       (!s3.secret_access_key && !secretAccessKeyConfigured.value))
   ) {
     appStore.showError(t('admin.assetStorage.validation.s3Required'))
+    return null
+  }
+  // 自定义域名可选；填了就必须是合法的 scheme+host，与后端校验保持一致。
+  if (backend === 's3' && s3.custom_domain && !isAcceptablePublicBaseUrl(s3.custom_domain)) {
+    appStore.showError(t('admin.assetStorage.validation.customDomain'))
     return null
   }
 

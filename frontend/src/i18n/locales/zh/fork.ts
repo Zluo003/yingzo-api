@@ -342,6 +342,9 @@ export default {
         secretAccessKey: 'Secret Access Key',
         secretConfigured: '已保存，留空表示不修改',
         forcePathStyle: '使用 Path Style 访问（MinIO 等自建存储需要勾选）',
+        customDomain: '自定义域名（可选）',
+        customDomainHint:
+          '配置后参考素材 URL 直接指向对象存储（如 https://cdn.example.com/model-assets/<id>），上游可绕过平台代理直读文件；需要先在对象存储上绑定该域名并开启公开读取（R2 为自定义域名 + Public Access）。留空时素材走平台代理地址。生成产物固定保存在本地，不受此配置影响。',
       },
       publicBaseUrl: {
         title: '对外访问地址',
@@ -424,6 +427,7 @@ export default {
           '本地素材目录不能是系统目录（/bin、/sbin、/lib、/lib64、/usr、/etc、/proc、/sys、/dev、/boot、/root、/var）。',
         s3Required: '使用 S3 后端时必须填写 Bucket、Access Key ID 和 Secret Access Key。',
         publicBaseUrl: '公网基础地址必须是 HTTPS，且只包含协议与主机名（localhost / 127.0.0.1 除外）。',
+        customDomain: '自定义域名必须是 HTTPS，且只包含协议与主机名（localhost / 127.0.0.1 除外）。',
       },
     },
   },

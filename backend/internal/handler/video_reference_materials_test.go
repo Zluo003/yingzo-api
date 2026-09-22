@@ -57,11 +57,14 @@ func referenceMaterialTestAPIKey() *service.APIKey {
 func TestParsePlatformReferenceMaterialURL(t *testing.T) {
 	const assetID = "3f2504e0-4f89-11d3-9a0c-0305e82c3301"
 	ownHosts := map[string]bool{"api.example.com": true}
+	customAccess := service.S3CustomAccess{Base: "https://cdn.example.com", Prefix: "model-assets/"}
+	customHosts := map[string]bool{"api.example.com": true, "cdn.example.com": true}
 
 	for _, tc := range []struct {
 		name    string
 		rawURL  string
 		hosts   map[string]bool
+		access  service.S3CustomAccess
 		wantOK  bool
 		wantID  string
 		wantTkn string
@@ -77,8 +80,33 @@ func TestParsePlatformReferenceMaterialURL(t *testing.T) {
 			hosts:  ownHosts, wantOK: true, wantTkn: "abc123token",
 		},
 		{
+			name:   "custom domain object key",
+			rawURL: "https://cdn.example.com/model-assets/" + assetID,
+			hosts:  customHosts, access: customAccess, wantOK: true, wantID: assetID,
+		},
+		{
+			name:   "custom domain object key without own host entry",
+			rawURL: "https://cdn.example.com/model-assets/" + assetID,
+			hosts:  ownHosts, access: customAccess, wantOK: true, wantID: assetID,
+		},
+		{
+			name:   "custom domain with wrong prefix",
+			rawURL: "https://cdn.example.com/other-assets/" + assetID,
+			hosts:  customHosts, access: customAccess,
+		},
+		{
+			name:   "custom domain shape without custom access configured",
+			rawURL: "https://cdn.example.com/model-assets/" + assetID,
+			hosts:  ownHosts,
+		},
+		{
+			name:   "prefix shape on own host is not an asset address",
+			rawURL: "https://api.example.com/model-assets/" + assetID,
+			hosts:  ownHosts, access: customAccess,
+		},
+		{
 			name:   "foreign host is not a platform asset",
-			rawURL: "https://cdn.example.com/media/" + assetID + "/asset.mp4",
+			rawURL: "https://storage.example.com/media/" + assetID + "/asset.mp4",
 			hosts:  ownHosts,
 		},
 		{
@@ -112,7 +140,7 @@ func TestParsePlatformReferenceMaterialURL(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ref, ok := parsePlatformReferenceMaterialURL(tc.rawURL, tc.hosts)
+			ref, ok := parsePlatformReferenceMaterialURL(tc.rawURL, tc.hosts, tc.access)
 			require.Equal(t, tc.wantOK, ok)
 			if !tc.wantOK {
 				require.Equal(t, platformReferenceMaterialRef{}, ref)

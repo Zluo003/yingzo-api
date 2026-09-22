@@ -455,6 +455,7 @@ func fileStorageConfigFromEnvironment() (FileStorageConfig, string) {
 		AccessKeyID:     read("FILE_SERVICE_S3_ACCESS_KEY_ID", "AGENT_ASSETS_S3_ACCESS_KEY_ID"),
 		SecretAccessKey: read("FILE_SERVICE_S3_SECRET_ACCESS_KEY", "AGENT_ASSETS_S3_SECRET_ACCESS_KEY"),
 		Prefix:          read("FILE_SERVICE_S3_PREFIX"),
+		CustomDomain:    read("FILE_SERVICE_S3_CUSTOM_DOMAIN", "AGENT_ASSETS_S3_CUSTOM_DOMAIN"),
 		ForcePathStyle:  strings.EqualFold(read("FILE_SERVICE_S3_FORCE_PATH_STYLE", "AGENT_ASSETS_S3_FORCE_PATH_STYLE"), "true"),
 	}
 	if cfg.S3.Bucket != "" {
@@ -569,6 +570,13 @@ func normalizeFileStorageConfig(input FileStorageConfig) (FileStorageConfig, err
 		return FileStorageConfig{}, err
 	}
 	input.S3.Prefix = prefix
+	if input.S3.CustomDomain != "" {
+		normalized, err := normalizeFileStorageCustomDomain(input.S3.CustomDomain)
+		if err != nil {
+			return FileStorageConfig{}, err
+		}
+		input.S3.CustomDomain = normalized
+	}
 	if input.S3.Endpoint != "" {
 		parsed, err := url.Parse(input.S3.Endpoint)
 		if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
@@ -671,6 +679,58 @@ func normalizeFileStoragePrefix(raw string) (string, error) {
 		}
 	}
 	return prefix + "/", nil
+}
+
+// normalizeFileStorageCustomDomain 校验 S3 自定义域名：只允许 scheme+host（可带端口），
+// 不允许路径、查询与用户信息；本地开发之外必须是 HTTPS。素材 URL 会以它为前缀直接
+// 拼接对象 key，任何多余部分都会让拼出来的地址不可用。
+func normalizeFileStorageCustomDomain(raw string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+		return "", errors.New("S3 custom domain must contain only an HTTP(S) scheme and host")
+	}
+	if parsed.Scheme != "https" && parsed.Hostname() != "localhost" && parsed.Hostname() != "127.0.0.1" && parsed.Hostname() != "::1" {
+		return "", errors.New("S3 custom domain must use HTTPS outside local development")
+	}
+	parsed.Path = ""
+	return strings.TrimRight(parsed.String(), "/"), nil
+}
+
+// S3CustomAccess 描述 S3 自定义域名直读访问的形状：素材 URL = Base + Prefix + 素材 ID。
+type S3CustomAccess struct {
+	// Base 是自定义域名基址（https://host，无尾斜杠）；空表示未启用直读。
+	Base string
+	// Prefix 是对象前缀（归一化后带尾斜杠）。
+	Prefix string
+}
+
+// Enabled 报告自定义域名直读是否已启用。
+func (a S3CustomAccess) Enabled() bool { return a.Base != "" }
+
+// Host 返回自定义域名基址的 hostname（小写）；基址为空或非法时返回空串。
+func (a S3CustomAccess) Host() string {
+	parsed, err := url.Parse(a.Base)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	return strings.ToLower(parsed.Hostname())
+}
+
+// EffectiveS3CustomAccess 返回当前生效的自定义域名直读访问。仅 S3 后端且显式配置了
+// 自定义域名时非空；参考素材的上传响应会用它构造对象存储直读地址。
+func (s *FileStorageService) EffectiveS3CustomAccess(ctx context.Context) S3CustomAccess {
+	if s == nil {
+		return S3CustomAccess{}
+	}
+	cfg, _, err := s.loadEffectiveConfig(ctx)
+	if err != nil || cfg.Backend != "s3" {
+		return S3CustomAccess{}
+	}
+	base := cfg.S3.CustomAssetBase()
+	if base == "" {
+		return S3CustomAccess{}
+	}
+	return S3CustomAccess{Base: base, Prefix: cfg.S3.Prefix}
 }
 
 func (s *FileStorageService) testConfig(ctx context.Context, cfg FileStorageConfig) error {

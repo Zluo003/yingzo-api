@@ -45,6 +45,7 @@ const config: FileStorageConfig = {
     access_key_id: 'ak',
     secret_access_key: '',
     prefix: 'model-assets/',
+    custom_domain: '',
     force_path_style: false,
   },
 }

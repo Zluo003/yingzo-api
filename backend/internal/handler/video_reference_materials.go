@@ -80,6 +80,10 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 		return nil, false, nil
 	}
 	ownHosts := h.referenceMaterialOwnHosts(c)
+	customAccess := service.S3CustomAccess{}
+	if h.agentHandler != nil && h.agentHandler.fileStorage != nil {
+		customAccess = h.agentHandler.fileStorage.EffectiveS3CustomAccess(c.Request.Context())
+	}
 	// 同一个素材被多条内容项引用时只下载与入库一次：map 的 key 复用请求体里已有的
 	// 字符串，不额外复制内存。时长仍按内容条数分别计费。
 	stored := make(map[string]*temporaryAssetUploadResult, len(content))
@@ -98,7 +102,7 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 
 		// 平台素材库里的地址：URL 不动，时长以素材行里的探测结果为准。
 		if urlField != "" && urlObject != nil {
-			if ref, isPlatformAsset := parsePlatformReferenceMaterialURL(rawURL, ownHosts); isPlatformAsset {
+			if ref, isPlatformAsset := parsePlatformReferenceMaterialURL(rawURL, ownHosts, customAccess); isPlatformAsset {
 				duration, probed, err := h.platformReferenceMaterialDuration(c.Request.Context(), apiKey, ref)
 				if err != nil {
 					return nil, false, err
@@ -192,9 +196,10 @@ func clearContentItemDurationSeconds(item map[string]any) bool {
 }
 
 // referenceMaterialOwnHosts 收集平台自身的 host：本次请求 origin 与素材库配置的
-// 公网 URL。命中这些 host 的参考素材说明已经在平台素材库里，不需要再下载转存。
+// 公网 URL，以及 S3 自定义域名直读域名。命中这些 host 的参考素材说明已经在平台素材
+// 库里，不需要再下载转存。
 //
-// 只认这两个来源，不认请求的 Host 头：Host 由下游控制，拿它当"平台自身"会让
+// 只认这几个来源，不认请求的 Host 头：Host 由下游控制，拿它当"平台自身"会让
 // 第三方地址被误判成平台素材。代价是两者都取不到时（既没配公网 URL、origin 又
 // 不是 HTTPS/localhost），multipart 刚上传的素材会被当成外部地址再转存一份。
 func (h *VideoHandler) referenceMaterialOwnHosts(c *gin.Context) map[string]bool {
@@ -214,14 +219,20 @@ func (h *VideoHandler) referenceMaterialOwnHosts(c *gin.Context) map[string]bool
 		if base, err := h.agentHandler.fileStorage.EffectivePublicBaseURL(c.Request.Context(), origin); err == nil {
 			add(base)
 		}
+		if access := h.agentHandler.fileStorage.EffectiveS3CustomAccess(c.Request.Context()); access.Enabled() {
+			add(access.Base)
+		}
 	}
 	return hosts
 }
 
-// parsePlatformReferenceMaterialURL 识别平台素材库的两种公网读取地址：
-// /media/<uuid>/<filename> 与 /temporary-assets/<token>。只有 host 属于平台自身
-// 时才认作平台素材，避免第三方站点的同形路径被当成平台记录。
-func parsePlatformReferenceMaterialURL(rawURL string, ownHosts map[string]bool) (platformReferenceMaterialRef, bool) {
+// parsePlatformReferenceMaterialURL 识别平台素材的公网读取地址：
+//   - 平台代理：/media/<uuid>/<filename> 与 /temporary-assets/<token>；
+//   - 自定义域名直读：https://{access.Base}{access.Prefix}<uuid>（access 启用时）。
+//
+// 只有 host 属于平台自身（ownHosts）或自定义域名时才认作平台记录，避免第三方站点
+// 的同形路径被当成平台记录。
+func parsePlatformReferenceMaterialURL(rawURL string, ownHosts map[string]bool, access service.S3CustomAccess) (platformReferenceMaterialRef, bool) {
 	trimmed := strings.TrimSpace(rawURL)
 	if trimmed == "" || len(ownHosts) == 0 {
 		return platformReferenceMaterialRef{}, false
@@ -233,26 +244,18 @@ func parsePlatformReferenceMaterialURL(rawURL string, ownHosts map[string]bool) 
 	if parsed.Scheme != "http" && parsed.Scheme != "https" {
 		return platformReferenceMaterialRef{}, false
 	}
-	if !ownHosts[strings.ToLower(parsed.Hostname())] {
+	host := strings.ToLower(parsed.Hostname())
+	if !ownHosts[host] && !(access.Enabled() && strings.EqualFold(access.Host(), host)) {
 		return platformReferenceMaterialRef{}, false
 	}
-	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	switch {
-	case len(segments) >= 2 && segments[0] == "media":
-		id, err := uuid.Parse(segments[1])
-		if err != nil {
-			return platformReferenceMaterialRef{}, false
-		}
-		return platformReferenceMaterialRef{byID: id}, true
-	case len(segments) == 2 && segments[0] == "temporary-assets":
-		token := strings.TrimSpace(segments[1])
-		if token == "" {
-			return platformReferenceMaterialRef{}, false
-		}
-		return platformReferenceMaterialRef{byToken: token}, true
-	default:
+	ref, ok := service.ParseTemporaryAssetRef(trimmed, access.Host(), access.Prefix)
+	if !ok {
 		return platformReferenceMaterialRef{}, false
 	}
+	if ref.ID != uuid.Nil {
+		return platformReferenceMaterialRef{byID: ref.ID}, true
+	}
+	return platformReferenceMaterialRef{byToken: ref.Token}, true
 }
 
 // platformReferenceMaterialDuration 读取平台素材行里保存的探测时长。

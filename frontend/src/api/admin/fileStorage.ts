@@ -13,6 +13,16 @@ export interface FileStorageS3Config {
    */
   secret_access_key?: string
   prefix: string
+  /**
+   * 对象存储的自定义公网域名（如 https://cdn.example.com），可选。
+   *
+   * 配置后参考素材返回给下游的 URL 直接指向对象存储（域名 + 对象前缀 + 素材 ID），
+   * 上游可以绕过平台代理直读文件，需要先在对象存储上完成自定义域名绑定并开启公开读取
+   * （Cloudflare R2 为自定义域名 + Public Access）。留空时素材仍走平台代理地址分发。
+   *
+   * 生成产物不受影响：它们固定保存在本地磁盘，始终通过平台代理地址分发。
+   */
+  custom_domain: string
   force_path_style: boolean
 }
 

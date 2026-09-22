@@ -692,6 +692,7 @@ func (s *VideoService) startLifecycle(input VideoTaskLifecycleInput) {
 			ErrorJSON: videoErrorJSON(clientErr.VideoClientError),
 		})
 		_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
+		s.releaseTaskReferenceAssets(input)
 	}()
 }
 
@@ -766,6 +767,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 				ErrorJSON: videoErrorJSON(clientErr),
 			})
 			_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
+			s.releaseTaskReferenceAssets(input)
 			return
 		case <-ticker.C:
 			result, err := s.pollUpstreamTask(ctx, input.Account, upstreamTaskID)
@@ -790,6 +792,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 					ErrorJSON: videoErrorJSON(clientErr.VideoClientError),
 				})
 				_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
+				s.releaseTaskReferenceAssets(input)
 				return
 			}
 			consecutiveFailures = 0
@@ -813,6 +816,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 				if updateErr == nil {
 					_ = s.recordCompletedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 				}
+				s.releaseTaskReferenceAssets(input)
 				return
 			case VideoTaskStatusFailed, VideoTaskStatusCancelled:
 				clientErr := videoClientError("video_generation_failed", "视频生成失败，请更换提示词或素材后重试")
@@ -821,6 +825,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 					ErrorJSON: videoErrorJSON(clientErr),
 				})
 				_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
+				s.releaseTaskReferenceAssets(input)
 				return
 			default:
 				_, _ = s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
@@ -829,6 +834,27 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 			}
 		}
 	}
+}
+
+// releaseTaskReferenceAssets 在任务终态后删除该任务引用的参考素材。S3 后端下参考
+// 素材只是把文件递给上游的载体，成功或失败后都不再使用，立即删除（本地后端保持原有
+// 到期清理逻辑，publisher 内部会跳过）。best-effort：失败只记日志，不影响任务结果。
+func (s *VideoService) releaseTaskReferenceAssets(input VideoTaskLifecycleInput) {
+	if s == nil || s.videoResultPublisher == nil || input.APIKey == nil {
+		return
+	}
+	releaser, ok := s.videoResultPublisher.(ReferenceAssetReleaser)
+	if !ok {
+		return
+	}
+	content := []VideoContent(nil)
+	if input.Normalized != nil {
+		content = input.Normalized.Content
+	}
+	if len(content) == 0 {
+		return
+	}
+	releaser.ReleaseTaskReferenceAssets(context.Background(), input.APIKey, content)
 }
 
 func (s *VideoService) publishVideoResult(ctx context.Context, input VideoTaskLifecycleInput, upstreamURL string) (string, error) {

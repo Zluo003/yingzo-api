@@ -11,6 +11,7 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -109,6 +110,92 @@ type referenceMaterialSettingRepo struct {
 
 func (r *referenceMaterialSettingRepo) GetValue(context.Context, string) (string, error) {
 	return r.value, nil
+}
+
+// stubSecretEncryptor 对称加解密桩：让含密钥的 S3 配置能正常落库读取。
+type stubSecretEncryptor struct{}
+
+func (stubSecretEncryptor) Encrypt(value string) (string, error) { return "enc:" + value, nil }
+func (stubSecretEncryptor) Decrypt(value string) (string, error) {
+	return strings.TrimPrefix(value, "enc:"), nil
+}
+
+// customDomainRecordingStore 记录上传调用的对象存储桩。
+type customDomainRecordingStore struct {
+	uploads []string
+}
+
+func (s *customDomainRecordingStore) Upload(_ context.Context, key string, _ io.Reader, _ string) (int64, error) {
+	s.uploads = append(s.uploads, key)
+	return 1, nil
+}
+func (s *customDomainRecordingStore) UploadFile(_ context.Context, key string, _ string, _ string) (int64, error) {
+	s.uploads = append(s.uploads, key)
+	return 1, nil
+}
+func (s *customDomainRecordingStore) Download(context.Context, string) (io.ReadCloser, error) {
+	return nil, errors.New("not implemented")
+}
+func (s *customDomainRecordingStore) Delete(context.Context, string) error { return nil }
+func (s *customDomainRecordingStore) PresignURL(context.Context, string, time.Duration) (string, error) {
+	return "", nil
+}
+func (s *customDomainRecordingStore) HeadBucket(context.Context) error { return nil }
+
+// S3 后端配置了自定义域名时，上传返回的 URL 直接指向对象存储（域名 + 前缀 + 素材 ID），
+// 对象确实被上传、本地中转副本被清理。
+func TestResolveVideoReferenceMaterialsWithCustomDomainReturnsObjectURL(t *testing.T) {
+	db := referenceMaterialPostgres(t)
+	dir := t.TempDir()
+	store := &customDomainRecordingStore{}
+	storageConfig := service.FileStorageConfig{
+		SchemaVersion:          1,
+		Backend:                "s3",
+		RetentionHours:         24,
+		DailyMaxCount:          1000,
+		DailyMaxBytes:          1 << 30,
+		ResultRetentionHours:   24,
+		CapacityReservePercent: reservePercentPtr(0),
+		S3: service.BackupS3Config{
+			Bucket: "assets", AccessKeyID: "ak", SecretAccessKey: "sk",
+			Prefix: "model-assets/", CustomDomain: "https://cdn.example.com",
+		},
+	}
+	payload, err := json.Marshal(storageConfig)
+	require.NoError(t, err)
+	svc := service.NewFileStorageService(db, &referenceMaterialSettingRepo{value: string(payload)}, stubSecretEncryptor{},
+		func(context.Context, *service.BackupS3Config) (service.BackupObjectStore, error) { return store, nil },
+		&config.Config{Pricing: config.PricingConfig{DataDir: dir}})
+	handler := NewVideoHandler(service.NewVideoService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil))
+	handler.agentHandler = &AgentHandler{db: db, dataDir: dir, fileStorage: svc}
+	apiKey := referenceMaterialTestAPIKey()
+
+	var encoded bytes.Buffer
+	require.NoError(t, png.Encode(&encoded, image.NewRGBA(image.Rect(0, 0, 2, 2))))
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(encoded.Bytes())
+	raw := map[string]any{
+		"content": []any{
+			map[string]any{"type": "image_url", "image_url": map[string]any{"url": dataURL}},
+		},
+	}
+	_, changed, err := handler.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), apiKey, raw)
+	require.NoError(t, err)
+	require.True(t, changed)
+
+	item := raw["content"].([]any)[0].(map[string]any)
+	stored := item["image_url"].(map[string]any)["url"].(string)
+	require.True(t, strings.HasPrefix(stored, "https://cdn.example.com/model-assets/"), stored)
+	require.Len(t, store.uploads, 1)
+	require.Equal(t, store.uploads[0], strings.TrimPrefix(stored, "https://cdn.example.com/"))
+
+	// 行记录为 s3 后端，key 与 URL 路径一致；本地中转目录已被清理。
+	id := uuid.MustParse(strings.TrimPrefix(stored, "https://cdn.example.com/model-assets/"))
+	var backend, storageKey string
+	require.NoError(t, db.QueryRow(`SELECT storage_backend,storage_key FROM temporary_assets WHERE id=$1`, id).Scan(&backend, &storageKey))
+	require.Equal(t, "s3", backend)
+	require.Equal(t, "model-assets/"+id.String(), storageKey)
+	_, statErr := os.Stat(filepath.Join(dir, "agent-assets", id.String()))
+	require.True(t, os.IsNotExist(statErr), "本地中转目录应被清理")
 }
 
 // insertLocalAsset 写入一条本地素材行，并在磁盘上建出对应文件。

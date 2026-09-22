@@ -887,6 +887,12 @@ func temporaryAssetPublicURL(publicBaseURL string, id uuid.UUID, contentType str
 	return strings.TrimRight(publicBaseURL, "/") + "/media/" + id.String() + "/asset" + canonicalMediaExtension(contentType)
 }
 
+// temporaryAssetCustomURL 构造自定义域名直读地址：对象 key 直接挂在域名后。对象存储
+// 返回响应时使用上传时写入的 Content-Type，路径里无需扩展名。
+func temporaryAssetCustomURL(base, storageKey string) string {
+	return strings.TrimRight(base, "/") + "/" + strings.TrimLeft(storageKey, "/")
+}
+
 type temporaryAssetUploadResult struct {
 	ID          uuid.UUID            `json:"id"`
 	URL         string               `json:"url"`
@@ -1120,9 +1126,17 @@ func (h *AgentHandler) storeTemporaryAssetPart(c *gin.Context, key *service.APIK
 		}
 		return nil, &temporaryAssetUploadError{status: http.StatusInternalServerError, code: "database_error"}
 	}
+	assetURL := temporaryAssetPublicURL(publicBaseURL, id, contentType)
+	if backend == "s3" {
+		// 配置了自定义域名时，参考素材返回给下游的是对象存储直读地址：上游直接从
+		// 对象存储取文件，不经过平台代理。
+		if base := runtime.Config.S3.CustomAssetBase(); base != "" {
+			assetURL = temporaryAssetCustomURL(base, storageKey)
+		}
+	}
 	return &temporaryAssetUploadResult{
 		ID:          id,
-		URL:         temporaryAssetPublicURL(publicBaseURL, id, contentType),
+		URL:         assetURL,
 		ContentType: contentType,
 		Size:        n,
 		SHA256:      digest,

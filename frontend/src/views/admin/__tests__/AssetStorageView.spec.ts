@@ -74,6 +74,7 @@ function baseSettings(overrides: Partial<FileStorageSettings> = {}): FileStorage
       access_key_id: '',
       secret_access_key: '',
       prefix: 'model-assets/',
+      custom_domain: '',
       force_path_style: false,
     },
     source: 'database',
@@ -718,6 +719,30 @@ describe('admin AssetStorageView', () => {
           // 已保存的密钥保持不变
           secret_access_key: '',
         }),
+      }),
+    )
+  })
+
+  it('saves the optional S3 custom domain and rejects a non-HTTPS one before calling the API', async () => {
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="asset-storage-backend-s3"]').setValue()
+    await wrapper.get('[data-testid="asset-storage-s3-bucket"]').setValue('assets')
+    await wrapper.get('[data-testid="asset-storage-s3-access-key-id"]').setValue('ak')
+    await wrapper.get('[data-testid="asset-storage-s3-custom-domain"] input').setValue('http://cdn.example.com')
+    await wrapper.get('[data-testid="asset-storage-save"]').trigger('click')
+    await flushPromises()
+    expect(showError).toHaveBeenCalledWith('admin.assetStorage.validation.customDomain')
+    expect(updateFileStorageSettings).not.toHaveBeenCalled()
+
+    await wrapper.get('[data-testid="asset-storage-s3-custom-domain"] input').setValue('https://cdn.example.com')
+    await wrapper.get('[data-testid="asset-storage-save"]').trigger('click')
+    await flushPromises()
+
+    expect(updateFileStorageSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: 's3',
+        s3: expect.objectContaining({ custom_domain: 'https://cdn.example.com' }),
       }),
     )
   })

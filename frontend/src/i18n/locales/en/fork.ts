@@ -342,6 +342,9 @@ export default {
         secretAccessKey: 'Secret Access Key',
         secretConfigured: 'Saved; leave empty to keep it unchanged',
         forcePathStyle: 'Use path-style access (required by MinIO and other self-hosted stores)',
+        customDomain: 'Custom domain (optional)',
+        customDomainHint:
+          'When set, reference asset URLs point directly at the object storage (e.g. https://cdn.example.com/model-assets/<id>) so upstreams can fetch files without the platform proxy; bind the domain on the bucket and enable public access first (R2: custom domain + Public Access). Leave empty to serve assets through the platform proxy. Generated results are always stored locally and are not affected.',
       },
       publicBaseUrl: {
         title: 'Public access URL',
@@ -429,6 +432,7 @@ export default {
           'The local asset directory cannot be a system directory (/bin, /sbin, /lib, /lib64, /usr, /etc, /proc, /sys, /dev, /boot, /root, /var).',
         s3Required: 'The S3 backend requires a bucket, an access key ID, and a secret access key.',
         publicBaseUrl: 'The public base URL must be HTTPS and contain only a scheme and host (except localhost / 127.0.0.1).',
+        customDomain: 'The custom domain must be HTTPS and contain only a scheme and host (except localhost / 127.0.0.1).',
       },
     },
   },

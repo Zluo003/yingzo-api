@@ -16,6 +16,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"log/slog"
 	"mime"
 	"net/http"
 	"net/url"
@@ -207,26 +208,6 @@ func (p *TemporaryAssetPublisher) PublishGeneratedImage(
 
 	backend := "local"
 	storageKey := localPath
-	if runtime.Config.Backend == "s3" {
-		if runtime.Store == nil {
-			_ = os.RemoveAll(assetDir)
-			return "", errors.New("temporary asset object storage is unavailable")
-		}
-		file, openErr := os.Open(localPath)
-		if openErr != nil {
-			_ = os.RemoveAll(assetDir)
-			return "", fmt.Errorf("open temporary asset for upload: %w", openErr)
-		}
-		storageKey = runtime.Config.S3.Prefix + id.String()
-		_, uploadErr := runtime.Store.Upload(ctx, storageKey, file, mimeType)
-		_ = file.Close()
-		if uploadErr != nil {
-			_ = os.RemoveAll(assetDir)
-			return "", fmt.Errorf("upload temporary asset: %w", uploadErr)
-		}
-		backend = "s3"
-		_ = os.RemoveAll(assetDir)
-	}
 
 	checksum := sha256.Sum256(imageBytes)
 	// 产物按自己的保存时长存放，与下游上传的参考素材分开。
@@ -241,11 +222,7 @@ func (p *TemporaryAssetPublisher) PublishGeneratedImage(
 		backend, storageKey, "generated-image"+extension, "image", mimeType, imageSize,
 		hex.EncodeToString(checksum[:]), metadata, expiresAt, TemporaryAssetPurposeGenerated)
 	if err != nil {
-		if backend == "s3" {
-			_ = runtime.Store.Delete(context.Background(), storageKey)
-		} else {
-			_ = os.RemoveAll(assetDir)
-		}
+		_ = os.RemoveAll(assetDir)
 		return "", fmt.Errorf("record temporary asset: %w", err)
 	}
 
@@ -388,30 +365,13 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 		return "", capacityErr
 	}
 
+	// 产物固定保存在本地磁盘：对象存储只承载参考素材（递给上游后即删），交付给下游的
+	// 产物始终从本地经平台代理分发。
 	backend := "local"
 	storageKey := localPath
-	if runtime.Config.Backend == "s3" {
-		if runtime.Store == nil {
-			return "", errors.New("temporary asset object storage is unavailable")
-		}
-		file, openErr := os.Open(localPath)
-		if openErr != nil {
-			return "", fmt.Errorf("open temporary asset for upload: %w", openErr)
-		}
-		storageKey = runtime.Config.S3.Prefix + id.String()
-		_, uploadErr := runtime.Store.Upload(ctx, storageKey, file, mimeType)
-		_ = file.Close()
-		if uploadErr != nil {
-			return "", fmt.Errorf("upload temporary asset: %w", uploadErr)
-		}
-		backend = "s3"
-	}
 
 	token, err := generatedAssetRandomToken(32)
 	if err != nil {
-		if backend == "s3" {
-			_ = runtime.Store.Delete(context.Background(), storageKey)
-		}
 		return "", fmt.Errorf("generate temporary asset token: %w", err)
 	}
 	metadata, err := json.Marshal(map[string]any{
@@ -420,9 +380,6 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 		"source":                "generated_video",
 	})
 	if err != nil {
-		if backend == "s3" {
-			_ = runtime.Store.Delete(context.Background(), storageKey)
-		}
 		return "", fmt.Errorf("encode temporary asset metadata: %w", err)
 	}
 
@@ -437,15 +394,9 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 		backend, storageKey, "generated-video"+extension, "video", mimeType, sizeBytes,
 		hex.EncodeToString(hasher.Sum(nil)), metadata, expiresAt, TemporaryAssetPurposeGenerated)
 	if err != nil {
-		if backend == "s3" {
-			_ = runtime.Store.Delete(context.Background(), storageKey)
-		}
 		return "", fmt.Errorf("record temporary asset: %w", err)
 	}
 
-	if backend == "s3" {
-		_ = os.RemoveAll(assetDir)
-	}
 	cleanupLocal = false
 	return strings.TrimRight(publicBaseURL, "/") + "/media/" + id.String() + "/asset" + extension, nil
 }
@@ -588,4 +539,138 @@ func writeGeneratedAssetAtomically(target string, data []byte) error {
 	}
 	cleanup = false
 	return nil
+}
+
+// ReferenceAssetReleaser 在生成任务到达终态后删除该任务引用的参考素材。
+type ReferenceAssetReleaser interface {
+	ReleaseTaskReferenceAssets(ctx context.Context, apiKey *APIKey, content []VideoContent)
+}
+
+// locateReferenceAssetQuery 找到一条属于该凭据的有效参考素材及其存储位置。purpose
+// 固定为 reference：任务终态清理绝不触碰生成产物。前缀占位符为 $1（ID 或 token hash）。
+const locateReferenceAssetQuery = `
+	SELECT id, storage_backend, storage_key FROM temporary_assets
+	WHERE purpose = '` + TemporaryAssetPurposeReference + `' AND deleted_at IS NULL
+		AND api_key_id = $2 AND user_id = $3 AND group_id IS NOT DISTINCT FROM $4
+		AND `
+
+// ReleaseTaskReferenceAssets 在任务终态后删除该任务引用的参考素材（仅 S3 后端）。
+//
+// S3 模式下参考素材只是把文件递给上游的载体：任务成功或失败后都不会再被读取，立即
+// 删除对象存储副本与本地缓存，不等保留时长到期。本地磁盘后端保持原有的到期清理逻辑，
+// 不做即时删除。best-effort：单条失败只记日志，不影响任务结果。
+func (p *TemporaryAssetPublisher) ReleaseTaskReferenceAssets(ctx context.Context, apiKey *APIKey, content []VideoContent) {
+	if p == nil || p.db == nil || p.fileStorage == nil || apiKey == nil || len(content) == 0 {
+		return
+	}
+	cfg, _, err := p.fileStorage.loadEffectiveConfig(ctx)
+	if err != nil {
+		slog.Warn("release task reference assets: load config failed", "error", err)
+		return
+	}
+	if cfg.Backend != "s3" {
+		return
+	}
+	refs := collectTemporaryAssetRefs(content, cfg.S3)
+	if len(refs) == 0 {
+		return
+	}
+	store, err := p.fileStorage.storeForConfig(ctx, cfg.S3)
+	if err != nil {
+		slog.Warn("release task reference assets: object store unavailable", "error", err)
+		store = nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	released := 0
+	for _, ref := range refs {
+		if p.releaseReferenceAsset(ctx, store, apiKey, ref) {
+			released++
+		}
+	}
+	if released > 0 {
+		slog.Info("released task reference assets", "count", released, "api_key_id", apiKey.ID)
+	}
+}
+
+// collectTemporaryAssetRefs 从任务的规范化内容里收集平台素材引用（去重）。
+func collectTemporaryAssetRefs(content []VideoContent, s3Cfg BackupS3Config) []TemporaryAssetRef {
+	customHost := ""
+	if parsed, err := url.Parse(s3Cfg.CustomAssetBase()); err == nil && parsed.Host != "" {
+		customHost = strings.ToLower(parsed.Hostname())
+	}
+	seen := make(map[string]struct{})
+	var refs []TemporaryAssetRef
+	add := func(ref TemporaryAssetRef, ok bool) {
+		if !ok {
+			return
+		}
+		key := ref.Token
+		if key == "" {
+			key = "id:" + ref.ID.String()
+		}
+		if _, dup := seen[key]; dup {
+			return
+		}
+		seen[key] = struct{}{}
+		refs = append(refs, ref)
+	}
+	for _, item := range content {
+		for _, rawURL := range []string{videoContentURL(item.ImageURL), videoContentURL(item.VideoURL), videoContentURL(item.AudioURL)} {
+			if strings.TrimSpace(rawURL) == "" {
+				continue
+			}
+			ref, ok := ParseTemporaryAssetRef(rawURL, customHost, s3Cfg.Prefix)
+			add(ref, ok)
+		}
+	}
+	return refs
+}
+
+func videoContentURL(ref *VideoContentURL) string {
+	if ref == nil {
+		return ""
+	}
+	return ref.URL
+}
+
+// releaseReferenceAsset 删除一条参考素材：先删物理对象（失败则保留行，交给过期清理
+// 稍后重试，避免留下孤儿对象），成功后再软删除行。返回行是否被释放。
+func (p *TemporaryAssetPublisher) releaseReferenceAsset(ctx context.Context, store BackupObjectStore, apiKey *APIKey, ref TemporaryAssetRef) bool {
+	var id uuid.UUID
+	var backend, storageKey string
+	var row *sql.Row
+	if ref.ID != uuid.Nil {
+		id = ref.ID
+		row = p.db.QueryRowContext(ctx, locateReferenceAssetQuery+`id = $1`, ref.ID, apiKey.ID, apiKey.UserID, apiKey.GroupID)
+	} else {
+		row = p.db.QueryRowContext(ctx, locateReferenceAssetQuery+`public_token_hash = $1`, generatedAssetHashToken(ref.Token), apiKey.ID, apiKey.UserID, apiKey.GroupID)
+	}
+	switch err := row.Scan(&id, &backend, &storageKey); {
+	case errors.Is(err, sql.ErrNoRows):
+		return false
+	case err != nil:
+		slog.Warn("release task reference asset: lookup failed", "error", err)
+		return false
+	}
+	switch backend {
+	case "s3":
+		if store == nil {
+			return false
+		}
+		if err := store.Delete(context.Background(), storageKey); err != nil {
+			slog.Warn("release task reference asset: object delete failed", "error", err)
+			return false
+		}
+	default:
+		if storageKey != "" {
+			// 本地素材一个素材一个目录，按目录整体清理。
+			_ = os.RemoveAll(filepath.Dir(storageKey))
+		}
+	}
+	if _, err := p.db.ExecContext(ctx, `UPDATE temporary_assets SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`, id); err != nil {
+		slog.Warn("release task reference asset: mark deleted failed", "error", err)
+		return false
+	}
+	return true
 }

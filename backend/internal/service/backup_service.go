@@ -103,11 +103,21 @@ type BackupS3Config struct {
 	SecretAccessKey string `json:"secret_access_key,omitempty"` //nolint:revive // field name follows AWS convention
 	Prefix          string `json:"prefix"`                      // S3 key 前缀，如 "backups/"
 	ForcePathStyle  bool   `json:"force_path_style"`
+	// CustomDomain 是对象存储的自定义公网域名（如 https://cdn.example.com）。只有临时
+	// 素材使用它：配置后参考素材返回给下游的 URL 直接指向对象存储（Base + Prefix + ID），
+	// 上游可以绕过平台代理直读，备份与桌面更新分发不用该字段。
+	CustomDomain string `json:"custom_domain"`
 }
 
 // IsConfigured 检查必要字段是否已配置
 func (c *BackupS3Config) IsConfigured() bool {
 	return c.Bucket != "" && c.AccessKeyID != "" && c.SecretAccessKey != ""
+}
+
+// CustomAssetBase 返回自定义域名直读基址（无尾斜杠）。空表示未启用直读，素材 URL
+// 继续走平台代理地址。
+func (c BackupS3Config) CustomAssetBase() string {
+	return strings.TrimRight(strings.TrimSpace(c.CustomDomain), "/")
 }
 
 // BackupScheduleConfig 定时备份配置
