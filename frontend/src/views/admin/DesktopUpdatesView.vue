@@ -37,7 +37,7 @@
           <label class="field"><span>在线更新包</span><input ref="fileInput" type="file" :accept="form.platform === 'win32' ? '.exe' : '.zip'" required @change="onFile" /><small>{{ form.platform === 'win32' ? '上传 NSIS .exe，用于首次安装和在线升级。' : '上传 electron-updater 使用的 .zip。' }}</small></label>
           <label v-if="form.platform === 'darwin'" class="field"><span>首次安装包（DMG）</span><input ref="installerInput" type="file" accept=".dmg" required @change="onInstallerFile" /><small>软件下载页面提供此 DMG；在线升级仍使用上面的 ZIP。</small></label>
           <label class="field md:col-span-2"><span>更新说明</span><textarea v-model="form.release_notes" rows="3" placeholder="本次更新内容" /></label>
-          <div class="md:col-span-2"><button class="btn btn-primary" :disabled="uploading">{{ uploading ? '上传中…' : '上传版本' }}</button></div>
+          <div class="md:col-span-2"><button class="btn btn-primary" :disabled="uploading">{{ uploading ? '上传中…' : '上传版本' }}</button><div v-if="uploading" class="mt-3 max-w-xl"><div class="mb-1 flex justify-between text-xs text-gray-500"><span>{{ uploadStatus }}</span><span>{{ uploadProgress }}%</span></div><div class="h-2 overflow-hidden rounded bg-gray-200 dark:bg-dark-700"><div class="h-full rounded bg-primary-500 transition-all" :style="{ width: `${uploadProgress}%` }" /></div></div></div>
         </form>
       </section>
 
@@ -60,6 +60,8 @@ const loading = ref(false)
 const saving = ref(false)
 const testing = ref(false)
 const uploading = ref(false)
+const uploadProgress = ref(0)
+const uploadStatus = ref('')
 const releases = ref<DesktopRelease[]>([])
 const fileInput = ref<HTMLInputElement | null>(null)
 const installerInput = ref<HTMLInputElement | null>(null)
@@ -71,7 +73,91 @@ async function saveStorage() { saving.value = true; try { Object.assign(storage,
 async function testStorageConnection() { testing.value = true; try { const result = await desktopUpdatesAPI.testStorage(storage); if (result.ok) appStore.showSuccess('R2 连接成功'); else appStore.showError(result.message || 'R2 连接失败') } catch (error) { appStore.showError(errorMessage(error, '测试 R2 连接失败')) } finally { testing.value = false } }
 function onFile(event: Event) { form.package = (event.target as HTMLInputElement).files?.[0] || null }
 function onInstallerFile(event: Event) { form.installerPackage = (event.target as HTMLInputElement).files?.[0] || null }
-async function uploadRelease() { if (!form.package || (form.platform === 'darwin' && !form.installerPackage)) return; uploading.value = true; try { await desktopUpdatesAPI.upload({ version: form.version, platform: form.platform, arch: form.platform === 'darwin' ? 'arm64' : 'x64', release_notes: form.release_notes, package: form.package, installerPackage: form.installerPackage || undefined }); appStore.showSuccess('版本上传成功'); form.version = ''; form.release_notes = ''; form.package = null; form.installerPackage = null; if (fileInput.value) fileInput.value.value = ''; if (installerInput.value) installerInput.value.value = ''; await load() } catch (error) { appStore.showError(errorMessage(error, '上传版本失败')) } finally { uploading.value = false } }
+const uploadChunkSize = 256 * 1024
+function wait(milliseconds: number) { return new Promise(resolve => window.setTimeout(resolve, milliseconds)) }
+function uploadReceived(job: Awaited<ReturnType<typeof desktopUpdatesAPI.getUpload>>, artifact: 'package' | 'installer') { return artifact === 'package' ? job.package_received : job.installer_received }
+async function uploadArtifact(id: string, artifact: 'package' | 'installer', file: File, initialOffset: number, totalSize: number, progressBase: number) {
+  let offset = initialOffset
+  while (offset < file.size) {
+    const end = Math.min(offset + uploadChunkSize, file.size)
+    const chunk = file.slice(offset, end)
+    let completed = false
+    let lastError: unknown
+    for (let attempt = 0; attempt < 6 && !completed; attempt += 1) {
+      try {
+        const job = await desktopUpdatesAPI.appendUploadChunk(id, artifact, offset, chunk)
+        offset = uploadReceived(job, artifact)
+        completed = true
+      } catch (error) {
+        lastError = error
+        try {
+          const job = await desktopUpdatesAPI.getUpload(id)
+          const serverOffset = uploadReceived(job, artifact)
+          if (serverOffset !== offset) {
+            offset = serverOffset
+            completed = true
+            continue
+          }
+        } catch {
+          // Keep retrying the same chunk when the status request is also transient.
+        }
+        if (attempt < 5) await wait(Math.min(8000, 500 * 2 ** attempt))
+      }
+    }
+    if (!completed) throw lastError instanceof Error ? lastError : new Error('分片上传失败')
+    uploadProgress.value = Math.min(99, Math.floor(((progressBase + offset) / totalSize) * 100))
+  }
+}
+async function waitForUpload(id: string) {
+  for (let attempt = 0; attempt < 1800; attempt += 1) {
+    const job = await desktopUpdatesAPI.getUpload(id)
+    if (job.status === 'completed') return
+    if (job.status === 'failed') throw new Error(job.error || '服务器后台处理失败')
+    uploadStatus.value = '服务器已收到文件，正在后台上传到 R2…'
+    await wait(2000)
+  }
+  throw new Error('服务器后台处理超时，请刷新页面查看状态')
+}
+async function uploadRelease() {
+  if (!form.package || (form.platform === 'darwin' && !form.installerPackage)) return
+  uploading.value = true
+  uploadProgress.value = 0
+  uploadStatus.value = '正在分片上传到服务器…'
+  try {
+    const packageFile = form.package
+    const installerFile = form.installerPackage
+    const totalSize = packageFile.size + (installerFile?.size || 0)
+    const job = await desktopUpdatesAPI.createUpload({
+      version: form.version,
+      platform: form.platform,
+      arch: form.platform === 'darwin' ? 'arm64' : 'x64',
+      release_notes: form.release_notes,
+      filename: packageFile.name,
+      installer_filename: installerFile?.name,
+      package_size: packageFile.size,
+      installer_size: installerFile?.size || 0,
+    })
+    await uploadArtifact(job.id, 'package', packageFile, job.package_received, totalSize, 0)
+    if (installerFile) await uploadArtifact(job.id, 'installer', installerFile, job.installer_received, totalSize, packageFile.size)
+    uploadProgress.value = 100
+    uploadStatus.value = '文件已接收，正在后台上传到 R2…'
+    await desktopUpdatesAPI.completeUpload(job.id)
+    await waitForUpload(job.id)
+    appStore.showSuccess('版本上传成功')
+    form.version = ''
+    form.release_notes = ''
+    form.package = null
+    form.installerPackage = null
+    if (fileInput.value) fileInput.value.value = ''
+    if (installerInput.value) installerInput.value.value = ''
+    await load()
+  } catch (error) {
+    appStore.showError(errorMessage(error, '上传版本失败；服务器可能仍在后台处理，请刷新版本列表查看'))
+  } finally {
+    uploading.value = false
+    uploadStatus.value = ''
+  }
+}
 async function publishRelease(item: DesktopRelease) { if (!window.confirm(`确定发布版本 ${item.version}？同平台旧稳定版会自动标记为 superseded。`)) return; try { await desktopUpdatesAPI.publish(item.id); appStore.showSuccess('版本已发布'); await load() } catch (error) { appStore.showError(errorMessage(error, '发布版本失败')) } }
 async function deleteRelease(item: DesktopRelease) { if (!window.confirm(`确定删除 ${item.version} 的安装包和元数据？`)) return; try { await desktopUpdatesAPI.remove(item.id); appStore.showSuccess('版本及安装包已删除'); await load() } catch (error) { appStore.showError(errorMessage(error, '删除版本失败')) } }
 function formatSize(value: number) { if (!value) return '0 B'; const units = ['B', 'KB', 'MB', 'GB']; let n = value; let i = 0; while (n >= 1024 && i < units.length - 1) { n /= 1024; i++ } return `${n.toFixed(i ? 1 : 0)} ${units[i]}` }

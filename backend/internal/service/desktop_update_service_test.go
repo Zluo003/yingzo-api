@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -175,5 +176,50 @@ func TestDesktopUpdateTestStorageReturnsConnectionError(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "context deadline exceeded") {
 		t.Fatalf("expected connection error, got %v", err)
+	}
+}
+
+func TestDesktopUploadQueueStagesChunksAndProcessesInBackground(t *testing.T) {
+	root := t.TempDir()
+	processed := make(chan struct{}, 1)
+	q := newDesktopUploadQueue(root, func(_ context.Context, input DesktopReleaseInput, packagePath, installerPath string, actorID int64) (*DesktopRelease, error) {
+		if installerPath != "" || actorID != 42 || input.Filename != "update.exe" {
+			t.Fatalf("unexpected background upload arguments: %+v %q %q %d", input, packagePath, installerPath, actorID)
+		}
+		data, err := os.ReadFile(packagePath)
+		if err != nil || string(data) != "hello" {
+			t.Fatalf("background worker received %q, %v", data, err)
+		}
+		processed <- struct{}{}
+		return &DesktopRelease{ID: "release-1"}, nil
+	})
+
+	job, err := q.Create(DesktopUploadInput{Version: "1.0.0", Platform: "win32", Arch: "x64", Filename: "update.exe", PackageSize: 5}, 42)
+	if err != nil {
+		t.Fatalf("create upload: %v", err)
+	}
+	defer q.stop()
+	if _, err := q.Append(job.ID, "package", 0, strings.NewReader("he")); err != nil {
+		t.Fatalf("append first chunk: %v", err)
+	}
+	// A retry after a lost response must be idempotent.
+	retry, err := q.Append(job.ID, "package", 0, strings.NewReader("he"))
+	if err != nil || retry.PackageReceived != 2 {
+		t.Fatalf("retry first chunk: %+v, %v", retry, err)
+	}
+	if _, err := q.Append(job.ID, "package", 2, strings.NewReader("llo")); err != nil {
+		t.Fatalf("append final chunk: %v", err)
+	}
+	if _, err := q.Complete(job.ID); err != nil {
+		t.Fatalf("complete upload: %v", err)
+	}
+	select {
+	case <-processed:
+	case <-time.After(2 * time.Second):
+		t.Fatal("background upload did not run")
+	}
+	status, err := q.Get(job.ID)
+	if err != nil || status.Status != "completed" || status.ReleaseID != "release-1" {
+		t.Fatalf("unexpected completed upload: %+v, %v", status, err)
 	}
 }

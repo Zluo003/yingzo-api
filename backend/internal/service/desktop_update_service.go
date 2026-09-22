@@ -111,6 +111,7 @@ type DesktopUpdateService struct {
 	encryptor    SecretEncryptor
 	storeFactory BackupObjectStoreFactory
 	defaultDir   string
+	uploadQueue  *DesktopUploadQueue
 }
 
 func NewDesktopUpdateService(db *sql.DB, settingRepo SettingRepository, encryptor SecretEncryptor, storeFactory BackupObjectStoreFactory, cfg *config.Config) *DesktopUpdateService {
@@ -122,7 +123,12 @@ func NewDesktopUpdateService(db *sql.DB, settingRepo SettingRepository, encrypto
 	if err == nil {
 		dataDir = absolute
 	}
-	return &DesktopUpdateService{db: db, settingRepo: settingRepo, encryptor: encryptor, storeFactory: storeFactory, defaultDir: dataDir}
+	service := &DesktopUpdateService{db: db, settingRepo: settingRepo, encryptor: encryptor, storeFactory: storeFactory, defaultDir: dataDir}
+	service.uploadQueue = newDesktopUploadQueue(filepath.Join(dataDir, ".uploads"), func(ctx context.Context, input DesktopReleaseInput, filePath, installerPath string, actorID int64) (*DesktopRelease, error) {
+		return service.CreateFromFiles(ctx, input, filePath, installerPath, actorID)
+	})
+	service.uploadQueue.start()
+	return service
 }
 
 func (s *DesktopUpdateService) GetStorage(ctx context.Context) (*DesktopUpdateStorageView, error) {

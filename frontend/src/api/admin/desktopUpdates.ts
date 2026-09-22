@@ -46,6 +46,26 @@ export interface DesktopRelease {
   published_at?: string
 }
 
+export interface DesktopUpload {
+  id: string
+  version: string
+  platform: DesktopUpdatePlatform
+  arch: DesktopUpdateArch
+  release_notes: string
+  filename: string
+  installer_filename?: string
+  package_size: number
+  installer_size: number
+  status: 'receiving' | 'queued' | 'uploading' | 'completed' | 'failed'
+  package_received: number
+  installer_received: number
+  error?: string
+  release_id?: string
+  created_at: string
+  updated_at: string
+  chunk_size: number
+}
+
 export async function list(): Promise<DesktopRelease[]> {
   const { data } = await apiClient.get<DesktopRelease[]>('/admin/desktop-updates')
   return data
@@ -63,6 +83,51 @@ export async function updateStorage(input: Partial<DesktopUpdateStorage>): Promi
 
 export async function testStorage(input: Partial<DesktopUpdateStorage>): Promise<{ ok: boolean; message: string }> {
   const { data } = await apiClient.post<{ ok: boolean; message: string }>('/admin/desktop-updates/storage/test', input)
+  return data
+}
+
+export async function createUpload(input: {
+  version: string
+  platform: DesktopUpdatePlatform
+  arch: DesktopUpdateArch
+  release_notes: string
+  filename: string
+  installer_filename?: string
+  package_size: number
+  installer_size?: number
+}): Promise<DesktopUpload> {
+  const { data } = await apiClient.post<DesktopUpload>('/admin/desktop-updates/uploads', {
+    ...input,
+    installer_size: input.installer_size || 0,
+  })
+  return data
+}
+
+export async function getUpload(id: string): Promise<DesktopUpload> {
+  const { data } = await apiClient.get<DesktopUpload>(`/admin/desktop-updates/uploads/${id}`)
+  return data
+}
+
+export async function appendUploadChunk(id: string, artifact: 'package' | 'installer', offset: number, chunk: Blob): Promise<DesktopUpload> {
+  const { data } = await apiClient.post<DesktopUpload>(`/admin/desktop-updates/uploads/${id}/chunks/${artifact}`, chunk, {
+    headers: { 'Content-Type': 'application/octet-stream', 'X-Upload-Offset': String(offset) },
+    timeout: 120000,
+  })
+  return data
+}
+
+export async function completeUpload(id: string): Promise<DesktopUpload> {
+  const { data } = await apiClient.post<DesktopUpload>(`/admin/desktop-updates/uploads/${id}/complete`)
+  return data
+}
+
+export async function retryUpload(id: string): Promise<DesktopUpload> {
+  const { data } = await apiClient.post<DesktopUpload>(`/admin/desktop-updates/uploads/${id}/retry`)
+  return data
+}
+
+export async function removeUpload(id: string): Promise<{ deleted: boolean }> {
+  const { data } = await apiClient.delete<{ deleted: boolean }>(`/admin/desktop-updates/uploads/${id}`)
   return data
 }
 
@@ -95,4 +160,4 @@ export async function remove(id: string): Promise<{ deleted: boolean }> {
   return data
 }
 
-export default { list, getStorage, updateStorage, testStorage, upload, publish, remove }
+export default { list, getStorage, updateStorage, testStorage, createUpload, getUpload, appendUploadChunk, completeUpload, retryUpload, removeUpload, upload, publish, remove }

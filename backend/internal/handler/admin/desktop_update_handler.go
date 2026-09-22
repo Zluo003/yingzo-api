@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -63,6 +64,88 @@ func (h *DesktopUpdateHandler) TestStorage(c *gin.Context) {
 		return
 	}
 	response.Success(c, gin.H{"ok": true, "message": "connection successful"})
+}
+
+func (h *DesktopUpdateHandler) ListUploads(c *gin.Context) {
+	items, err := h.service.ListUploads(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, items)
+}
+
+func (h *DesktopUpdateHandler) CreateUpload(c *gin.Context) {
+	subject, ok := middleware2.GetAuthSubjectFromContext(c)
+	if !ok {
+		response.Unauthorized(c, "User not found in context")
+		return
+	}
+	var input service.DesktopUploadInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.BadRequest(c, "Invalid request: "+err.Error())
+		return
+	}
+	item, err := h.service.CreateUpload(c.Request.Context(), input, subject.UserID)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, item)
+}
+
+func (h *DesktopUpdateHandler) UploadStatus(c *gin.Context) {
+	item, err := h.service.GetUpload(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, item)
+}
+
+func (h *DesktopUpdateHandler) AppendUploadChunk(c *gin.Context) {
+	offset, err := strconv.ParseInt(strings.TrimSpace(c.GetHeader("X-Upload-Offset")), 10, 64)
+	if err != nil || offset < 0 {
+		response.BadRequest(c, "X-Upload-Offset must be a non-negative integer")
+		return
+	}
+	item, err := h.service.AppendUpload(c.Request.Context(), c.Param("id"), c.Param("artifact"), offset, c.Request.Body)
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	nextOffset := item.PackageReceived
+	if c.Param("artifact") == "installer" {
+		nextOffset = item.InstallerReceived
+	}
+	c.Header("X-Upload-Offset", strconv.FormatInt(nextOffset, 10))
+	response.Success(c, item)
+}
+
+func (h *DesktopUpdateHandler) CompleteUpload(c *gin.Context) {
+	item, err := h.service.CompleteUpload(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Accepted(c, item)
+}
+
+func (h *DesktopUpdateHandler) RetryUpload(c *gin.Context) {
+	item, err := h.service.RetryUpload(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Accepted(c, item)
+}
+
+func (h *DesktopUpdateHandler) DeleteUpload(c *gin.Context) {
+	if err := h.service.DeleteUpload(c.Request.Context(), c.Param("id")); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"deleted": true})
 }
 
 func (h *DesktopUpdateHandler) Upload(c *gin.Context) {
