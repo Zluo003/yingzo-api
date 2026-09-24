@@ -44,19 +44,6 @@ func RegisterGatewayRoutes(
 	requireGroupGoogle := middleware.RequireGroupAssignment(settingService, middleware.GoogleErrorWriter)
 	groupModelAllowlist := middleware.GroupModelAllowlist()
 
-	// 聚合分组按"请求模型所属平台"分发，行为与该平台的独立分组保持一致：
-	// openai/grok 走 OpenAI 兼容链路，其余（含国产供应商）走 Gateway 链路。
-	isOpenAIResponsesCompatibleGatewayPlatform := func(c *gin.Context) bool {
-		if platform, ok := agentDispatchPlatform(c, service.PlatformOpenAI); ok {
-			return platform == service.PlatformOpenAI || platform == service.PlatformGrok
-		}
-		switch getGroupPlatform(c) {
-		case service.PlatformOpenAI, service.PlatformGrok:
-			return true
-		default:
-			return false
-		}
-	}
 	isOpenAIGatewayPlatform := func(c *gin.Context) bool {
 		if platform, ok := agentDispatchPlatform(c, service.PlatformOpenAI); ok {
 			return platform == service.PlatformOpenAI
@@ -585,6 +572,17 @@ func RegisterGatewayRoutes(
 		antigravityV1Beta.POST("/models/*modelAction", h.Gateway.GeminiV1BetaModels)
 	}
 
+}
+
+// isOpenAIResponsesCompatibleGatewayPlatform reports whether the request should
+// use the OpenAI-compatible handler for Responses and Chat Completions. Agent
+// groups can resolve a model to any OpenAI-compatible provider, including the
+// domestic providers that speak the Chat Completions protocol.
+func isOpenAIResponsesCompatibleGatewayPlatform(c *gin.Context) bool {
+	if platform, ok := agentDispatchPlatform(c, service.PlatformOpenAI); ok {
+		return service.IsOpenAICompatibleAgentPlatform(platform)
+	}
+	return service.IsOpenAICompatibleAgentPlatform(getGroupPlatform(c))
 }
 
 // dispatchCodexModelsGateway selects the native OpenAI Codex models endpoint

@@ -58,6 +58,49 @@ func newGatewayRoutesTestRouterWithConfig(cfg *config.Config, platform ...string
 	return router
 }
 
+func TestOpenAICompatibleGatewayPlatformIncludesDomesticProviders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, platform := range []string{
+		service.PlatformOpenAI,
+		service.PlatformGrok,
+		service.PlatformKimi,
+		service.PlatformZhipu,
+		service.PlatformDeepseek,
+		service.PlatformMiniMax,
+	} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		groupID := int64(1)
+		c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
+			GroupID: &groupID,
+			Group:   &service.Group{Platform: platform},
+		})
+		require.True(t, isOpenAIResponsesCompatibleGatewayPlatform(c), "platform=%s", platform)
+	}
+
+	// Agent requests use the model-resolved platform, not the composite group's
+	// default platform.
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	groupID := int64(1)
+	c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
+		GroupID: &groupID,
+		Group:   &service.Group{Platform: service.PlatformComposite, Kind: "agent", SystemCode: "yingzo"},
+	})
+	c.Set(agentResolvedPlatformKey, service.PlatformZhipu)
+	require.True(t, isOpenAIResponsesCompatibleGatewayPlatform(c))
+
+	for _, platform := range []string{service.PlatformAnthropic, service.PlatformGemini, service.PlatformVideo} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+		c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
+			GroupID: &groupID,
+			Group:   &service.Group{Platform: platform},
+		})
+		require.False(t, isOpenAIResponsesCompatibleGatewayPlatform(c), "platform=%s", platform)
+	}
+}
+
 func TestGatewayRoutesOpenAIResponsesCompactPathIsRegistered(t *testing.T) {
 	router := newGatewayRoutesTestRouter()
 
