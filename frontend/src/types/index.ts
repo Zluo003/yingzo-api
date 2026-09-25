@@ -1887,6 +1887,8 @@ export interface RedeemCodeRequest {
 export interface DashboardStats {
   // 用户统计
   total_users: number
+  online_users: number // 最近 2.5 分钟有 Yingzo 桌面端心跳的用户数
+  online_ip_counts: Array<{ ip: string; users: number }> // 在线用户按来源 IP 汇总
   today_new_users: number // 今日新增用户数
   active_users: number // 今日有请求的用户数
   hourly_active_users: number // 当前小时活跃用户数（UTC）

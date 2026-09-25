@@ -35,6 +35,16 @@ func TestAgentRoutesRejectOrdinaryAPIKeys(t *testing.T) {
 	require.Contains(t, w.Body.String(), "agent_credential_required")
 }
 
+func TestAgentHeartbeatRejectsOrdinaryAPIKeys(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	v := r.Group("/api/v1")
+	RegisterAgentRoutes(r, v, &handler.Handlers{Agent: &handler.AgentHandler{}}, agentAuthForTest(false))
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/agent/heartbeat", nil))
+	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
 func TestAgentAssetUploadRouteRequiresAgentCredential(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 

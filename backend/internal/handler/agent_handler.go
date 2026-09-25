@@ -17,6 +17,7 @@ import (
 	_ "image/png"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -87,6 +88,33 @@ func (h *AgentHandler) ModelCatalog() *service.AgentModelCatalogService {
 		return nil
 	}
 	return h.agentModels
+}
+
+// Heartbeat records the authenticated Agent user's latest desktop activity.
+// The API key decides the identity; the request body cannot name another user.
+func (h *AgentHandler) Heartbeat(c *gin.Context) {
+	apiKey, ok := middleware.GetAPIKeyFromContext(c)
+	if !ok || apiKey == nil || apiKey.UserID <= 0 {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": gin.H{"type": "invalid_api_key", "message": "Authentication required"}})
+		return
+	}
+	// Reuse the same proxy-aware IP as session binding and API-key ACLs.
+	// Never accept an IP from the desktop request body.
+	var clientIP any
+	if parsed := net.ParseIP(middleware.SecurityClientIP(c)); parsed != nil {
+		clientIP = parsed.String()
+	}
+	if _, err := h.db.ExecContext(c.Request.Context(), `
+		INSERT INTO yingzo_agent_heartbeats (user_id, last_seen_at, client_ip)
+		VALUES ($1, NOW(), $2)
+		ON CONFLICT (user_id) DO UPDATE SET
+			last_seen_at = EXCLUDED.last_seen_at,
+			client_ip = EXCLUDED.client_ip
+	`, apiKey.UserID, clientIP); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "api_error", "message": "Heartbeat unavailable"}})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 // Models 返回 Yingzo Agent 当前可用的聚合模型目录。Agent 分组只保留一个

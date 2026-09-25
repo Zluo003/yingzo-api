@@ -29,26 +29,21 @@
             </div>
           </div>
 
-          <!-- Service Accounts -->
+          <!-- Registered and online Yingzo users -->
           <div class="card p-4">
             <div class="flex items-center gap-3">
               <div class="rounded-lg bg-purple-100 p-2 dark:bg-purple-900/30">
-                <Icon name="server" size="md" class="text-purple-600 dark:text-purple-400" :stroke-width="2" />
+                <Icon name="users" size="md" class="text-purple-600 dark:text-purple-400" :stroke-width="2" />
               </div>
               <div>
                 <p class="text-xs font-medium text-gray-500 dark:text-gray-400">
-                  {{ t('admin.dashboard.accounts') }}
+                  {{ t('admin.dashboard.registeredUsers') }}
                 </p>
                 <p class="text-xl font-bold text-gray-900 dark:text-white">
-                  {{ stats.total_accounts }}
+                  {{ formatNumber(stats.total_users) }}
                 </p>
                 <p class="text-xs">
-                  <span class="text-green-600 dark:text-green-400"
-                    >{{ stats.normal_accounts }} {{ t('common.active') }}</span
-                  >
-                  <span v-if="stats.error_accounts > 0" class="ml-1 text-red-500"
-                    >{{ stats.error_accounts }} {{ t('common.error') }}</span
-                  >
+                  <span class="text-green-600 dark:text-green-400">{{ formatNumber(stats.online_users) }} {{ t('admin.dashboard.onlineUsers') }}</span>
                 </p>
               </div>
             </div>
@@ -216,6 +211,32 @@
           </div>
         </div>
 
+        <!-- Online Yingzo users by approximate IP location -->
+        <div class="card p-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('admin.dashboard.onlineGeography') }}</h2>
+              <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">{{ t('admin.dashboard.onlineGeographyHint') }}</p>
+            </div>
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :disabled="geoLookupLoading || onlineIPCounts.length === 0"
+              @click="lookupOnlineGeography"
+            >
+              {{ geoLookupLoading ? t('admin.dashboard.geoLoading') : t('admin.dashboard.geoLookup') }}
+            </button>
+          </div>
+          <p v-if="stats.online_users === 0" class="mt-4 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.dashboard.noOnlineUsers') }}</p>
+          <p v-else-if="!geoLookupRequested && onlineIPCounts.length > 0" class="mt-4 text-sm text-gray-500 dark:text-gray-400">{{ t('admin.dashboard.geoLookupHint') }}</p>
+          <div v-else class="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div v-for="place in geoDistribution" :key="place.name" class="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2 text-sm dark:bg-dark-800/50">
+              <span class="truncate text-gray-600 dark:text-gray-300" :title="place.name">{{ place.name }}</span>
+              <strong class="ml-3 text-gray-900 dark:text-white">{{ place.users }}</strong>
+            </div>
+          </div>
+        </div>
+
         <!-- Quick Actions -->
         <div class="card p-4">
           <div class="mb-3 flex items-center justify-between">
@@ -341,7 +362,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
@@ -363,6 +384,7 @@ import Select from '@/components/common/Select.vue'
 import ModelDistributionChart from '@/components/charts/ModelDistributionChart.vue'
 import TokenUsageTrend from '@/components/charts/TokenUsageTrend.vue'
 import { useBatchImageAccess } from '@/composables/useBatchImageAccess'
+import { fetchBatch, getEntry } from '@/utils/ipGeoLookup'
 
 import {
   Chart as ChartJS,
@@ -391,6 +413,38 @@ const appStore = useAppStore()
 const router = useRouter()
 const { canUseBatchImage, refreshBatchImageAccess } = useBatchImageAccess()
 const stats = ref<DashboardStats | null>(null)
+const geoLookupLoading = ref(false)
+const geoLookupRequested = ref(false)
+const onlineIPCounts = computed(() => stats.value?.online_ip_counts ?? [])
+const geoDistribution = computed(() => {
+  const places = new Map<string, number>()
+  let accountedFor = 0
+  for (const item of onlineIPCounts.value) {
+    accountedFor += item.users
+    const detail = getEntry(item.ip).detail
+    const name = detail?.countryCode
+      ? [detail.countryCode, detail.region].filter(Boolean).join(' · ')
+      : t('admin.dashboard.geoUnknown')
+    places.set(name, (places.get(name) ?? 0) + item.users)
+  }
+  const noIPCount = (stats.value?.online_users ?? 0) - accountedFor
+  if (noIPCount > 0) {
+    const unknown = t('admin.dashboard.geoUnknown')
+    places.set(unknown, (places.get(unknown) ?? 0) + noIPCount)
+  }
+  return [...places.entries()].map(([name, users]) => ({ name, users })).sort((a, b) => b.users - a.users)
+})
+
+const lookupOnlineGeography = async () => {
+  geoLookupLoading.value = true
+  try {
+    const ok = await fetchBatch(onlineIPCounts.value.map((item) => item.ip))
+    geoLookupRequested.value = true
+    if (!ok) appStore.showError(t('admin.dashboard.geoLookupFailed'))
+  } finally {
+    geoLookupLoading.value = false
+  }
+}
 const loading = ref(false)
 const chartsLoading = ref(false)
 const userTrendLoading = ref(false)
@@ -748,9 +802,32 @@ const loadChartData = async () => {
   ])
 }
 
+let presenceRefreshTimer: number | undefined
+
+const refreshPresenceStats = async () => {
+  try {
+    const current = await adminAPI.dashboard.getStats()
+    if (stats.value) {
+      stats.value = {
+        ...stats.value,
+        total_users: current.total_users,
+        online_users: current.online_users,
+        online_ip_counts: current.online_ip_counts
+      }
+    }
+  } catch (error) {
+    console.error('Error refreshing online user count:', error)
+  }
+}
+
 onMounted(() => {
   void refreshBatchImageAccess()
   loadDashboardStats()
+  presenceRefreshTimer = window.setInterval(() => void refreshPresenceStats(), 60_000)
+})
+
+onUnmounted(() => {
+  if (presenceRefreshTimer !== undefined) window.clearInterval(presenceRefreshTimer)
 })
 </script>
 

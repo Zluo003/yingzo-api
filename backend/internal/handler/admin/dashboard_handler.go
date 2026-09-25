@@ -90,9 +90,11 @@ func (h *DashboardHandler) GetStats(c *gin.Context) {
 
 	response.Success(c, gin.H{
 		// 用户统计
-		"total_users":     stats.TotalUsers,
-		"today_new_users": stats.TodayNewUsers,
-		"active_users":    stats.ActiveUsers,
+		"total_users":      stats.TotalUsers,
+		"online_users":     stats.OnlineUsers,
+		"online_ip_counts": stats.OnlineIPCounts,
+		"today_new_users":  stats.TodayNewUsers,
+		"active_users":     stats.ActiveUsers,
 
 		// API Key 统计
 		"total_api_keys":  stats.TotalAPIKeys,

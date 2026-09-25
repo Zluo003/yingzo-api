@@ -28,9 +28,11 @@ func NormalizeModelSource(source string) string {
 // DashboardStats 仪表盘统计
 type DashboardStats struct {
 	// 用户统计
-	TotalUsers    int64 `json:"total_users"`
-	TodayNewUsers int64 `json:"today_new_users"` // 今日新增用户数
-	ActiveUsers   int64 `json:"active_users"`    // 今日有请求的用户数
+	TotalUsers     int64           `json:"total_users"`
+	OnlineUsers    int64           `json:"online_users"`     // 近 2.5 分钟有桌面端心跳的去重用户数
+	OnlineIPCounts []OnlineIPCount `json:"online_ip_counts"` // 每个来源 IP 的在线用户数，供管理员按需查询地域
+	TodayNewUsers  int64           `json:"today_new_users"`  // 今日新增用户数
+	ActiveUsers    int64           `json:"active_users"`     // 今日有请求的用户数
 	// 小时活跃用户数（UTC 当前小时）
 	HourlyActiveUsers int64 `json:"hourly_active_users"`
 
@@ -77,6 +79,11 @@ type DashboardStats struct {
 	// 性能指标
 	Rpm int64 `json:"rpm"` // 近5分钟平均每分钟请求数
 	Tpm int64 `json:"tpm"` // 近5分钟平均每分钟Token数
+}
+
+type OnlineIPCount struct {
+	IP    string `json:"ip"`
+	Users int64  `json:"users"`
 }
 
 // TrendDataPoint represents a single point in trend data

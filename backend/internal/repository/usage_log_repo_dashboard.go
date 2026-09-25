@@ -146,6 +146,32 @@ func (r *usageLogRepository) fillDashboardEntityStats(ctx context.Context, stats
 	); err != nil {
 		return err
 	}
+	rows, err := r.sql.QueryContext(ctx, `
+		SELECT COALESCE(h.client_ip, ''), COUNT(*)
+		FROM yingzo_agent_heartbeats h
+		JOIN users u ON u.id = h.user_id
+		WHERE h.last_seen_at >= $1 AND u.deleted_at IS NULL
+		GROUP BY h.client_ip
+		ORDER BY COUNT(*) DESC
+	`, now.Add(-150*time.Second))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	stats.OnlineIPCounts = make([]usagestats.OnlineIPCount, 0)
+	for rows.Next() {
+		var entry usagestats.OnlineIPCount
+		if err := rows.Scan(&entry.IP, &entry.Users); err != nil {
+			return err
+		}
+		stats.OnlineUsers += entry.Users
+		if entry.IP != "" {
+			stats.OnlineIPCounts = append(stats.OnlineIPCounts, entry)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
 
 	apiKeyStatsQuery := `
 		SELECT

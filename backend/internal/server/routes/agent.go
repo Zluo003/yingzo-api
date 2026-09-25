@@ -13,6 +13,7 @@ func RegisterAgentRoutes(r *gin.Engine, v1 *gin.RouterGroup, h *handler.Handlers
 	g.Use(gin.HandlerFunc(apiKeyAuth))
 	g.Use(requireAgentGroup())
 	g.GET("/pricing", h.Agent.GetAgentPricingSnapshot)
+	g.POST("/heartbeat", h.Agent.Heartbeat)
 	g.POST("/generation/estimates", h.Agent.EstimateGeneration)
 	g.GET("/generation/estimates/:id", h.Agent.GetGenerationEstimate)
 	g.POST("/assets", h.Agent.UploadTemporaryAsset)
