@@ -465,6 +465,9 @@ func (s *VideoService) selectAccountForRequestWithExclusion(
 		if !videoAccountSupportsDuration(&account, model, normalized.GeneratedSeconds) {
 			continue
 		}
+		if !videoAccountSupportsRequest(&account, normalized) {
+			continue
+		}
 		if agentGroup {
 			current := agentDiscoverySet(discoverAgentModels([]Account{account}))
 			if _, supported := current[agentModelKey(PlatformVideo, model)]; !supported {

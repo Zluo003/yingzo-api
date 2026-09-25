@@ -187,15 +187,25 @@
             <input v-model.number="editVideoConnectTimeoutMs" type="number" min="1000" step="1000" class="input" />
           </div>
         </div>
+        <div v-if="account.platform === 'video'">
+          <label class="input-label">{{ t('admin.accounts.video.models') }}</label>
+          <ModelWhitelistSelector
+            v-model="allowedModels"
+            platform="video"
+            :account-id="account.id"
+          />
+          <p class="text-xs text-gray-500 dark:text-gray-400">
+            {{ t('admin.accounts.selectedModels', { count: editSelectedVideoModels.length }) }}
+          </p>
+        </div>
         <!--
-          分辨率/时长白名单：按模型勾选该账号实际支持的档位。
-          全部模型都展示而非只展示 model_mapping 白名单内的模型：隐藏已保存的条目会让
-          保存时静默丢掉它们，而这里列出的模型即便当下不可调度，配置本身也应保留。
+          分辨率/时长白名单：只展示上方模型白名单中选中的模型。
+          新增模型不会自动带入现有账号的能力配置。
         -->
         <div v-if="account.platform === 'video'">
           <label class="input-label">{{ t('admin.accounts.video.resolutions') }}</label>
           <div class="mt-2 space-y-3">
-            <div v-for="model in videoDefaultModels" :key="model">
+            <div v-for="model in editSelectedVideoModels" :key="model">
               <div class="text-xs font-medium text-gray-600 dark:text-gray-400">{{ model }}</div>
               <div class="mt-1.5 flex flex-wrap gap-2">
                 <button
@@ -222,7 +232,7 @@
         <div v-if="account.platform === 'video'">
           <label class="input-label">{{ t('admin.accounts.video.durations') }}</label>
           <div class="mt-2 space-y-3">
-            <div v-for="model in videoDefaultModels" :key="model">
+            <div v-for="model in editSelectedVideoModels" :key="model">
               <div class="text-xs font-medium text-gray-600 dark:text-gray-400">{{ model }}</div>
               <div class="mt-1.5 flex flex-wrap gap-2">
                 <button
@@ -246,6 +256,11 @@
           </div>
           <p class="input-hint">{{ t('admin.accounts.video.durationsHint') }}</p>
         </div>
+        <VideoModelCapabilitiesField
+          v-if="account.platform === 'video'"
+          v-model="editVideoCapabilities"
+          :models="editSelectedVideoModels"
+        />
         <div>
           <label class="input-label">{{ t('admin.accounts.apiKey') }}</label>
           <input
@@ -274,7 +289,7 @@
         </div>
 
         <!-- Model Restriction Section (不适用于 Antigravity) -->
-        <div v-if="account.platform !== 'antigravity'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <div v-if="account.platform !== 'antigravity' && account.platform !== 'video'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <div
@@ -3098,6 +3113,11 @@ import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
+import VideoModelCapabilitiesField from '@/components/account/VideoModelCapabilitiesField.vue'
+import {
+  parseVideoModelCapabilities,
+  serializeVideoModelCapabilities
+} from '@/views/admin/videoModelCapabilities'
 import {
   VIDEO_MODEL_CODES,
   defaultVideoModelResolutions,
@@ -3257,6 +3277,7 @@ const editVideoResolutions = ref<Record<string, string[]>>(
 const editVideoDurations = ref<Record<string, number[]>>(
   defaultVideoModelDurations()
 )
+const editVideoCapabilities = ref(parseVideoModelCapabilities(undefined))
 
 /** 勾选/取消一个分辨率档位。 */
 const onEditVideoResolutionToggle = (model: string, resolution: string) => {
@@ -3985,11 +4006,6 @@ watch(editVideoProvider, (_newProvider, oldProvider) => {
     editVideoConnectTimeoutMs.value = editVideoProviderDefaults.value.connectTimeoutMs
   }
   if (props.account?.platform !== 'video') return
-  // 视频上游都使用白名单：newtoken / mikuapi / jingyu 的上游模型名由后端适配器决定
-  // （newtoken 把分辨率编进模型名），扁平的 from→to 映射无法表达，只能限定下游可用模型。
-  modelRestrictionMode.value = 'whitelist'
-  allowedModels.value = [...videoDefaultModels]
-  modelMappings.value = []
 })
 
 const normalizePoolModeRetryCount = (value: number) => {
@@ -4015,6 +4031,13 @@ const loadModelRestrictionFromMapping = (rawMapping?: Record<string, unknown>) =
       ? 'mapping'
       : 'whitelist'
 }
+
+const editSelectedVideoModels = computed(() => {
+  if (modelMappings.value.length > 0) return []
+  if (allowedModels.value.length === 0) return [...videoDefaultModels]
+  const selected = new Set(allowedModels.value)
+  return videoDefaultModels.filter((model) => selected.has(model))
+})
 
 const buildModelRestrictionMapping = () =>
   buildModelMappingObject('combined', allowedModels.value, modelMappings.value)
@@ -4387,6 +4410,9 @@ const syncFormFromAccount = (newAccount: Account | null) => {
       editVideoDurations.value = parseVideoModelDurations(
         extra?.video_model_durations
       )
+      editVideoCapabilities.value = parseVideoModelCapabilities(
+        extra?.video_model_capabilities
+      )
     }
     if (newAccount.platform === 'video') {
       // Seedance 账号的 base_url 存在 extra 里，优先于 credentials
@@ -4406,6 +4432,12 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 
     // Load model mappings and detect mode
     loadModelRestrictionFromMapping(credentials.model_mapping as Record<string, unknown> | undefined)
+    if (newAccount.platform === 'video') {
+      // Video accounts use a model whitelist; capability sections follow only
+      // the selected downstream models.
+      modelRestrictionMode.value = 'whitelist'
+      modelMappings.value = []
+    }
 
     // Load pool mode
     poolModeEnabled.value = credentials.pool_mode === true
@@ -5085,6 +5117,10 @@ const handleSubmit = async () => {
     appStore.showError(t('admin.accounts.pleaseSelectStatus'))
     return
   }
+  if (props.account.platform === 'video' && editSelectedVideoModels.value.length === 0) {
+    appStore.showError(t('admin.accounts.video.modelsRequired'))
+    return
+  }
 	if (autoResetCreditEnabled.value) {
 		const thresholds = [autoResetCredit5hThreshold.value, autoResetCredit7dThreshold.value]
 		if (thresholds.some((value) => !Number.isFinite(value) || value < 0.1 || value > 100)) {
@@ -5260,17 +5296,23 @@ const handleSubmit = async () => {
         }
         // 新增/更新分辨率与时长白名单；清空勾选等价于「不限制」，必须删除旧键，
         // 否则 currentExtra 里残留的配置会继续生效。
-        const videoResolutions = serializeVideoModelResolutions(editVideoResolutions.value)
+        const videoResolutions = serializeVideoModelResolutions(editVideoResolutions.value, editSelectedVideoModels.value)
         if (videoResolutions) {
           nextExtra.video_model_resolutions = videoResolutions
         } else {
           delete nextExtra.video_model_resolutions
         }
-        const videoDurations = serializeVideoModelDurations(editVideoDurations.value)
+        const videoDurations = serializeVideoModelDurations(editVideoDurations.value, editSelectedVideoModels.value)
         if (videoDurations) {
           nextExtra.video_model_durations = videoDurations
         } else {
           delete nextExtra.video_model_durations
+        }
+        const videoCapabilities = serializeVideoModelCapabilities(editVideoCapabilities.value, editSelectedVideoModels.value)
+        if (videoCapabilities) {
+          nextExtra.video_model_capabilities = videoCapabilities
+        } else {
+          delete nextExtra.video_model_capabilities
         }
         updatePayload.extra = nextExtra
       }

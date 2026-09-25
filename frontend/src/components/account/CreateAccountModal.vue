@@ -664,6 +664,12 @@
           </div>
           <p class="input-hint">{{ t('admin.accounts.video.durationsHint') }}</p>
         </div>
+        <VideoModelCapabilitiesField
+          v-if="selectedVideoModels.length > 0"
+          v-model="selectedVideoCapabilities"
+          :models="selectedVideoModels"
+          class="mt-4"
+        />
       </div>
 
       <!-- Account Mode Selection (Kimi / Zhipu / DeepSeek / MiniMax) -->
@@ -4121,6 +4127,11 @@ import {
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
+import VideoModelCapabilitiesField from './VideoModelCapabilitiesField.vue'
+import {
+  parseVideoModelCapabilities,
+  serializeVideoModelCapabilities
+} from '@/views/admin/videoModelCapabilities'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -4617,6 +4628,7 @@ const selectedVideoResolutions = ref<Record<string, string[]>>(
 const selectedVideoDurations = ref<Record<string, number[]>>(
   defaultVideoModelDurations()
 )
+const selectedVideoCapabilities = ref(parseVideoModelCapabilities(undefined))
 
 /** 上游平台与模型联动：下拉里只保留能服务当前所选全部模型的平台。 */
 const availableVideoProviders = computed(() => {
@@ -5772,6 +5784,7 @@ const resetForm = () => {
   videoRequestTimeoutMs.value = videoProviderDefaultsMap.aigod.requestTimeoutMs
   videoConnectTimeoutMs.value = videoProviderDefaultsMap.aigod.connectTimeoutMs
   selectedVideoModels.value = [...videoDefaultModels]
+  selectedVideoCapabilities.value = parseVideoModelCapabilities(undefined)
   selectedVideoResolutions.value = defaultVideoModelResolutions()
   selectedVideoDurations.value = defaultVideoModelDurations()
   upstreamBillingAutoProbeEnabled.value = true
@@ -6221,6 +6234,10 @@ const handleSubmit = async () => {
   }
 
   // For apikey type, create directly
+  if (form.platform === 'video' && selectedVideoModels.value.length === 0) {
+    appStore.showError(t('admin.accounts.video.modelsRequired'))
+    return
+  }
   if (!apiKeyValue.value.trim()) {
     appStore.showError(t('admin.accounts.pleaseEnterApiKey'))
     return
@@ -6336,6 +6353,7 @@ const handleSubmit = async () => {
   // 分辨率白名单：没有任何勾选时不写该键（键缺失 = 不限制分辨率，与旧行为一致）。
   const videoResolutionsExtra = videoModelResolutionsPayload()
   const videoDurationsExtra = videoModelDurationsPayload()
+  const videoCapabilitiesExtra = serializeVideoModelCapabilities(selectedVideoCapabilities.value, selectedVideoModels.value)
   const extra = form.platform === 'video'
     ? {
         video_provider: videoProvider.value,
@@ -6347,6 +6365,7 @@ const handleSubmit = async () => {
         connect_timeout_ms: Number(videoConnectTimeoutMs.value) || videoProviderDefaults.value.connectTimeoutMs,
         ...(videoResolutionsExtra ? { video_model_resolutions: videoResolutionsExtra } : {}),
         ...(videoDurationsExtra ? { video_model_durations: videoDurationsExtra } : {}),
+        ...(videoCapabilitiesExtra ? { video_model_capabilities: videoCapabilitiesExtra } : {}),
       }
     : {
         ...buildAnthropicExtra(buildOpenAIExtra()),

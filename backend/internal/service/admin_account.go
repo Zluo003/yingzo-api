@@ -419,6 +419,9 @@ func NormalizeVideoProviderExtra(platform string, extra map[string]any) (map[str
 	if err := normalizeVideoModelDurationsExtra(normalized); err != nil {
 		return nil, err
 	}
+	if err := normalizeVideoModelCapabilitiesExtra(normalized); err != nil {
+		return nil, err
+	}
 	raw, _ := normalized[VideoProviderExtraKey].(string)
 	provider := strings.ToLower(strings.TrimSpace(raw))
 	if provider == "" {
