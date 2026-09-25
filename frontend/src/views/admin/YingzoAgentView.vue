@@ -254,15 +254,23 @@
                   :key="resolution"
                   class="py-2 pr-3"
                 >
-                  <input
-                    v-model="drafts[model.id].prices[resolution]"
-                    class="input w-24"
-                    type="number"
-                    min="0"
-                    step="0.001"
-                    :placeholder="t('admin.yingzoAgent.pricePlaceholder')"
-                    :data-testid="`yingzo-agent-price-${model.id}-${resolution}`"
-                  />
+                  <div class="flex items-center gap-2">
+                    <input
+                      v-model="drafts[model.id].resolutionEnabled[resolution]"
+                      type="checkbox"
+                      :aria-label="`${resolution} ${t('admin.yingzoAgent.columns.enabled')}`"
+                      :data-testid="`yingzo-agent-resolution-enabled-${model.id}-${resolution}`"
+                    />
+                    <input
+                      v-model="drafts[model.id].prices[resolution]"
+                      class="input w-24"
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      :placeholder="t('admin.yingzoAgent.pricePlaceholder')"
+                      :data-testid="`yingzo-agent-price-${model.id}-${resolution}`"
+                    />
+                  </div>
                 </td>
               </template>
               <td class="py-2 pr-3 text-right">
@@ -286,7 +294,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import { adminAPI } from '@/api'
@@ -309,6 +317,8 @@ interface ModelDraft {
   mediaType: AgentMediaType
   rateMultiplier: string
   prices: Record<string, string>
+  /** 分辨率独立开关；未出现在接口响应里的档位默认关闭。 */
+  resolutionEnabled: Record<string, boolean>
 }
 
 const loading = ref(false)
@@ -387,14 +397,31 @@ function isDirty(model: AgentGroupModel): boolean {
   if (draft.mediaType === 'text') {
     return normalizeNumber(draft.rateMultiplier) !== (model.rate_multiplier ?? null)
   }
-  const stored = new Map(model.prices.map((price) => [price.resolution, price.unit_price]))
+  const stored = new Map(model.prices.map((price) => [price.resolution, price]))
   for (const resolution of Object.keys(draft.prices)) {
-    if (normalizeNumber(draft.prices[resolution]) !== (stored.get(resolution) ?? null)) {
+    const storedPrice = stored.get(resolution)
+    const draftEnabled = draft.resolutionEnabled[resolution] !== false
+    const storedEnabled = storedPrice ? storedPrice.enabled !== false : false
+    if (draftEnabled !== storedEnabled) {
+      return true
+    }
+    if (!draftEnabled && !storedPrice && normalizeNumber(draft.prices[resolution]) !== null) {
+      return true
+    }
+    if (
+      draftEnabled &&
+      normalizeNumber(draft.prices[resolution]) !== (storedPrice?.unit_price ?? null)
+    ) {
       return true
     }
   }
   for (const [resolution, price] of stored) {
-    if (normalizeNumber(draft.prices[resolution] ?? '') !== price) {
+    if (draft.resolutionEnabled[resolution] !== false || price.enabled !== false) {
+      if (normalizeNumber(draft.prices[resolution] ?? '') !== price.unit_price) {
+        return true
+      }
+    }
+    if (draft.resolutionEnabled[resolution] === false && price.enabled !== false) {
       return true
     }
   }
@@ -419,17 +446,35 @@ function buildDrafts(): void {
   }
   for (const model of models.value) {
     const prices: Record<string, string> = {}
+    const resolutionEnabled: Record<string, boolean> = {}
     for (const resolution of resolutionColumnsForType(model.media_type, model.model_code)) {
       prices[resolution] = ''
+      resolutionEnabled[resolution] = false
     }
     for (const price of model.prices) {
       prices[price.resolution] = String(price.unit_price)
+      resolutionEnabled[price.resolution] = price.enabled !== false
     }
     drafts[model.id] = {
       enabled: model.enabled,
       mediaType: model.media_type,
       rateMultiplier: model.rate_multiplier === null ? '' : String(model.rate_multiplier),
       prices,
+      resolutionEnabled,
+    }
+  }
+}
+
+// When an administrator changes a model's media type, seed the newly visible
+// resolution controls as disabled until the administrator selects them. This
+// keeps an empty tier from being exposed accidentally.
+function ensureDraftResolutions(): void {
+  for (const model of models.value) {
+    const draft = drafts[model.id]
+    if (!draft || draft.mediaType === 'text') continue
+    for (const resolution of resolutionColumnsForType(draft.mediaType, model.model_code)) {
+      if (!(resolution in draft.prices)) draft.prices[resolution] = ''
+      if (!(resolution in draft.resolutionEnabled)) draft.resolutionEnabled[resolution] = false
     }
   }
 }
@@ -489,7 +534,11 @@ function buildPrices(model: AgentGroupModel): AgentModelPrice[] {
     if (value === null) {
       continue
     }
-    prices.push({ resolution, unit_price: value })
+    const price: AgentModelPrice = { resolution, unit_price: value }
+    if (draft.resolutionEnabled[resolution] === false) {
+      price.enabled = false
+    }
+    prices.push(price)
   }
   return prices
 }
@@ -572,4 +621,10 @@ onMounted(async () => {
   }
   await loadCatalog()
 })
+
+watch(
+  () => models.value.map((model) => `${model.id}:${drafts[model.id]?.mediaType ?? model.media_type}`),
+  ensureDraftResolutions,
+  { flush: 'post' },
+)
 </script>

@@ -182,7 +182,16 @@ describe('admin YingzoAgentView', () => {
     await wrapper.get('[data-testid="yingzo-agent-tab-image"]').trigger('click')
     expect(inputValue(wrapper, 'yingzo-agent-price-2-1K')).toBe('0.1')
     expect(inputValue(wrapper, 'yingzo-agent-price-2-4K')).toBe('')
+    expect(
+      (wrapper.get('[data-testid="yingzo-agent-resolution-enabled-2-1K"]').element as HTMLInputElement)
+        .checked,
+    ).toBe(true)
+    expect(
+      (wrapper.get('[data-testid="yingzo-agent-resolution-enabled-2-2K"]').element as HTMLInputElement)
+        .checked,
+    ).toBe(false)
 
+    await wrapper.get('[data-testid="yingzo-agent-resolution-enabled-2-4K"]').setValue(true)
     await wrapper.get('[data-testid="yingzo-agent-price-2-4K"]').setValue('0.4')
     await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
     await flushPromises()
@@ -193,6 +202,25 @@ describe('admin YingzoAgentView', () => {
       prices: [
         { resolution: '1K', unit_price: 0.1 },
         { resolution: '4K', unit_price: 0.4 },
+      ],
+    })
+  })
+
+  it('persists a disabled resolution without exposing it downstream', async () => {
+    const wrapper = await mountView()
+
+    await wrapper.get('[data-testid="yingzo-agent-tab-image"]').trigger('click')
+    await wrapper.get('[data-testid="yingzo-agent-price-2-2K"]').setValue('0.2')
+    await wrapper.get('[data-testid="yingzo-agent-resolution-enabled-2-2K"]').setValue(false)
+    await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
+    await flushPromises()
+
+    expect(updateAgentModel).toHaveBeenCalledWith(7, 2, {
+      media_type: 'image',
+      enabled: true,
+      prices: [
+        { resolution: '1K', unit_price: 0.1 },
+        { resolution: '2K', unit_price: 0.2, enabled: false },
       ],
     })
   })
@@ -210,6 +238,7 @@ describe('admin YingzoAgentView', () => {
     // 切成图片后立刻出现按张计价的档位输入，不必先保存再切页签。
     expect(wrapper.find('[data-testid="yingzo-agent-price-1-1K"]').exists()).toBe(true)
 
+    await wrapper.get('[data-testid="yingzo-agent-resolution-enabled-1-1K"]').setValue(true)
     await wrapper.get('[data-testid="yingzo-agent-price-1-1K"]').setValue('0.1')
     await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
     await flushPromises()

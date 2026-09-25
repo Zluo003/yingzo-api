@@ -19,6 +19,8 @@ export interface AgentModelPrice {
   resolution: string
   billing_unit?: AgentBillingUnit
   unit_price: number
+  /** Per-resolution visibility switch. Omitted by older API responses means enabled. */
+  enabled?: boolean
   created_at?: string
   updated_at?: string
 }

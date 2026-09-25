@@ -49,13 +49,17 @@ var (
 )
 
 type AgentModelPrice struct {
-	ID           int64     `json:"id"`
-	AgentModelID int64     `json:"agent_model_id"`
-	Resolution   string    `json:"resolution"`
-	BillingUnit  string    `json:"billing_unit"`
-	UnitPrice    float64   `json:"unit_price"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           int64   `json:"id"`
+	AgentModelID int64   `json:"agent_model_id"`
+	Resolution   string  `json:"resolution"`
+	BillingUnit  string  `json:"billing_unit"`
+	UnitPrice    float64 `json:"unit_price"`
+	// Enabled is a per-resolution visibility switch. A nil value is treated as
+	// enabled for backwards compatibility with callers that construct prices
+	// before this field was introduced.
+	Enabled   *bool     `json:"enabled,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 type AgentGroupModel struct {
@@ -312,8 +316,8 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 	if err != nil {
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", err.Error())
 	}
-	if input.Enabled && mediaType != AgentMediaTypeText && len(prices) == 0 {
-		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "an enabled image or video model requires at least one resolution price")
+	if input.Enabled && mediaType != AgentMediaTypeText && !hasEnabledAgentModelPrice(prices) {
+		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "an enabled image or video model requires at least one resolution price, and at least one resolution must be enabled")
 	}
 	if err := s.modelRepo.UpdateModelConfig(ctx, groupID, model.ID, mediaType, input.Enabled, rate, prices); err != nil {
 		return nil, fmt.Errorf("update Agent model: %w", err)
@@ -435,7 +439,7 @@ func (s *AgentModelCatalogService) EnsureAgentImageModelPriced(ctx context.Conte
 		if err != nil || entry == nil || entry.MediaType != AgentMediaTypeImage {
 			continue
 		}
-		if len(entry.Prices) == 0 {
+		if !hasEnabledAgentModelPrice(entry.Prices) {
 			return true, fmt.Errorf("%w for model %s", ErrAgentImagePricingUnavailable, entry.ModelCode)
 		}
 		return true, nil
@@ -476,7 +480,7 @@ func (s *AgentModelCatalogService) ResolveMediaUnitPrice(
 			continue
 		}
 		for _, price := range model.Prices {
-			if price.Resolution == resolution && price.BillingUnit == billingUnitForAgentMedia(mediaType) && price.UnitPrice >= 0 {
+			if price.Resolution == resolution && price.BillingUnit == billingUnitForAgentMedia(mediaType) && price.UnitPrice >= 0 && agentModelPriceEnabled(price) {
 				return price.UnitPrice, model.ModelCode, nil
 			}
 		}
@@ -590,10 +594,27 @@ func normalizeAgentModelPrices(mediaType string, prices []AgentModelPrice) ([]Ag
 			return nil, fmt.Errorf("duplicate price resolution %s", resolution)
 		}
 		seen[resolution] = struct{}{}
-		out = append(out, AgentModelPrice{Resolution: resolution, BillingUnit: billingUnit, UnitPrice: price.UnitPrice})
+		enabled := true
+		if price.Enabled != nil {
+			enabled = *price.Enabled
+		}
+		out = append(out, AgentModelPrice{Resolution: resolution, BillingUnit: billingUnit, UnitPrice: price.UnitPrice, Enabled: &enabled})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Resolution < out[j].Resolution })
 	return out, nil
+}
+
+func agentModelPriceEnabled(price AgentModelPrice) bool {
+	return price.Enabled == nil || *price.Enabled
+}
+
+func hasEnabledAgentModelPrice(prices []AgentModelPrice) bool {
+	for _, price := range prices {
+		if agentModelPriceEnabled(price) {
+			return true
+		}
+	}
+	return false
 }
 
 // normalizeAgentModelRate validates the per-model configuration shape: text

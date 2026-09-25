@@ -21,7 +21,8 @@ func TestAgentCatalogModelPublishesRoutingCapabilities(t *testing.T) {
 		Available: true,
 		Prices: []service.AgentModelPrice{
 			{Resolution: "720p"},
-			{Resolution: "1080p"},
+			{Resolution: "1080p", Enabled: boolPointer(false)},
+			{Resolution: "4K", Enabled: boolPointer(true)},
 		},
 	}}})
 
@@ -31,9 +32,11 @@ func TestAgentCatalogModelPublishesRoutingCapabilities(t *testing.T) {
 	capabilities := capabilitiesOf(t, model)
 	require.Equal(t, []string{"video"}, capabilities["output_modalities"])
 	require.Equal(t, []string{"video.generate"}, capabilities["operations"])
-	require.Equal(t, []string{"720p", "1080p"}, capabilities["supported_video_resolutions"])
+	require.Equal(t, []string{"720p", "4K"}, capabilities["supported_video_resolutions"])
 	require.Equal(t, true, capabilities["asynchronous"])
 }
+
+func boolPointer(value bool) *bool { return &value }
 
 func TestAgentCatalogModelPublishesPerModelVideoDurations(t *testing.T) {
 	cases := []struct {

@@ -60,7 +60,7 @@ func TestGetAgentPricingSnapshotUsesPerModelTextRateAndMediaPrices(t *testing.T)
 				Prices: []service.AgentModelPrice{
 					{Resolution: service.ImageBillingSize1K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0.1},
 					{Resolution: service.ImageBillingSize2K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0.2},
-					{Resolution: service.ImageBillingSize4K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0.4},
+					{Resolution: service.ImageBillingSize4K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0.4, Enabled: boolPointer(false)},
 				},
 			},
 			{
@@ -81,7 +81,7 @@ func TestGetAgentPricingSnapshotUsesPerModelTextRateAndMediaPrices(t *testing.T)
 	require.Equal(t, "credit", snapshot.Currency)
 	require.WithinDuration(t, time.Now().UTC(), snapshot.FetchedAt, time.Second)
 	require.Equal(t, agentPricingSnapshotTTL, snapshot.ValidUntil.Sub(snapshot.FetchedAt))
-	require.Len(t, snapshot.Rules, 5)
+	require.Len(t, snapshot.Rules, 4)
 
 	language := snapshot.Rules[0]
 	require.Equal(t, "gpt-text", language.Model)
@@ -90,13 +90,13 @@ func TestGetAgentPricingSnapshotUsesPerModelTextRateAndMediaPrices(t *testing.T)
 	require.Equal(t, "channel_price_multiplier", language.UnitKind)
 	require.InDelta(t, 2, language.BillingMultiplier, 1e-12)
 
-	for i, expected := range []float64{0.1, 0.2, 0.4} {
+	for i, expected := range []float64{0.1, 0.2} {
 		image := snapshot.Rules[i+1]
 		require.Equal(t, "image-custom", image.Model)
 		require.Equal(t, service.AgentBillingUnitImage, image.UnitKind)
 		require.InDelta(t, expected, image.UnitPrice, 1e-12)
 	}
-	video := snapshot.Rules[4]
+	video := snapshot.Rules[3]
 	require.Equal(t, "video-custom", video.Model)
 	require.Equal(t, service.PlatformVideo, video.Platform)
 	require.Equal(t, service.AgentBillingUnitSecond, video.UnitKind)
@@ -119,6 +119,37 @@ func TestGetAgentPricingSnapshotReturnsOnlyConfiguredPrices(t *testing.T) {
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &snapshot))
 	require.Len(t, snapshot.Rules, 1)
 	require.Equal(t, service.ImageBillingSize1K, snapshot.Rules[0].Resolution)
+}
+
+func TestGetAgentPricingCompatibilitySkipsDisabledVideoResolution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	groupID := int64(21)
+	h := newAgentPricingHandlerForTest(groupID, []service.AgentGroupModel{{
+		ID: 1, GroupID: groupID, Platform: service.PlatformVideo, ModelCode: "video-custom",
+		MediaType: service.AgentMediaTypeVideo, Enabled: true, Available: true,
+		Prices: []service.AgentModelPrice{
+			{Resolution: "720p", BillingUnit: service.AgentBillingUnitSecond, UnitPrice: 0.2},
+			{Resolution: "4K", BillingUnit: service.AgentBillingUnitSecond, UnitPrice: 0.8, Enabled: boolPointer(false)},
+		},
+	}})
+	c, recorder := agentPricingRequestContext(groupID)
+
+	h.GetAgentPricingCompatibility(c)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var payload struct {
+		Data []struct {
+			Model  string `json:"model_name"`
+			Schema struct {
+				Resolution struct {
+					Enum []string `json:"enum"`
+				} `json:"resolution"`
+			} `json:"billing_usage_schema"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &payload))
+	require.Len(t, payload.Data, 1)
+	require.Equal(t, "video-custom", payload.Data[0].Model)
+	require.Equal(t, []string{"720p"}, payload.Data[0].Schema.Resolution.Enum)
 }
 
 func TestGetAgentPricingSnapshotAcceptsExplicitZeroPrices(t *testing.T) {

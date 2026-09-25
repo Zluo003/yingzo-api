@@ -187,6 +187,15 @@ WHERE group_id = $1 AND id = $2 AND excluded = FALSE
 		return err
 	}
 	for _, price := range prices {
+		if price.Enabled != nil && !*price.Enabled {
+			if _, err := tx.ExecContext(ctx, `
+INSERT INTO agent_model_prices (agent_model_id, resolution, billing_unit, unit_price, enabled)
+VALUES ($1, $2, $3, $4, FALSE)
+`, modelID, price.Resolution, price.BillingUnit, price.UnitPrice); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO agent_model_prices (agent_model_id, resolution, billing_unit, unit_price)
 VALUES ($1, $2, $3, $4)
@@ -272,7 +281,7 @@ func (r *agentModelRepository) attachPrices(ctx context.Context, groupID int64, 
 		models[i].Prices = []service.AgentModelPrice{}
 	}
 	rows, err := r.db.QueryContext(ctx, `
-SELECT p.id, p.agent_model_id, p.resolution, p.billing_unit, p.unit_price, p.created_at, p.updated_at
+SELECT p.id, p.agent_model_id, p.resolution, p.billing_unit, p.unit_price, p.created_at, p.updated_at, p.enabled
 FROM agent_model_prices p
 JOIN agent_group_models m ON m.id = p.agent_model_id
 WHERE m.group_id = $1
@@ -296,7 +305,7 @@ ORDER BY p.agent_model_id, p.resolution
 
 func (r *agentModelRepository) listPricesByModelID(ctx context.Context, modelID int64) ([]service.AgentModelPrice, error) {
 	rows, err := r.db.QueryContext(ctx, `
-SELECT id, agent_model_id, resolution, billing_unit, unit_price, created_at, updated_at
+SELECT id, agent_model_id, resolution, billing_unit, unit_price, created_at, updated_at, enabled
 FROM agent_model_prices
 WHERE agent_model_id = $1
 ORDER BY resolution
@@ -318,17 +327,49 @@ ORDER BY resolution
 
 func scanAgentModelPrice(scanner agentModelScanner) (service.AgentModelPrice, error) {
 	var price service.AgentModelPrice
-	err := scanner.Scan(
-		&price.ID,
-		&price.AgentModelID,
-		&price.Resolution,
-		&price.BillingUnit,
-		&price.UnitPrice,
-		&price.CreatedAt,
-		&price.UpdatedAt,
-	)
+	var enabled sql.NullBool
+	includeEnabled := false
+	if columns, ok := scanner.(interface{ Columns() ([]string, error) }); ok {
+		if names, err := columns.Columns(); err == nil {
+			for _, name := range names {
+				if name == "enabled" {
+					includeEnabled = true
+					break
+				}
+			}
+		}
+	}
+	var err error
+	if includeEnabled {
+		err = scanner.Scan(
+			&price.ID,
+			&price.AgentModelID,
+			&price.Resolution,
+			&price.BillingUnit,
+			&price.UnitPrice,
+			&price.CreatedAt,
+			&price.UpdatedAt,
+			&enabled,
+		)
+	} else {
+		err = scanner.Scan(
+			&price.ID,
+			&price.AgentModelID,
+			&price.Resolution,
+			&price.BillingUnit,
+			&price.UnitPrice,
+			&price.CreatedAt,
+			&price.UpdatedAt,
+		)
+		enabled.Valid = true
+		enabled.Bool = true
+	}
 	if err != nil {
 		return service.AgentModelPrice{}, fmt.Errorf("scan Agent model price: %w", err)
+	}
+	if enabled.Valid {
+		value := enabled.Bool
+		price.Enabled = &value
 	}
 	return price, nil
 }

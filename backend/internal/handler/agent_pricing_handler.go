@@ -37,6 +37,9 @@ func (h *AgentHandler) GetAgentPricingCompatibility(c *gin.Context) {
 		resolutions := make([]string, 0, len(model.Prices))
 		seen := map[string]struct{}{}
 		for _, price := range model.Prices {
+			if !agentModelPriceEnabled(price) {
+				continue
+			}
 			resolution := strings.TrimSpace(price.Resolution)
 			if resolution == "" {
 				continue
@@ -118,6 +121,9 @@ func (h *AgentHandler) GetAgentPricingSnapshot(c *gin.Context) {
 			continue
 		}
 		for _, price := range model.Prices {
+			if !agentModelPriceEnabled(price) {
+				continue
+			}
 			rules = append(rules, agentPricingSnapshotRule{
 				Model: model.ModelCode, Platform: model.Platform, MediaType: model.MediaType,
 				Resolution: price.Resolution, UnitKind: price.BillingUnit,

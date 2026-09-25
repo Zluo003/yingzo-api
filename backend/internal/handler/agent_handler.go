@@ -291,7 +291,7 @@ func configuredAgentModelResolutions(entry service.AgentModelCatalogEntry, confi
 			}
 			for _, price := range model.Prices {
 				resolution := strings.TrimSpace(price.Resolution)
-				if resolution != "" {
+				if resolution != "" && agentModelPriceEnabled(price) {
 					if _, ok := seen[resolution]; !ok {
 						seen[resolution] = struct{}{}
 						result = append(result, resolution)
@@ -301,6 +301,10 @@ func configuredAgentModelResolutions(entry service.AgentModelCatalogEntry, confi
 		}
 	}
 	return result
+}
+
+func agentModelPriceEnabled(price service.AgentModelPrice) bool {
+	return price.Enabled == nil || *price.Enabled
 }
 
 func (h *AgentHandler) StartCleanupWorker(interval time.Duration) {

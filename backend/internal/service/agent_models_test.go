@@ -485,6 +485,41 @@ func TestAgentModelPricingSupportsExplicitZeroModelPrices(t *testing.T) {
 	require.ErrorIs(t, err, ErrAgentImagePricingUnavailable)
 }
 
+func TestAgentModelPricingSkipsDisabledResolution(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
+		Platform:    PlatformOpenAI,
+		Credentials: map[string]any{"model_mapping": map[string]any{"image-alias": "gpt-image-2"}},
+	}}}
+	catalogService, _ := newAgentCatalogForTest(accounts)
+	_, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	config, err := catalogService.GetConfig(context.Background(), 9)
+	require.NoError(t, err)
+
+	disabled := false
+	_, err = catalogService.UpdateModel(context.Background(), 9, config.Models[0].ID, AgentModelConfigInput{
+		MediaType: AgentMediaTypeImage,
+		Enabled:   true,
+		Prices: []AgentModelPrice{
+			{Resolution: ImageBillingSize1K, UnitPrice: 0.1},
+			{Resolution: ImageBillingSize2K, UnitPrice: 0.2, Enabled: &disabled},
+		},
+	})
+	require.NoError(t, err)
+
+	price, model, err := catalogService.ResolveMediaUnitPrice(
+		context.Background(), 9, PlatformOpenAI, AgentMediaTypeImage, ImageBillingSize1K, "image-alias",
+	)
+	require.NoError(t, err)
+	require.Equal(t, "image-alias", model)
+	require.Equal(t, 0.1, price)
+
+	_, _, err = catalogService.ResolveMediaUnitPrice(
+		context.Background(), 9, PlatformOpenAI, AgentMediaTypeImage, ImageBillingSize2K, "image-alias",
+	)
+	require.ErrorIs(t, err, ErrAgentImagePricingUnavailable)
+}
+
 func TestAgentModelCatalogIntersectsPersistedModelsWithCurrentAccounts(t *testing.T) {
 	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
 		Platform:    PlatformAnthropic,
