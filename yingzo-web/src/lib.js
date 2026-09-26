@@ -7,7 +7,71 @@ import DOMPurify from 'dompurify'
 const API = import.meta.env.VITE_API_BASE || '/api/v1'
 export const UPDATE_API = 'https://updata.yingzo.art/v1/updates'
 
-export async function request(path, options = {}) {
+// ---- Auth session persistence (mirrors frontend/src/api/tokenRefresh.ts) ----
+// The access token is short-lived; without a silent refresh the user is logged
+// out whenever it expires. These helpers refresh on demand and coordinate with
+// the legacy admin app, which shares the same localStorage keys and rotates the
+// one-time refresh token on every use.
+const AUTH_PATHS_NO_REFRESH = ['/auth/login', '/auth/register', '/auth/refresh']
+export const AUTH_EXPIRED_EVENT = 'yingzo:auth-expired'
+
+export function clearAuthKeys() {
+  localStorage.removeItem('auth_token')
+  localStorage.removeItem('refresh_token')
+  localStorage.removeItem('token_expires_at')
+  localStorage.removeItem('auth_user')
+}
+
+let refreshInFlight = null
+export function refreshAuthTokens() {
+  if (refreshInFlight) return refreshInFlight
+  refreshInFlight = doRefreshAuthTokens().finally(() => { refreshInFlight = null })
+  return refreshInFlight
+}
+
+async function doRefreshAuthTokens() {
+  const refreshToken = localStorage.getItem('refresh_token')
+  if (!refreshToken) throw noSessionError()
+  const res = await fetch(`${API}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  })
+  const raw = await res.json().catch(() => ({}))
+  const data = raw?.code === 0 ? raw.data : null
+  if (!res.ok || !data?.access_token) {
+    // Another tab (either frontend) may have rotated the one-time refresh token
+    // while this request was in flight: adopt the stored pair instead of logging out.
+    const storedRefresh = localStorage.getItem('refresh_token')
+    const storedAccess = localStorage.getItem('auth_token')
+    if (storedRefresh && storedRefresh !== refreshToken && storedAccess) {
+      return { access_token: storedAccess, refresh_token: storedRefresh }
+    }
+    // A definitive rejection means the session is gone; transient failures keep
+    // the tokens so a later retry can still recover.
+    if (res.status >= 400 && res.status < 500) {
+      clearAuthKeys()
+      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+    }
+    const err = new Error(raw?.message || '登录已过期，请重新登录')
+    err.status = res.status
+    throw err
+  }
+  localStorage.setItem('auth_token', data.access_token)
+  if (data.expires_in) localStorage.setItem('token_expires_at', String(Date.now() + data.expires_in * 1000))
+  // The rotating refresh token is written last so peers can treat its change as a commit marker.
+  localStorage.setItem('refresh_token', data.refresh_token || refreshToken)
+  return data
+}
+
+function noSessionError() {
+  const err = new Error('登录已过期，请重新登录')
+  err.status = 401
+  return err
+}
+
+async function fetchAPI(path, options) {
   const token = localStorage.getItem('auth_token')
   const res = await fetch(`${API}${path}`, {
     credentials: 'include',
@@ -15,11 +79,29 @@ export async function request(path, options = {}) {
     ...options,
   })
   const raw = await res.json().catch(() => ({}))
-  const data = raw?.code !== undefined ? (raw.code === 0 ? raw.data : raw) : raw
-  if (!res.ok || raw?.code > 0) {
-    const err = new Error(raw.message || raw.error || '请求失败')
-    err.reason = raw.reason || ''
-    err.metadata = raw.metadata || null
+  return { res, raw, token }
+}
+
+export async function request(path, options = {}) {
+  let attempt = await fetchAPI(path, options)
+  // Access token expired: refresh silently once, then retry the original request.
+  // 比较基准是本次请求实际携带的 token——401 返回时其它并发请求可能已完成续期，
+  // 存储里已是新值，此时直接复用新 token 重试即可，不必再触发一次续期。
+  if (attempt.res.status === 401 && !AUTH_PATHS_NO_REFRESH.some(p => path === p || path.startsWith(`${p}?`)) && (attempt.token || localStorage.getItem('refresh_token'))) {
+    if (!attempt.token || localStorage.getItem('auth_token') === attempt.token) {
+      try { await refreshAuthTokens() } catch { /* fall through with the original 401 */ }
+    }
+    const nextToken = localStorage.getItem('auth_token')
+    if (nextToken && nextToken !== attempt.token) {
+      attempt = await fetchAPI(path, options)
+    }
+  }
+  const data = attempt.raw?.code !== undefined ? (attempt.raw.code === 0 ? attempt.raw.data : attempt.raw) : attempt.raw
+  if (!attempt.res.ok || attempt.raw?.code > 0) {
+    const err = new Error(attempt.raw.message || attempt.raw.error || '请求失败')
+    err.reason = attempt.raw.reason || ''
+    err.metadata = attempt.raw.metadata || null
+    err.status = attempt.res.status
     throw err
   }
   return data
