@@ -36,7 +36,7 @@ export const VIDEO_MODEL_CODES: string[] = VIDEO_MODEL_RESOLUTIONS.map(
 )
 
 /** 视频上游平台名，与后端 supportedVideoProviders 对齐。 */
-export type VideoProviderName = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu'
+export type VideoProviderName = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang'
 
 /**
  * 各上游适配器当前能路由的模型——仅用于「上游平台」下拉的分组提示，
@@ -51,7 +51,9 @@ export const VIDEO_PROVIDER_SUPPORTED_MODELS: Record<
   aigod: ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5'],
   newtoken: ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5'],
   mikuapi: [...VIDEO_MODEL_CODES],
-  jingyu: ['seedance-2.0', 'seedance-2.5']
+  jingyu: ['seedance-2.0', 'seedance-2.5'],
+  // xingguang 上游没有 fast 对应模型；档位与时长/画幅的渠道硬约束由适配器闸门兜底。
+  xingguang: ['seedance-2.0', 'seedance-2.5']
 }
 
 /** 报告哪些上游平台能服务给定的全部模型；未选模型时返回全部平台。 */

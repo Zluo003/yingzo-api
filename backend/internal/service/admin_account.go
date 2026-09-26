@@ -371,7 +371,7 @@ func ValidateOpenAILongContextBillingExtra(platform string, extra map[string]any
 	return nil
 }
 
-// VideoProviderExtraKey 是视频账号在 extra 中记录上游平台（aigod/newtoken/mikuapi/jingyu）的键。
+// VideoProviderExtraKey 是视频账号在 extra 中记录上游平台（aigod/newtoken/mikuapi/jingyu/xingguang）的键。
 const VideoProviderExtraKey = "video_provider"
 
 // VideoModelResolutionsExtraKey 是视频账号在 extra 中记录「每个模型实际支持哪些
@@ -397,7 +397,7 @@ const VideoModelDurationsExtraKey = "video_model_durations"
 
 // supportedVideoProviders 是视频账号允许配置的上游平台，必须与
 // videoProviderAdapterByName 的实现保持一致。
-var supportedVideoProviders = []string{videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu}
+var supportedVideoProviders = []string{videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang}
 
 // NormalizeVideoProviderExtra 校验并归一化视频账号的 video_provider、
 // video_model_resolutions 与 video_model_durations。

@@ -217,7 +217,7 @@ func TestChannelGateEnforcesDurationAndRatio(t *testing.T) {
 // aigod 与 jingyu 也有时长/画幅约束；漏掉它会让不支持的请求被调度到对应上游，
 // 直到上游 400 才失败，而同一 Agent 下的其它渠道本可正常承接。
 func TestVideoProviderNeedsRequestCompatibilityIncludesAigod(t *testing.T) {
-	for _, provider := range []string{videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu} {
+	for _, provider := range []string{videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang} {
 		require.True(t, videoProviderNeedsRequestCompatibility(provider), "%s 必须执行请求能力检查", provider)
 	}
 	// 未知 provider 仍按默认 aigod 适配器处理，但这里只接受显式 provider 名。

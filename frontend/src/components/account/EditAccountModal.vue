@@ -35,6 +35,7 @@
             <option value="newtoken">{{ t('admin.accounts.video.providers.newtoken') }}</option>
             <option value="mikuapi">{{ t('admin.accounts.video.providers.mikuapi') }}</option>
             <option value="jingyu">{{ t('admin.accounts.video.providers.jingyu') }}</option>
+            <option value="xingguang">{{ t('admin.accounts.video.providers.xingguang') }}</option>
           </select>
           <p class="input-hint">{{ t('admin.accounts.video.providerHint') }}</p>
         </div>
@@ -3255,7 +3256,7 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
-type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu'
+type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang'
 
 /** 对外提供的视频模型：单一来源见 @/views/admin/videoModelResolutions。 */
 const videoDefaultModels = VIDEO_MODEL_CODES
@@ -3304,7 +3305,8 @@ const editVideoDefaultsMap: Record<
   aigod: { baseUrl: 'https://api.aigod.one', apiPath: '/v1/videos', pollIntervalMs: 2000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
   newtoken: { baseUrl: 'https://newtoken.club', apiPath: '/v1/videos', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 300000, connectTimeoutMs: 15000 },
   mikuapi: { baseUrl: 'https://mikuapi.org', apiPath: '/v1/videos', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
-  jingyu: { baseUrl: 'https://api.jingyuapi.art', apiPath: '/v1/video/generations', pollIntervalMs: 5000, pollTimeoutMs: 1800000, requestTimeoutMs: 1800000, connectTimeoutMs: 60000 }
+  jingyu: { baseUrl: 'https://api.jingyuapi.art', apiPath: '/v1/video/generations', pollIntervalMs: 5000, pollTimeoutMs: 1800000, requestTimeoutMs: 1800000, connectTimeoutMs: 60000 },
+  xingguang: { baseUrl: 'https://xingapi.top', apiPath: '/v1/videos', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 }
 }
 const editVideoDefaultsFor = (provider: VideoProvider) =>
   editVideoDefaultsMap[provider] ?? editVideoDefaultsMap.aigod
@@ -4384,7 +4386,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     }
     // 只认已接入的上游；未知取值回落 aigod（后端也会在写入时校验并拒绝）。
     const storedVideoProvider: VideoProvider =
-      extra?.video_provider === 'newtoken' || extra?.video_provider === 'mikuapi' || extra?.video_provider === 'jingyu'
+      extra?.video_provider === 'newtoken' || extra?.video_provider === 'mikuapi' || extra?.video_provider === 'jingyu' || extra?.video_provider === 'xingguang'
         ? extra.video_provider
         : 'aigod'
     const platformDefaultUrl =

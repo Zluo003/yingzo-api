@@ -1618,7 +1618,7 @@ func isVideoAccountCompatibleForRequest(account *Account, normalized *normalized
 // unsupported request is routed to another upstream instead of failing there.
 func videoProviderNeedsRequestCompatibility(provider string) bool {
 	switch provider {
-	case videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu:
+	case videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang:
 		return true
 	default:
 		return false
@@ -1871,6 +1871,8 @@ func videoAccountProvider(account *Account) string {
 		return videoProviderMikuapi
 	case videoProviderJingyu:
 		return videoProviderJingyu
+	case videoProviderXingguang:
+		return videoProviderXingguang
 	default:
 		return videoProviderAigod
 	}
@@ -1909,6 +1911,11 @@ func videoAccountDefaultDuration(account *Account, key string) time.Duration {
 		switch key {
 		case "poll_interval_ms":
 			return videoMikuapiPollInterval
+		}
+	case videoProviderXingguang:
+		switch key {
+		case "poll_interval_ms":
+			return videoXingguangPollInterval
 		}
 	case videoProviderNewtoken:
 		switch key {

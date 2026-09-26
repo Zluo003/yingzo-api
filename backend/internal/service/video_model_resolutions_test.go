@@ -199,6 +199,12 @@ func TestVideoProviderServableResolutionMatrix(t *testing.T) {
 			VideoModelGrokImagineVideo15: {VideoResolution480P, VideoResolution720P, VideoResolution1080P},
 			VideoModelKlingV3Omni:        {VideoResolution720P, VideoResolution1080P, VideoResolution4K},
 		},
+		// xingguang：文档只开放 480p/720p 两档（1080p/4K 上游出不了片），
+		// 且只接 seedance-2.0 / 2.5（fast 上游没有对应模型）。
+		videoProviderXingguang: {
+			VideoModelSeedance20: {VideoResolution480P, VideoResolution720P},
+			VideoModelSeedance25: {VideoResolution480P, VideoResolution720P},
+		},
 	}
 
 	for provider, byModel := range expected {
