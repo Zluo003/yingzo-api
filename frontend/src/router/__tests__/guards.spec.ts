@@ -63,10 +63,29 @@ interface MockAuthState {
 function simulateGuard(
   toPath: string,
   toMeta: Record<string, any>,
-  authState: MockAuthState
+  authState: MockAuthState,
+  options: { isAdminBase?: boolean; redirectedFrom?: string | null } = {}
 ): string | null {
   const requiresAuth = toMeta.requiresAuth !== false
   const requiresAdmin = toMeta.requiresAdmin === true
+
+  // 部署形态守卫：/admin/ 基座下整个应用都是管理后台
+  if (options.isAdminBase) {
+    const kickExempt = ['/payment', '/auth/', '/email-verify'].some((p) => toPath.startsWith(p))
+    if (!kickExempt) {
+      if (authState.isAuthenticated && !authState.isAdmin) {
+        return 'PORTAL:/'
+      }
+      if (options.redirectedFrom === '/' && toPath === '/home') {
+        if (!authState.isAuthenticated) {
+          return '/login'
+        }
+        if (authState.isAdmin) {
+          return '/admin/dashboard'
+        }
+      }
+    }
+  }
 
   if (toPath === '/setup' && authState.setupNeedsSetup === false) {
     return resolveCompletedSetupRedirectPath(authState.isAuthenticated, authState.isAdmin)
@@ -331,6 +350,53 @@ describe('路由守卫逻辑', () => {
       }
       const redirect = simulateGuard('/keys', {}, authState)
       expect(redirect).toBeNull()
+    })
+  })
+
+  // --- /admin/ 基座部署形态（BASE_URL !== '/'） ---
+
+  describe('/admin/ 基座部署形态', () => {
+    const base = { isAdminBase: true }
+
+    it('已登录普通用户访问 /dashboard 被送回新版前端首页', () => {
+      const authState: MockAuthState = { isAuthenticated: true, isAdmin: false, isSimpleMode: false, backendModeEnabled: false, hasPendingAuthSession: false }
+      expect(simulateGuard('/dashboard', {}, authState, base)).toBe('PORTAL:/')
+    })
+
+    it('已登录普通用户访问管理页面被送回新版前端首页', () => {
+      const authState: MockAuthState = { isAuthenticated: true, isAdmin: false, isSimpleMode: false, backendModeEnabled: false, hasPendingAuthSession: false }
+      expect(simulateGuard('/admin/dashboard', { requiresAdmin: true }, authState, base)).toBe('PORTAL:/')
+    })
+
+    it('已登录普通用户从根路径入口（/admin）被送回新版前端首页', () => {
+      const authState: MockAuthState = { isAuthenticated: true, isAdmin: false, isSimpleMode: false, backendModeEnabled: false, hasPendingAuthSession: false }
+      expect(simulateGuard('/home', { requiresAuth: false }, authState, { ...base, redirectedFrom: '/' })).toBe('PORTAL:/')
+    })
+
+    it('未登录用户从根路径入口（/admin）进入原版登录页', () => {
+      const authState: MockAuthState = { isAuthenticated: false, isAdmin: false, isSimpleMode: false, backendModeEnabled: false, hasPendingAuthSession: false }
+      expect(simulateGuard('/home', { requiresAuth: false }, authState, { ...base, redirectedFrom: '/' })).toBe('/login')
+    })
+
+    it('管理员从根路径入口（/admin）直达管理后台', () => {
+      const authState: MockAuthState = { isAuthenticated: true, isAdmin: true, isSimpleMode: false, backendModeEnabled: false, hasPendingAuthSession: false }
+      expect(simulateGuard('/home', { requiresAuth: false }, authState, { ...base, redirectedFrom: '/' })).toBe('/admin/dashboard')
+    })
+
+    it('未登录用户直接访问 /home 仍允许通过', () => {
+      const authState: MockAuthState = { isAuthenticated: false, isAdmin: false, isSimpleMode: false, backendModeEnabled: false, hasPendingAuthSession: false }
+      expect(simulateGuard('/home', { requiresAuth: false }, authState, { ...base, redirectedFrom: null })).toBeNull()
+    })
+
+    it('已登录普通用户的支付页面不被打断', () => {
+      const authState: MockAuthState = { isAuthenticated: true, isAdmin: false, isSimpleMode: false, backendModeEnabled: false, hasPendingAuthSession: false }
+      expect(simulateGuard('/payment/stripe', { requiresAuth: false }, authState, base)).toBeNull()
+      expect(simulateGuard('/auth/wechat/payment/callback', { requiresAuth: false }, authState, base)).toBeNull()
+    })
+
+    it('独立部署形态（BASE_URL 为 /）不启用分流', () => {
+      const authState: MockAuthState = { isAuthenticated: true, isAdmin: false, isSimpleMode: false, backendModeEnabled: false, hasPendingAuthSession: false }
+      expect(simulateGuard('/dashboard', {}, authState, { isAdminBase: false })).toBeNull()
     })
   })
 

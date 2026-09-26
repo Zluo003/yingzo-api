@@ -834,6 +834,36 @@ router.beforeEach(async (to, _from, next) => {
   const requiresAuth = to.meta.requiresAuth !== false // Default to true
   const requiresAdmin = to.meta.requiresAdmin === true
 
+  // 部署形态守卫：原版前端以 /admin/ 为 base 构建时（BASE_URL !== '/'），整个应用都
+  // 属于管理后台，y.company.com/admin 及其下所有页面不再对普通用户开放。
+  // - 已登录普通用户：整页跳转回新版前端（yingzo-web）首页；
+  // - 根路径入口（/admin、/admin/，路由上表现为 / 重定向到 /home）：未登录进原版
+  //   登录页，管理员直达管理后台；
+  // - 支付与 OAuth 回调等免登录功能页保持可用，避免打断进行中的流程。
+  if (import.meta.env.BASE_URL !== '/') {
+    const kickExempt = ['/payment', '/auth/', '/email-verify'].some((p) => to.path.startsWith(p))
+    if (!kickExempt) {
+      if (authStore.isAuthenticated && !authStore.isAdmin) {
+        window.location.replace('/')
+        next(false)
+        return
+      }
+      // 根路径入口（/admin、/admin/ → 路由 / 重定向到 /home）。守卫内 next(location)
+      // 产生的新导航同样会带 redirectedFrom='/'，因此必须同时限定 to.path 是 /home
+      // （/ 记录的唯一重定向目标），否则会形成无限重定向。
+      if (to.redirectedFrom?.path === '/' && to.path === '/home') {
+        if (!authStore.isAuthenticated) {
+          next({ path: '/login', query: { redirect: '/admin/dashboard' } })
+          return
+        }
+        if (authStore.isAdmin) {
+          next('/admin/dashboard')
+          return
+        }
+      }
+    }
+  }
+
   if (to.path === '/setup') {
     try {
       const status = await getSetupStatus()
