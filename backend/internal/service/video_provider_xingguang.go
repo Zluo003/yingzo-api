@@ -17,9 +17,12 @@ import (
 //   - Seedance 2.5 → seedance2.5。
 // seedance-2.0-fast 上游没有对应模型，不接（Compatible 返回 false）。
 //
-// 上游当前只开放参考生视频：参考素材只有公网图片（至多 10 张，数组顺序对应
-// @Image1、@Image2）与参考音频（至多 3 条，且必须伴随参考图），参考视频未开放；
-// 分辨率文档只给出 480p/720p；画幅只有 16:9/9:16。
+// 上游当前只开放参考生视频：参考素材是公网图片（至多 10 张，数组顺序对应
+// @Image1、@Image2）、参考音频（至多 3 条，且必须伴随参考图或参考视频）与
+// 参考视频。参考视频不在适配器里写死：上游当前未开放，由账号级
+// video_model_capabilities 的 max_reference_videos 收敛（配 0 即关闭）；上游
+// 开放后把该项调大即可，无需改代码。分辨率文档只给出 480p/720p；画幅只有
+// 16:9/9:16。
 const (
 	videoProviderXingguang = "xingguang"
 
@@ -77,8 +80,9 @@ func (x xingguangVideoProviderAdapter) Compatible(model, resolution string) bool
 //   - 时长按模型区分：2.0 系列 4-15 秒、2.5 为 4-30 秒（与共享规格表一致，上游
 //     对超范围时长是夹取而不是报错，静默夹取会按 A 时长计费交付 B 时长）；
 //   - 画幅是渠道能力：文档只开放 16:9 与 9:16（2.5 的 auto 哨兵同样不在其中）；
-//   - 参考素材只有图片与音频，参考视频未开放；音频必须伴随参考图（文档示例中
-//     参考音频始终与参考图同传）。
+//   - 参考素材是图片、音频与视频；音频必须伴随参考图或参考视频。参考视频数量
+//     不在适配器写死：上游当前未开放，由账号级 max_reference_videos 收敛
+//     （调度阶段按账号配置过滤），上游开放后调大配置即可。
 func (x xingguangVideoProviderAdapter) CompatibleRequest(normalized *normalizedVideoRequest) bool {
 	if normalized == nil || !x.Compatible(normalized.Model, normalized.Resolution) {
 		return false
@@ -97,13 +101,10 @@ func (x xingguangVideoProviderAdapter) CompatibleRequest(normalized *normalizedV
 		return false
 	}
 	stats := inspectVideoContent(normalized.Content)
-	if stats.VideoCount > 0 {
-		return false
-	}
 	if stats.ImageCount > xingguangMaxReferenceImages || stats.AudioCount > xingguangMaxReferenceAudios {
 		return false
 	}
-	// 至少 1 个参考素材，且参考音频必须伴随参考图（视频已拒绝，等价于必须有图）。
+	// 至少 1 个参考素材，且参考音频必须伴随参考图或参考视频。
 	if stats.ImageCount+stats.VideoCount == 0 {
 		return false
 	}
@@ -139,8 +140,9 @@ func videoXingguangUpstreamModel(model string) string {
 }
 
 // BuildCreateBody 组装 xingguang 请求体：只发文档列出的公共字段
-// （model / prompt / duration / ratio / resolution / images / audios）。
-// 参考视频上游未开放，CompatibleRequest 已挡掉，请求体不会出现 videos 字段。
+// （model / prompt / duration / ratio / resolution / images / videos / audios）。
+// videos 字段仅在请求带参考视频时出现：上游当前未开放参考视频，由账号级
+// max_reference_videos 收敛为 0，上游开放后调大配置即可，无需改这里。
 func (x xingguangVideoProviderAdapter) BuildCreateBody(normalized *normalizedVideoRequest, upstreamModel string) map[string]any {
 	if normalized == nil {
 		return nil
@@ -156,6 +158,9 @@ func (x xingguangVideoProviderAdapter) BuildCreateBody(normalized *normalizedVid
 	}
 	if images := xingguangReferenceImages(normalized.Content); len(images) > 0 {
 		body["images"] = images
+	}
+	if videos := xingguangReferenceVideos(normalized.Content); len(videos) > 0 {
+		body["videos"] = videos
 	}
 	if audios := xingguangReferenceAudios(normalized.Content); len(audios) > 0 {
 		body["audios"] = audios
@@ -173,6 +178,21 @@ func xingguangReferenceImages(content []VideoContent) []string {
 			continue
 		}
 		if rawURL := strings.TrimSpace(item.ImageURL.URL); rawURL != "" {
+			urls = append(urls, rawURL)
+		}
+	}
+	return urls
+}
+
+// xingguangReferenceVideos 收集参考视频公网直链。上游当前未开放参考视频，数量
+// 由账号级 max_reference_videos 在调度阶段收敛；上游开放后该字段随请求透传。
+func xingguangReferenceVideos(content []VideoContent) []string {
+	var urls []string
+	for _, item := range content {
+		if item.Type != "video_url" || item.VideoURL == nil {
+			continue
+		}
+		if rawURL := strings.TrimSpace(item.VideoURL.URL); rawURL != "" {
 			urls = append(urls, rawURL)
 		}
 	}

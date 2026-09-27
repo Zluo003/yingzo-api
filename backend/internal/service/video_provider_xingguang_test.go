@@ -79,9 +79,10 @@ func TestXingguangResolutionAndRatioMatchDocumentation(t *testing.T) {
 	require.True(t, a.CompatibleRequest(request(VideoModelSeedance20, "", false)))
 }
 
-// xingguang 当前只开放参考生视频：文生 / 图生（首帧）/ 首尾帧一律不接；参考素材
-// 只有图片与音频（图至多 10 张、音频至多 3 条），参考视频未开放，音频必须伴随
-// 参考图。
+// xingguang 当前只开放参考生视频：文生 / 图生（首帧）/ 首尾帧一律不接；参考
+// 素材是图片（图至多 10 张）、音频（至多 3 条）与视频。参考视频不在适配器写死：
+// 由账号级 max_reference_videos 在调度阶段收敛（上游未开放期间配 0），适配器
+// 只负责透传；音频必须伴随参考图或参考视频。
 func TestXingguangServesReferenceToVideoOnly(t *testing.T) {
 	a := videoProviderAdapterByName(videoProviderXingguang)
 	normalized := func(ability string, content []VideoContent) *normalizedVideoRequest {
@@ -96,9 +97,13 @@ func TestXingguangServesReferenceToVideoOnly(t *testing.T) {
 	referenceVideo := VideoContent{Type: "video_url", Role: "reference_video", VideoURL: &VideoContentURL{URL: "https://cdn/a.mp4"}}
 	firstFrame := VideoContent{Type: "image_url", Role: "first_frame", ImageURL: &VideoContentURL{URL: "https://cdn/first.png"}}
 
-	// 参考生视频：图、图+音频均可服务。
+	// 参考生视频：图、图+音频、图+视频均可服务。
 	require.True(t, a.CompatibleRequest(normalized(videoAbilityReferenceToVideo, []VideoContent{referenceImage})))
 	require.True(t, a.CompatibleRequest(normalized(videoAbilityReferenceToVideo, []VideoContent{referenceImage, referenceAudio})))
+	require.True(t, a.CompatibleRequest(normalized(videoAbilityReferenceToVideo, []VideoContent{referenceImage, referenceVideo})),
+		"参考视频不写死：是否放行由账号级 max_reference_videos 收敛")
+	require.True(t, a.CompatibleRequest(normalized(videoAbilityReferenceToVideo, []VideoContent{referenceVideo, referenceAudio})),
+		"音频伴随参考视频（无参考图）同样通过渠道闸门")
 
 	// 其余能力交给别的上游。
 	require.False(t, a.CompatibleRequest(normalized(videoAbilityTextToVideo, nil)), "文生视频不支持")
@@ -107,12 +112,11 @@ func TestXingguangServesReferenceToVideoOnly(t *testing.T) {
 		firstFrame,
 		{Type: "image_url", Role: "last_frame", ImageURL: &VideoContentURL{URL: "https://cdn/last.png"}},
 	})), "首尾帧不支持")
-	require.False(t, a.CompatibleRequest(normalized(videoAbilityReferenceToVideo, []VideoContent{referenceVideo})),
-		"参考视频上游未开放")
 
-	// 参考素材约束：音频必须伴随参考图；图至多 10 张、音频至多 3 条。
+	// 参考素材约束：音频不能单独出现；图至多 10 张、音频至多 3 条（数量上限是
+	// 渠道文档写死的，参考视频数量交由账号配置）。
 	require.False(t, a.CompatibleRequest(normalized(videoAbilityReferenceToVideo, []VideoContent{referenceAudio})),
-		"音频必须伴随参考图")
+		"音频必须伴随参考图或参考视频")
 	maxImages := make([]VideoContent, 0, xingguangMaxReferenceImages+1)
 	for i := 0; i <= xingguangMaxReferenceImages; i++ {
 		maxImages = append(maxImages, VideoContent{
@@ -147,7 +151,7 @@ func TestXingguangServesReferenceToVideoOnly(t *testing.T) {
 }
 
 // 请求体字段名按 xingguang 文档：duration / ratio / resolution，参考素材是
-// images / audios 字符串数组；参考视频上游未开放，绝不出现 videos 字段。
+// images / videos / audios 字符串数组；videos 仅在请求带参考视频时出现。
 func TestXingguangBuildCreateBodyUsesDocumentedFields(t *testing.T) {
 	a := videoProviderAdapterByName(videoProviderXingguang)
 	normalized := &normalizedVideoRequest{
@@ -161,6 +165,7 @@ func TestXingguangBuildCreateBodyUsesDocumentedFields(t *testing.T) {
 		Content: []VideoContent{
 			{Type: "image_url", Role: "reference_image", ImageURL: &VideoContentURL{URL: "https://cdn/a.png"}},
 			{Type: "image_url", Role: "reference_image", ImageURL: &VideoContentURL{URL: "https://cdn/b.png"}},
+			{Type: "video_url", Role: "reference_video", VideoURL: &VideoContentURL{URL: "https://cdn/a.mp4"}},
 			{Type: "audio_url", Role: "reference_audio", AudioURL: &VideoContentURL{URL: "https://cdn/a.mp3"}},
 		},
 	}
@@ -172,13 +177,15 @@ func TestXingguangBuildCreateBodyUsesDocumentedFields(t *testing.T) {
 	require.Equal(t, "9:16", body["ratio"])
 	require.Equal(t, "720p", body["resolution"], "分辨率走 resolution 字段，统一小写")
 	require.Equal(t, []string{"https://cdn/a.png", "https://cdn/b.png"}, body["images"])
+	require.Equal(t, []string{"https://cdn/a.mp4"}, body["videos"],
+		"参考视频随请求透传，是否放行由账号级配置决定")
 	require.Equal(t, []string{"https://cdn/a.mp3"}, body["audios"])
 	// 文档之外的字段一个都不能出现。
-	for _, forbidden := range []string{"seconds", "aspect_ratio", "images_url", "videos", "reference_images", "stream", "n", "response_format", "webhook_url"} {
+	for _, forbidden := range []string{"seconds", "aspect_ratio", "images_url", "reference_images", "stream", "n", "response_format", "webhook_url"} {
 		require.NotContains(t, body, forbidden, "xingguang 不接受字段 %s", forbidden)
 	}
 
-	// 未提供画幅时不发 ratio；没有参考素材的字段不发键。
+	// 未提供画幅时不发 ratio；没有对应参考素材的字段不发键。
 	plain := &normalizedVideoRequest{
 		Model: VideoModelSeedance20, Prompt: "x", Resolution: VideoResolution720P,
 		GeneratedSeconds: 5, AbilityCode: videoAbilityReferenceToVideo,
@@ -188,6 +195,7 @@ func TestXingguangBuildCreateBodyUsesDocumentedFields(t *testing.T) {
 	}
 	plainBody := a.BuildCreateBody(plain, videoXingguangSeedance20Model)
 	require.NotContains(t, plainBody, "ratio")
+	require.NotContains(t, plainBody, "videos")
 	require.NotContains(t, plainBody, "audios")
 }
 
