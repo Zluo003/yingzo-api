@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -97,14 +98,14 @@ func install(ctx context.Context, root string, payload []byte, digest string) (s
 	if err != nil {
 		return "", fmt.Errorf("open bundled ffprobe: %w", err)
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 	out, err := os.CreateTemp(dir, ".ffprobe-*")
 	if err != nil {
 		return "", err
 	}
 	tmp := out.Name()
-	defer os.Remove(tmp)
-	defer out.Close()
+	defer func() { _ = os.Remove(tmp) }()
+	defer func() { _ = out.Close() }()
 	hash := sha256.New()
 	const maxProbeSize = 128 << 20
 	n, err := io.Copy(io.MultiWriter(out, hash), io.LimitReader(in, maxProbeSize+1))
@@ -147,7 +148,7 @@ func matchesDigest(path, digest string) bool {
 	if err != nil {
 		return false
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	hash := sha256.New()
 	_, err = io.Copy(hash, file)
 	return err == nil && hex.EncodeToString(hash.Sum(nil)) == digest
@@ -156,8 +157,20 @@ func matchesDigest(path, digest string) bool {
 func checkExecutable(ctx context.Context, path string) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if err := exec.CommandContext(ctx, path, "-version").Run(); err != nil {
-		return fmt.Errorf("execute bundled ffprobe: %w", err)
+	for attempt := 0; ; attempt++ {
+		err := exec.CommandContext(ctx, path, "-version").Run()
+		if err == nil {
+			return nil
+		}
+		// Linux can briefly report ETXTBSY when multiple provisioning processes
+		// publish and execute the runtime concurrently. Retry only that error.
+		if !errors.Is(err, syscall.ETXTBSY) || attempt >= 4 {
+			return fmt.Errorf("execute bundled ffprobe: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("execute bundled ffprobe: %w", ctx.Err())
+		case <-time.After(25 * time.Millisecond):
+		}
 	}
-	return nil
 }
