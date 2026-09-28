@@ -70,7 +70,7 @@ func RegisterAdminRoutes(
 		registerSettingsRoutes(admin, h)
 
 		// 公共文件服务
-		registerFileStorageRoutes(admin, h)
+		registerFileStorageRoutes(admin, h, stepUpAuth)
 
 		// 桌面端软件升级
 		if h.Admin.DesktopUpdate != nil {
@@ -170,11 +170,11 @@ func registerAuditLogRoutes(admin *gin.RouterGroup, h *handler.Handlers, _ middl
 	}
 }
 
-func registerFileStorageRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+func registerFileStorageRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAuth middleware.StepUpAuthMiddleware) {
 	files := admin.Group("/file-service")
 	{
 		files.GET("/settings", h.Admin.FileStorage.GetSettings)
-		files.PUT("/settings", h.Admin.FileStorage.UpdateSettings)
+		files.PUT("/settings", gin.HandlerFunc(stepUpAuth), h.Admin.FileStorage.UpdateSettings)
 		files.POST("/test", h.Admin.FileStorage.TestSettings)
 	}
 }

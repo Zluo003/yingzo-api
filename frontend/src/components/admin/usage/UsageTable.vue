@@ -135,7 +135,10 @@
               class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium"
               :class="getRefundBadgeClass()"
             >
-              {{ t('usage.refund') }}
+              {{ row.funds_event === 'failure_refund' ? t('usage.imageFailureRefund') : t('usage.refund') }}
+            </span>
+            <span v-if="row.image_task_id" class="text-xs text-gray-500" :title="row.image_task_id">
+              {{ row.funds_event ? t(`usage.imageFunds.${row.funds_event}`) : '' }} · {{ row.image_task_status ? t(`usage.imageStates.${row.image_task_status}`) : '' }}
             </span>
             <span
               v-if="row.native_compaction_v2"
@@ -707,6 +710,7 @@ const tokenTooltipPosition = ref({ x: 0, y: 0 })
 const tokenTooltipData = ref<AdminUsageLog | null>(null)
 
 const getRequestTypeLabel = (row: AdminUsageLog): string => {
+  if (row.image_task_id) return t('usage.asyncImage')
   const requestType = resolveUsageRequestType(row)
   if (requestType === 'cyber') return t('usage.cyber')
   if (requestType === 'live') return t('usage.live')
@@ -724,7 +728,7 @@ const getRequestTypeLabel = (row: AdminUsageLog): string => {
  */
 const isUsageRefund = (row: AdminUsageLog): boolean => {
   if ((row.request_id ?? '').endsWith(':refund')) return true
-  return (row.total_cost ?? 0) < 0
+  return (row.actual_cost ?? 0) < 0 || (row.total_cost ?? 0) < 0
 }
 
 const getRefundBadgeClass = (): string =>

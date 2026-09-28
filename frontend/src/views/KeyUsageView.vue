@@ -830,7 +830,7 @@ const showDailyUsage = computed(() => Boolean(resultData.value && Array.isArray(
 // ==================== Utility Functions ====================
 
 function usd(value: number | null | undefined): string {
-  if (value == null || value < 0) return '-'
+  if (value == null) return '-'
   return '$' + Number(value).toFixed(2)
 }
 

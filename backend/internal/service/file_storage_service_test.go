@@ -159,7 +159,9 @@ func TestFileStoragePersistsEncryptedS3SettingsAndHotLoadsRuntime(t *testing.T) 
 	runtime, err := svc.Runtime(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, "secret", runtime.Config.S3.SecretAccessKey)
-	require.Same(t, store, runtime.Store)
+	versioned, ok := runtime.Store.(*versionedAssetStore)
+	require.True(t, ok)
+	require.Same(t, store, versioned.legacy)
 }
 
 func TestFileStorageBlankSecretPreservesConfiguredSecret(t *testing.T) {

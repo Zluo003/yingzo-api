@@ -3246,6 +3246,10 @@ func (h *OpenAIGatewayHandler) submitUsageRecordTask(parent context.Context, tas
 	if task == nil {
 		return
 	}
+	if service.IsAsyncImageExecution(parent) {
+		task(parent)
+		return
+	}
 	task = wrapUsageRecordTaskContext(parent, task)
 	if h.usageRecordWorkerPool != nil {
 		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
@@ -3283,6 +3287,10 @@ func (h *OpenAIGatewayHandler) submitOpenAIUsageRecordTask(parent context.Contex
 
 func (h *OpenAIGatewayHandler) submitMandatoryUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
 	if task == nil {
+		return
+	}
+	if service.IsAsyncImageExecution(parent) {
+		task(parent)
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)

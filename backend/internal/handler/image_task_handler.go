@@ -21,6 +21,7 @@ import (
 )
 
 type AsyncImageHandler struct {
+	durable *service.DurableImageService
 	tasks   *service.ImageTaskService
 	openAI  *OpenAIGatewayHandler
 	execute func(platform string, c *gin.Context)
@@ -32,18 +33,19 @@ func NewAsyncImageHandler(tasks *service.ImageTaskService, openAI *OpenAIGateway
 	return h
 }
 
-// enabled reports whether the async image task feature is available. Object
-// storage is the enablement gate: without it the endpoints are fully disabled
-// so that large base64 results never land in Redis.
+// enabled controls admission only. Durable tasks use the generated-output
+// switch; legacy installations retain their original object-storage gate.
 func (h *AsyncImageHandler) enabled() bool {
+	if h != nil && h.durable != nil {
+		return h.durable.Enabled(context.Background())
+	}
 	return h != nil && h.tasks != nil && h.tasks.Enabled()
 }
 
-// pollable reports whether task lookups can be served. It is deliberately weaker
-// than enabled(): results already written to Redis stay readable after the
-// feature is switched off, so an in-flight task is never stranded.
+// pollable is independent of admission: durable and legacy tasks remain
+// readable after the feature is switched off.
 func (h *AsyncImageHandler) pollable() bool {
-	return h != nil && h.tasks != nil && h.tasks.Pollable()
+	return h != nil && (h.durable != nil || (h.tasks != nil && h.tasks.Pollable()))
 }
 
 // Submit accepts the same payload as the synchronous Images endpoint and
@@ -58,11 +60,14 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		imageTaskError(c, service.ErrImageTaskForbidden)
 		return
 	}
-	platform := ""
-	if apiKey.Group != nil {
-		platform = apiKey.Group.Platform
+	platform := effectiveAPIKeyPlatform(c, apiKey)
+	if p := c.GetString("agent_resolved_platform"); p != "" {
+		platform = p
 	}
-	if platform != service.PlatformOpenAI && platform != service.PlatformGrok {
+	if p := c.GetString("async_image_platform"); p != "" {
+		platform = p
+	}
+	if platform != service.PlatformOpenAI && platform != service.PlatformGrok && platform != service.PlatformGemini {
 		imageTaskJSONError(c, http.StatusNotFound, "not_found_error", "Images API is not supported for this platform")
 		return
 	}
@@ -100,6 +105,11 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		return
 	}
 
+	if h.durable != nil {
+		h.submitDurable(c, apiKey, platform, body)
+		return
+	}
+
 	taskCtx, recorder, cancel := newAsyncImageContext(c, body, h.tasks.ExecutionTimeout())
 	task, err := h.tasks.Create(c.Request.Context(), service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID})
 	if err != nil {
@@ -126,6 +136,9 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 }
 
 func (h *AsyncImageHandler) checkSecurityAuditBeforeSubmit(c *gin.Context, apiKey *service.APIKey, platform string, body []byte) bool {
+	if platform == service.PlatformGemini {
+		return true
+	}
 	if h == nil || h.openAI == nil {
 		return true
 	}
@@ -175,7 +188,15 @@ func (h *AsyncImageHandler) Get(c *gin.Context) {
 		imageTaskError(c, service.ErrImageTaskForbidden)
 		return
 	}
-	task, err := h.tasks.Get(c.Request.Context(), service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID}, c.Param("task_id"))
+	var task *service.ImageTask
+	var err error
+	owner := service.ImageTaskOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID}
+	if h.durable != nil {
+		task, err = h.durable.Get(c.Request.Context(), owner, c.Param("task_id"), false)
+	}
+	if h.durable == nil || errors.Is(err, service.ErrImageTaskNotFound) {
+		task, err = h.tasks.Get(c.Request.Context(), owner, c.Param("task_id"))
+	}
 	if err != nil {
 		imageTaskError(c, err)
 		return
@@ -188,6 +209,9 @@ func (h *AsyncImageHandler) Get(c *gin.Context) {
 }
 
 func (h *AsyncImageHandler) validateRequest(c *gin.Context, platform string, body []byte) error {
+	if platform == service.PlatformGemini {
+		return nil
+	}
 	if h.openAI == nil || h.openAI.gatewayService == nil {
 		return nil
 	}

@@ -20,13 +20,24 @@ export interface FileStorageS3Config {
    * 上游可以绕过平台代理直读文件，需要先在对象存储上完成自定义域名绑定并开启公开读取
    * （Cloudflare R2 为自定义域名 + Public Access）。留空时素材仍走平台代理地址分发。
    *
-   * 生成产物不受影响：它们固定保存在本地磁盘，始终通过平台代理地址分发。
+   * 生成产物使用 generated.s3 独立配置。
    */
   custom_domain: string
   force_path_style: boolean
 }
 
+export interface GeneratedStorageConfig {
+  async_images_enabled: boolean
+  backend: FileStorageBackend
+  local_dir: string
+  s3: FileStorageS3Config
+  presign_expiry_hours: number
+  secret_access_key_configured?: boolean
+}
+
 export interface FileStorageConfig {
+  generated?: GeneratedStorageConfig
+
   schema_version: number
   backend: FileStorageBackend
   /**
@@ -115,6 +126,8 @@ export interface FileStorageUsage {
 }
 
 export interface FileStorageSettings extends FileStorageConfig {
+  generated_defaults?: GeneratedStorageConfig
+  generated_migration_pending?: boolean
   /** 配置来源：database / environment / default。 */
   source: string
   /**

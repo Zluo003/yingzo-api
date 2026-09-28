@@ -238,7 +238,13 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		serviceTier = strings.TrimSpace(*result.ServiceTier)
 	}
 	longContextBillingGate := openAILongContextBillingGate(billingAccount)
-	if agentGroup {
+	if execution := AsyncImageExecutionFromContext(ctx); execution != nil && execution.Quote != nil {
+		cost, err = calculateFrozenImageCost(ctx, s.billingService, s.resolver, execution.Quote, tokens, result.ImageCount)
+		if err != nil {
+			return err
+		}
+		multiplier = execution.Quote.Multiplier
+	} else if agentGroup {
 		agentCost, agentMultiplier, agentErr := s.calculateOpenAIAgentRecordUsageCost(
 			ctx, result, apiKey, account, billingModels, tokens, serviceTier, longContextBillingGate,
 		)
@@ -491,6 +497,10 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 			account.ID, *apiKey.GroupID, result.UpstreamModel, result.Model,
 			tokens, cost.TotalCost, pricingAt,
 		)
+	}
+
+	if captureAsyncImageUsage(ctx, usageLog) {
+		return nil
 	}
 
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {

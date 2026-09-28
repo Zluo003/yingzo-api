@@ -145,7 +145,13 @@ func (h *AgentHandler) Models(c *gin.Context) {
 	}
 	models := make([]gin.H, 0, len(entries))
 	for _, entry := range entries {
-		models = append(models, agentCatalogModel(entry, config))
+		model := agentCatalogModel(entry, config)
+		if containsAgentMediaType(entry.MediaTypes, service.AgentMediaTypeImage) && h.fileStorage != nil {
+			if capabilities, ok := model["capabilities"].(gin.H); ok {
+				capabilities["asynchronous"] = h.fileStorage.AsyncImagesEnabled(c.Request.Context())
+			}
+		}
+		models = append(models, model)
 	}
 	body := gin.H{
 		"object":                   "list",
@@ -1216,6 +1222,18 @@ func (h *AgentHandler) ServeCleanTemporaryAsset(c *gin.Context) {
 
 func (h *AgentHandler) serveTemporaryAssetContent(c *gin.Context, backend, file, name, contentType string, size int64) bool {
 	if backend == "s3" {
+		if h.fileStorage != nil {
+			direct, err := h.fileStorage.GeneratedObjectURL(c.Request.Context(), file)
+			if err != nil {
+				c.Status(http.StatusServiceUnavailable)
+				return false
+			}
+			if direct != "" {
+				c.Header("Cache-Control", "no-store")
+				c.Redirect(http.StatusTemporaryRedirect, direct)
+				return true
+			}
+		}
 		return h.serveS3Media(c, file, name, contentType, size)
 	}
 	f, err := os.Open(file)
@@ -1308,6 +1326,11 @@ func (h *AgentHandler) CleanupExpired(ctx context.Context) (int64, error) {
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
+	}
+	if h.fileStorage != nil {
+		if err := h.fileStorage.CleanupGeneratedStorageVersions(ctx); err != nil {
+			return n, err
+		}
 	}
 	_, _ = h.db.ExecContext(ctx, `DELETE FROM agent_generation_quotes WHERE expires_at<NOW()-INTERVAL '24 hours'`)
 	return n, nil

@@ -24,14 +24,20 @@ const (
 )
 
 var (
+	ErrImageTaskExpired     = infraerrors.New(http.StatusGone, "IMAGE_RESULT_EXPIRED", "generated image files have expired")
 	ErrImageTaskNotFound    = infraerrors.New(http.StatusNotFound, "IMAGE_TASK_NOT_FOUND", "image task not found")
 	ErrImageTaskForbidden   = infraerrors.New(http.StatusForbidden, "IMAGE_TASK_FORBIDDEN", "image task does not belong to this API key")
 	ErrImageTaskUnavailable = infraerrors.New(http.StatusServiceUnavailable, "IMAGE_TASK_UNAVAILABLE", "image task storage is unavailable")
 )
 
-// ImageTaskRecord is the private Redis representation of an asynchronous image
+// ImageTaskRecord is the private persisted representation of an asynchronous image
 // request. Ownership fields are intentionally omitted from the public view.
 type ImageTaskRecord struct {
+	Phase         string `json:"phase,omitempty"`
+	BillingStatus string `json:"billing_status,omitempty"`
+	RefundStatus  string `json:"refund_status,omitempty"`
+	DeadlineAt    int64  `json:"deadline_at,omitempty"`
+
 	ID          string          `json:"id"`
 	UserID      int64           `json:"user_id"`
 	APIKeyID    int64           `json:"api_key_id"`
@@ -46,6 +52,11 @@ type ImageTaskRecord struct {
 
 // ImageTask is the API-safe task representation returned to callers.
 type ImageTask struct {
+	Phase         string `json:"phase,omitempty"`
+	BillingStatus string `json:"billing_status,omitempty"`
+	RefundStatus  string `json:"refund_status,omitempty"`
+	DeadlineAt    int64  `json:"deadline_at,omitempty"`
+
 	ID          string          `json:"id"`
 	TaskID      string          `json:"task_id"`
 	Object      string          `json:"object"`
@@ -240,6 +251,7 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 		return nil
 	}
 	return &ImageTask{
+		Phase: task.Phase, BillingStatus: task.BillingStatus, RefundStatus: task.RefundStatus, DeadlineAt: task.DeadlineAt,
 		ID:          task.ID,
 		TaskID:      task.ID,
 		Object:      "image.generation.task",

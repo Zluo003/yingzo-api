@@ -426,7 +426,7 @@ func (r *dashboardAggregationRepository) upsertHourlyAggregates(ctx context.Cont
 		WITH hourly AS (
 			SELECT
 				date_trunc('hour', created_at AT TIME ZONE $3) AT TIME ZONE $3 AS bucket_start,
-				COUNT(*) AS total_requests,
+				COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END) AS total_requests,
 				COALESCE(SUM(input_tokens), 0) AS input_tokens,
 				COALESCE(SUM(output_tokens), 0) AS output_tokens,
 				COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,

@@ -20,6 +20,12 @@ const (
 	FieldAPIKeyID = "api_key_id"
 	// FieldAccountID holds the string denoting the account_id field in the database.
 	FieldAccountID = "account_id"
+	// FieldImageTaskID holds the string denoting the image_task_id field in the database.
+	FieldImageTaskID = "image_task_id"
+	// FieldFundsEvent holds the string denoting the funds_event field in the database.
+	FieldFundsEvent = "funds_event"
+	// FieldImageTaskStatus holds the string denoting the image_task_status field in the database.
+	FieldImageTaskStatus = "image_task_status"
 	// FieldRequestID holds the string denoting the request_id field in the database.
 	FieldRequestID = "request_id"
 	// FieldModel holds the string denoting the model field in the database.
@@ -171,6 +177,9 @@ var Columns = []string{
 	FieldUserID,
 	FieldAPIKeyID,
 	FieldAccountID,
+	FieldImageTaskID,
+	FieldFundsEvent,
+	FieldImageTaskStatus,
 	FieldRequestID,
 	FieldModel,
 	FieldRequestedModel,
@@ -333,6 +342,21 @@ func ByAPIKeyID(opts ...sql.OrderTermOption) OrderOption {
 // ByAccountID orders the results by the account_id field.
 func ByAccountID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldAccountID, opts...).ToFunc()
+}
+
+// ByImageTaskID orders the results by the image_task_id field.
+func ByImageTaskID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldImageTaskID, opts...).ToFunc()
+}
+
+// ByFundsEvent orders the results by the funds_event field.
+func ByFundsEvent(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFundsEvent, opts...).ToFunc()
+}
+
+// ByImageTaskStatus orders the results by the image_task_status field.
+func ByImageTaskStatus(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldImageTaskStatus, opts...).ToFunc()
 }
 
 // ByRequestID orders the results by the request_id field.

@@ -45,6 +45,56 @@ func (_c *UsageLogCreate) SetAccountID(v int64) *UsageLogCreate {
 	return _c
 }
 
+// SetNillableAccountID sets the "account_id" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableAccountID(v *int64) *UsageLogCreate {
+	if v != nil {
+		_c.SetAccountID(*v)
+	}
+	return _c
+}
+
+// SetImageTaskID sets the "image_task_id" field.
+func (_c *UsageLogCreate) SetImageTaskID(v string) *UsageLogCreate {
+	_c.mutation.SetImageTaskID(v)
+	return _c
+}
+
+// SetNillableImageTaskID sets the "image_task_id" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableImageTaskID(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetImageTaskID(*v)
+	}
+	return _c
+}
+
+// SetFundsEvent sets the "funds_event" field.
+func (_c *UsageLogCreate) SetFundsEvent(v string) *UsageLogCreate {
+	_c.mutation.SetFundsEvent(v)
+	return _c
+}
+
+// SetNillableFundsEvent sets the "funds_event" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableFundsEvent(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetFundsEvent(*v)
+	}
+	return _c
+}
+
+// SetImageTaskStatus sets the "image_task_status" field.
+func (_c *UsageLogCreate) SetImageTaskStatus(v string) *UsageLogCreate {
+	_c.mutation.SetImageTaskStatus(v)
+	return _c
+}
+
+// SetNillableImageTaskStatus sets the "image_task_status" field if the given value is not nil.
+func (_c *UsageLogCreate) SetNillableImageTaskStatus(v *string) *UsageLogCreate {
+	if v != nil {
+		_c.SetImageTaskStatus(*v)
+	}
+	return _c
+}
+
 // SetRequestID sets the "request_id" field.
 func (_c *UsageLogCreate) SetRequestID(v string) *UsageLogCreate {
 	_c.mutation.SetRequestID(v)
@@ -855,9 +905,6 @@ func (_c *UsageLogCreate) check() error {
 	if _, ok := _c.mutation.APIKeyID(); !ok {
 		return &ValidationError{Name: "api_key_id", err: errors.New(`ent: missing required field "UsageLog.api_key_id"`)}
 	}
-	if _, ok := _c.mutation.AccountID(); !ok {
-		return &ValidationError{Name: "account_id", err: errors.New(`ent: missing required field "UsageLog.account_id"`)}
-	}
 	if _, ok := _c.mutation.RequestID(); !ok {
 		return &ValidationError{Name: "request_id", err: errors.New(`ent: missing required field "UsageLog.request_id"`)}
 	}
@@ -1019,9 +1066,6 @@ func (_c *UsageLogCreate) check() error {
 	if len(_c.mutation.APIKeyIDs()) == 0 {
 		return &ValidationError{Name: "api_key", err: errors.New(`ent: missing required edge "UsageLog.api_key"`)}
 	}
-	if len(_c.mutation.AccountIDs()) == 0 {
-		return &ValidationError{Name: "account", err: errors.New(`ent: missing required edge "UsageLog.account"`)}
-	}
 	return nil
 }
 
@@ -1049,6 +1093,18 @@ func (_c *UsageLogCreate) createSpec() (*UsageLog, *sqlgraph.CreateSpec) {
 		_spec = sqlgraph.NewCreateSpec(usagelog.Table, sqlgraph.NewFieldSpec(usagelog.FieldID, field.TypeInt64))
 	)
 	_spec.OnConflict = _c.conflict
+	if value, ok := _c.mutation.ImageTaskID(); ok {
+		_spec.SetField(usagelog.FieldImageTaskID, field.TypeString, value)
+		_node.ImageTaskID = &value
+	}
+	if value, ok := _c.mutation.FundsEvent(); ok {
+		_spec.SetField(usagelog.FieldFundsEvent, field.TypeString, value)
+		_node.FundsEvent = &value
+	}
+	if value, ok := _c.mutation.ImageTaskStatus(); ok {
+		_spec.SetField(usagelog.FieldImageTaskStatus, field.TypeString, value)
+		_node.ImageTaskStatus = &value
+	}
 	if value, ok := _c.mutation.RequestID(); ok {
 		_spec.SetField(usagelog.FieldRequestID, field.TypeString, value)
 		_node.RequestID = value
@@ -1403,6 +1459,66 @@ func (u *UsageLogUpsert) SetAccountID(v int64) *UsageLogUpsert {
 // UpdateAccountID sets the "account_id" field to the value that was provided on create.
 func (u *UsageLogUpsert) UpdateAccountID() *UsageLogUpsert {
 	u.SetExcluded(usagelog.FieldAccountID)
+	return u
+}
+
+// ClearAccountID clears the value of the "account_id" field.
+func (u *UsageLogUpsert) ClearAccountID() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldAccountID)
+	return u
+}
+
+// SetImageTaskID sets the "image_task_id" field.
+func (u *UsageLogUpsert) SetImageTaskID(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldImageTaskID, v)
+	return u
+}
+
+// UpdateImageTaskID sets the "image_task_id" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateImageTaskID() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldImageTaskID)
+	return u
+}
+
+// ClearImageTaskID clears the value of the "image_task_id" field.
+func (u *UsageLogUpsert) ClearImageTaskID() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldImageTaskID)
+	return u
+}
+
+// SetFundsEvent sets the "funds_event" field.
+func (u *UsageLogUpsert) SetFundsEvent(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldFundsEvent, v)
+	return u
+}
+
+// UpdateFundsEvent sets the "funds_event" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateFundsEvent() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldFundsEvent)
+	return u
+}
+
+// ClearFundsEvent clears the value of the "funds_event" field.
+func (u *UsageLogUpsert) ClearFundsEvent() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldFundsEvent)
+	return u
+}
+
+// SetImageTaskStatus sets the "image_task_status" field.
+func (u *UsageLogUpsert) SetImageTaskStatus(v string) *UsageLogUpsert {
+	u.Set(usagelog.FieldImageTaskStatus, v)
+	return u
+}
+
+// UpdateImageTaskStatus sets the "image_task_status" field to the value that was provided on create.
+func (u *UsageLogUpsert) UpdateImageTaskStatus() *UsageLogUpsert {
+	u.SetExcluded(usagelog.FieldImageTaskStatus)
+	return u
+}
+
+// ClearImageTaskStatus clears the value of the "image_task_status" field.
+func (u *UsageLogUpsert) ClearImageTaskStatus() *UsageLogUpsert {
+	u.SetNull(usagelog.FieldImageTaskStatus)
 	return u
 }
 
@@ -2330,6 +2446,76 @@ func (u *UsageLogUpsertOne) SetAccountID(v int64) *UsageLogUpsertOne {
 func (u *UsageLogUpsertOne) UpdateAccountID() *UsageLogUpsertOne {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateAccountID()
+	})
+}
+
+// ClearAccountID clears the value of the "account_id" field.
+func (u *UsageLogUpsertOne) ClearAccountID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearAccountID()
+	})
+}
+
+// SetImageTaskID sets the "image_task_id" field.
+func (u *UsageLogUpsertOne) SetImageTaskID(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetImageTaskID(v)
+	})
+}
+
+// UpdateImageTaskID sets the "image_task_id" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateImageTaskID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateImageTaskID()
+	})
+}
+
+// ClearImageTaskID clears the value of the "image_task_id" field.
+func (u *UsageLogUpsertOne) ClearImageTaskID() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearImageTaskID()
+	})
+}
+
+// SetFundsEvent sets the "funds_event" field.
+func (u *UsageLogUpsertOne) SetFundsEvent(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFundsEvent(v)
+	})
+}
+
+// UpdateFundsEvent sets the "funds_event" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateFundsEvent() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFundsEvent()
+	})
+}
+
+// ClearFundsEvent clears the value of the "funds_event" field.
+func (u *UsageLogUpsertOne) ClearFundsEvent() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFundsEvent()
+	})
+}
+
+// SetImageTaskStatus sets the "image_task_status" field.
+func (u *UsageLogUpsertOne) SetImageTaskStatus(v string) *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetImageTaskStatus(v)
+	})
+}
+
+// UpdateImageTaskStatus sets the "image_task_status" field to the value that was provided on create.
+func (u *UsageLogUpsertOne) UpdateImageTaskStatus() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateImageTaskStatus()
+	})
+}
+
+// ClearImageTaskStatus clears the value of the "image_task_status" field.
+func (u *UsageLogUpsertOne) ClearImageTaskStatus() *UsageLogUpsertOne {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearImageTaskStatus()
 	})
 }
 
@@ -3563,6 +3749,76 @@ func (u *UsageLogUpsertBulk) SetAccountID(v int64) *UsageLogUpsertBulk {
 func (u *UsageLogUpsertBulk) UpdateAccountID() *UsageLogUpsertBulk {
 	return u.Update(func(s *UsageLogUpsert) {
 		s.UpdateAccountID()
+	})
+}
+
+// ClearAccountID clears the value of the "account_id" field.
+func (u *UsageLogUpsertBulk) ClearAccountID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearAccountID()
+	})
+}
+
+// SetImageTaskID sets the "image_task_id" field.
+func (u *UsageLogUpsertBulk) SetImageTaskID(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetImageTaskID(v)
+	})
+}
+
+// UpdateImageTaskID sets the "image_task_id" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateImageTaskID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateImageTaskID()
+	})
+}
+
+// ClearImageTaskID clears the value of the "image_task_id" field.
+func (u *UsageLogUpsertBulk) ClearImageTaskID() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearImageTaskID()
+	})
+}
+
+// SetFundsEvent sets the "funds_event" field.
+func (u *UsageLogUpsertBulk) SetFundsEvent(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetFundsEvent(v)
+	})
+}
+
+// UpdateFundsEvent sets the "funds_event" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateFundsEvent() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateFundsEvent()
+	})
+}
+
+// ClearFundsEvent clears the value of the "funds_event" field.
+func (u *UsageLogUpsertBulk) ClearFundsEvent() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearFundsEvent()
+	})
+}
+
+// SetImageTaskStatus sets the "image_task_status" field.
+func (u *UsageLogUpsertBulk) SetImageTaskStatus(v string) *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.SetImageTaskStatus(v)
+	})
+}
+
+// UpdateImageTaskStatus sets the "image_task_status" field to the value that was provided on create.
+func (u *UsageLogUpsertBulk) UpdateImageTaskStatus() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.UpdateImageTaskStatus()
+	})
+}
+
+// ClearImageTaskStatus clears the value of the "image_task_status" field.
+func (u *UsageLogUpsertBulk) ClearImageTaskStatus() *UsageLogUpsertBulk {
+	return u.Update(func(s *UsageLogUpsert) {
+		s.ClearImageTaskStatus()
 	})
 }
 

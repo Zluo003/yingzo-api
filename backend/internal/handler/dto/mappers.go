@@ -691,7 +691,7 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		ID:                        l.ID,
 		UserID:                    l.UserID,
 		APIKeyID:                  l.APIKeyID,
-		AccountID:                 l.AccountID,
+		AccountID:                 usageAccountID(l.AccountID),
 		RequestID:                 l.RequestID,
 		Model:                     requestedModel,
 		ServiceTier:               l.ServiceTier,
@@ -720,6 +720,9 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		NativeCompactionV2:        l.NativeCompactionV2,
 		DurationMs:                l.DurationMs,
 		FirstTokenMs:              l.FirstTokenMs,
+		ImageTaskID:               l.ImageTaskID,
+		FundsEvent:                l.FundsEvent,
+		ImageTaskStatus:           l.ImageTaskStatus,
 		ImageCount:                l.ImageCount,
 		ImageSize:                 l.ImageSize,
 		ImageInputSize:            l.ImageInputSize,
@@ -960,4 +963,11 @@ func PromoCodeUsageFromService(u *service.PromoCodeUsage) *PromoCodeUsage {
 		UsedAt:      u.UsedAt,
 		User:        UserFromServiceShallow(u.User),
 	}
+}
+
+func usageAccountID(id int64) *int64 {
+	if id <= 0 {
+		return nil
+	}
+	return &id
 }

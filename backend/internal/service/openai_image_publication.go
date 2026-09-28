@@ -33,7 +33,7 @@ func WithOpenAIImageURLPublication(
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if publisher == nil {
+	if publisher == nil || IsAsyncImageExecution(ctx) {
 		return ctx
 	}
 	return context.WithValue(ctx, openAIImageURLPublicationContextKey{}, openAIImageURLPublication{

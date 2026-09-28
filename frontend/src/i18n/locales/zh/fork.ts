@@ -25,6 +25,10 @@ export default {
     videoBillableSeconds: '计费秒数',
     videoUnitPrice: '每秒价格',
     videoResultUrl: '结果地址',
+    asyncImage: '异步生图',
+    imageFailureRefund: '失败退款',
+    imageFunds: { precharge: '提交预扣', settlement: '成功补扣', settlement_refund: '退还差额', failure_refund: '失败退款' },
+    imageStates: { refunding: '退款中', processing: '处理中', completed: '已完成', failed: '失败' },
     asyncTaskRefund: '异步任务退费',
   },
   modelPlaza: {
@@ -398,6 +402,12 @@ export default {
       },
       // 生成产物 = 网关从上游回捞并交付给下游的结果文件。
       generated: {
+        asyncHint: '仅控制新提交的异步图片任务。同步生图始终可用，已受理任务继续生成、保存和结算，视频不受此开关影响。',
+        migrationHint: '首次保存前，图片和视频沿用各自的旧存储位置；保存后，新的生成产物统一使用以下配置。历史文件不搬迁。',
+        directDownloadHint: '图片与视频共用此存储。公开域名留空时签发临时链接；修改配置后历史文件仍使用写入时的存储版本。',
+        moved: '异步生图开关和产物存储已移至「素材存储 → 生成产物」。',
+        openSettings: '前往生成产物设置',
+
         title: '生成产物（上游回捞）',
         description:
           '网关回捞的生成视频、图片等交付物单独计量，拥有独立于参考素材的保存时长、容量预算与每日配额，既不会被参考素材挤掉，也不会占用下游上传的上传配额。',

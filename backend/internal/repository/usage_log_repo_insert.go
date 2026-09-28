@@ -1307,7 +1307,7 @@ func prepareUsageLogInsert(log *service.UsageLog) usageLogInsertPrepared {
 		args: []any{
 			log.UserID,
 			log.APIKeyID,
-			log.AccountID,
+			nullableUsageAccountID(log.AccountID),
 			requestIDArg,
 			log.Model,
 			nullString(&requestedModel),
@@ -1391,4 +1391,11 @@ func (r *usageLogRepository) bestEffortRecentKey(requestID string, apiKeyID int6
 		return "", false
 	}
 	return usageLogBatchKey(requestID, apiKeyID), true
+}
+
+func nullableUsageAccountID(id int64) any {
+	if id == 0 {
+		return nil
+	}
+	return id
 }

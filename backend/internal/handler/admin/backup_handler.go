@@ -5,6 +5,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
+	"net/http"
 )
 
 type BackupHandler struct {
@@ -225,17 +226,7 @@ func (h *BackupHandler) GetImageStorageConfig(c *gin.Context) {
 }
 
 func (h *BackupHandler) UpdateImageStorageConfig(c *gin.Context) {
-	var req service.ImageStorageSettings
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.BadRequest(c, "Invalid request: "+err.Error())
-		return
-	}
-	cfg, err := h.imageStorage.Update(c.Request.Context(), req)
-	if err != nil {
-		response.ErrorFrom(c, err)
-		return
-	}
-	response.Success(c, cfg)
+	c.JSON(http.StatusConflict, gin.H{"code": "IMAGE_STORAGE_SETTINGS_MOVED", "message": "请在系统设置 → 素材存储 → 生成产物保存异步生图与存储配置", "settings_url": "/admin/settings?tab=assetStorage"})
 }
 
 func (h *BackupHandler) TestImageStorageConnection(c *gin.Context) {

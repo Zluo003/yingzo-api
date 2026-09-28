@@ -44898,6 +44898,9 @@ type UsageLogMutation struct {
 	op                                  Op
 	typ                                 string
 	id                                  *int64
+	image_task_id                       *string
+	funds_event                         *string
+	image_task_status                   *string
 	request_id                          *string
 	model                               *string
 	requested_model                     *string
@@ -45184,9 +45187,169 @@ func (m *UsageLogMutation) OldAccountID(ctx context.Context) (v int64, err error
 	return oldValue.AccountID, nil
 }
 
+// ClearAccountID clears the value of the "account_id" field.
+func (m *UsageLogMutation) ClearAccountID() {
+	m.account = nil
+	m.clearedFields[usagelog.FieldAccountID] = struct{}{}
+}
+
+// AccountIDCleared returns if the "account_id" field was cleared in this mutation.
+func (m *UsageLogMutation) AccountIDCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldAccountID]
+	return ok
+}
+
 // ResetAccountID resets all changes to the "account_id" field.
 func (m *UsageLogMutation) ResetAccountID() {
 	m.account = nil
+	delete(m.clearedFields, usagelog.FieldAccountID)
+}
+
+// SetImageTaskID sets the "image_task_id" field.
+func (m *UsageLogMutation) SetImageTaskID(s string) {
+	m.image_task_id = &s
+}
+
+// ImageTaskID returns the value of the "image_task_id" field in the mutation.
+func (m *UsageLogMutation) ImageTaskID() (r string, exists bool) {
+	v := m.image_task_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldImageTaskID returns the old "image_task_id" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldImageTaskID(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldImageTaskID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldImageTaskID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldImageTaskID: %w", err)
+	}
+	return oldValue.ImageTaskID, nil
+}
+
+// ClearImageTaskID clears the value of the "image_task_id" field.
+func (m *UsageLogMutation) ClearImageTaskID() {
+	m.image_task_id = nil
+	m.clearedFields[usagelog.FieldImageTaskID] = struct{}{}
+}
+
+// ImageTaskIDCleared returns if the "image_task_id" field was cleared in this mutation.
+func (m *UsageLogMutation) ImageTaskIDCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldImageTaskID]
+	return ok
+}
+
+// ResetImageTaskID resets all changes to the "image_task_id" field.
+func (m *UsageLogMutation) ResetImageTaskID() {
+	m.image_task_id = nil
+	delete(m.clearedFields, usagelog.FieldImageTaskID)
+}
+
+// SetFundsEvent sets the "funds_event" field.
+func (m *UsageLogMutation) SetFundsEvent(s string) {
+	m.funds_event = &s
+}
+
+// FundsEvent returns the value of the "funds_event" field in the mutation.
+func (m *UsageLogMutation) FundsEvent() (r string, exists bool) {
+	v := m.funds_event
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFundsEvent returns the old "funds_event" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldFundsEvent(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFundsEvent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFundsEvent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFundsEvent: %w", err)
+	}
+	return oldValue.FundsEvent, nil
+}
+
+// ClearFundsEvent clears the value of the "funds_event" field.
+func (m *UsageLogMutation) ClearFundsEvent() {
+	m.funds_event = nil
+	m.clearedFields[usagelog.FieldFundsEvent] = struct{}{}
+}
+
+// FundsEventCleared returns if the "funds_event" field was cleared in this mutation.
+func (m *UsageLogMutation) FundsEventCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldFundsEvent]
+	return ok
+}
+
+// ResetFundsEvent resets all changes to the "funds_event" field.
+func (m *UsageLogMutation) ResetFundsEvent() {
+	m.funds_event = nil
+	delete(m.clearedFields, usagelog.FieldFundsEvent)
+}
+
+// SetImageTaskStatus sets the "image_task_status" field.
+func (m *UsageLogMutation) SetImageTaskStatus(s string) {
+	m.image_task_status = &s
+}
+
+// ImageTaskStatus returns the value of the "image_task_status" field in the mutation.
+func (m *UsageLogMutation) ImageTaskStatus() (r string, exists bool) {
+	v := m.image_task_status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldImageTaskStatus returns the old "image_task_status" field's value of the UsageLog entity.
+// If the UsageLog object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UsageLogMutation) OldImageTaskStatus(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldImageTaskStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldImageTaskStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldImageTaskStatus: %w", err)
+	}
+	return oldValue.ImageTaskStatus, nil
+}
+
+// ClearImageTaskStatus clears the value of the "image_task_status" field.
+func (m *UsageLogMutation) ClearImageTaskStatus() {
+	m.image_task_status = nil
+	m.clearedFields[usagelog.FieldImageTaskStatus] = struct{}{}
+}
+
+// ImageTaskStatusCleared returns if the "image_task_status" field was cleared in this mutation.
+func (m *UsageLogMutation) ImageTaskStatusCleared() bool {
+	_, ok := m.clearedFields[usagelog.FieldImageTaskStatus]
+	return ok
+}
+
+// ResetImageTaskStatus resets all changes to the "image_task_status" field.
+func (m *UsageLogMutation) ResetImageTaskStatus() {
+	m.image_task_status = nil
+	delete(m.clearedFields, usagelog.FieldImageTaskStatus)
 }
 
 // SetRequestID sets the "request_id" field.
@@ -47742,7 +47905,7 @@ func (m *UsageLogMutation) ClearAccount() {
 
 // AccountCleared reports if the "account" edge to the Account entity was cleared.
 func (m *UsageLogMutation) AccountCleared() bool {
-	return m.clearedaccount
+	return m.AccountIDCleared() || m.clearedaccount
 }
 
 // AccountIDs returns the "account" edge IDs in the mutation.
@@ -47849,7 +48012,7 @@ func (m *UsageLogMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UsageLogMutation) Fields() []string {
-	fields := make([]string, 0, 51)
+	fields := make([]string, 0, 54)
 	if m.user != nil {
 		fields = append(fields, usagelog.FieldUserID)
 	}
@@ -47858,6 +48021,15 @@ func (m *UsageLogMutation) Fields() []string {
 	}
 	if m.account != nil {
 		fields = append(fields, usagelog.FieldAccountID)
+	}
+	if m.image_task_id != nil {
+		fields = append(fields, usagelog.FieldImageTaskID)
+	}
+	if m.funds_event != nil {
+		fields = append(fields, usagelog.FieldFundsEvent)
+	}
+	if m.image_task_status != nil {
+		fields = append(fields, usagelog.FieldImageTaskStatus)
 	}
 	if m.request_id != nil {
 		fields = append(fields, usagelog.FieldRequestID)
@@ -48017,6 +48189,12 @@ func (m *UsageLogMutation) Field(name string) (ent.Value, bool) {
 		return m.APIKeyID()
 	case usagelog.FieldAccountID:
 		return m.AccountID()
+	case usagelog.FieldImageTaskID:
+		return m.ImageTaskID()
+	case usagelog.FieldFundsEvent:
+		return m.FundsEvent()
+	case usagelog.FieldImageTaskStatus:
+		return m.ImageTaskStatus()
 	case usagelog.FieldRequestID:
 		return m.RequestID()
 	case usagelog.FieldModel:
@@ -48128,6 +48306,12 @@ func (m *UsageLogMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldAPIKeyID(ctx)
 	case usagelog.FieldAccountID:
 		return m.OldAccountID(ctx)
+	case usagelog.FieldImageTaskID:
+		return m.OldImageTaskID(ctx)
+	case usagelog.FieldFundsEvent:
+		return m.OldFundsEvent(ctx)
+	case usagelog.FieldImageTaskStatus:
+		return m.OldImageTaskStatus(ctx)
 	case usagelog.FieldRequestID:
 		return m.OldRequestID(ctx)
 	case usagelog.FieldModel:
@@ -48253,6 +48437,27 @@ func (m *UsageLogMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetAccountID(v)
+		return nil
+	case usagelog.FieldImageTaskID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetImageTaskID(v)
+		return nil
+	case usagelog.FieldFundsEvent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFundsEvent(v)
+		return nil
+	case usagelog.FieldImageTaskStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetImageTaskStatus(v)
 		return nil
 	case usagelog.FieldRequestID:
 		v, ok := value.(string)
@@ -48899,6 +49104,18 @@ func (m *UsageLogMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *UsageLogMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(usagelog.FieldAccountID) {
+		fields = append(fields, usagelog.FieldAccountID)
+	}
+	if m.FieldCleared(usagelog.FieldImageTaskID) {
+		fields = append(fields, usagelog.FieldImageTaskID)
+	}
+	if m.FieldCleared(usagelog.FieldFundsEvent) {
+		fields = append(fields, usagelog.FieldFundsEvent)
+	}
+	if m.FieldCleared(usagelog.FieldImageTaskStatus) {
+		fields = append(fields, usagelog.FieldImageTaskStatus)
+	}
 	if m.FieldCleared(usagelog.FieldRequestedModel) {
 		fields = append(fields, usagelog.FieldRequestedModel)
 	}
@@ -48982,6 +49199,18 @@ func (m *UsageLogMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *UsageLogMutation) ClearField(name string) error {
 	switch name {
+	case usagelog.FieldAccountID:
+		m.ClearAccountID()
+		return nil
+	case usagelog.FieldImageTaskID:
+		m.ClearImageTaskID()
+		return nil
+	case usagelog.FieldFundsEvent:
+		m.ClearFundsEvent()
+		return nil
+	case usagelog.FieldImageTaskStatus:
+		m.ClearImageTaskStatus()
+		return nil
 	case usagelog.FieldRequestedModel:
 		m.ClearRequestedModel()
 		return nil
@@ -49067,6 +49296,15 @@ func (m *UsageLogMutation) ResetField(name string) error {
 		return nil
 	case usagelog.FieldAccountID:
 		m.ResetAccountID()
+		return nil
+	case usagelog.FieldImageTaskID:
+		m.ResetImageTaskID()
+		return nil
+	case usagelog.FieldFundsEvent:
+		m.ResetFundsEvent()
+		return nil
+	case usagelog.FieldImageTaskStatus:
+		m.ResetImageTaskStatus()
 		return nil
 	case usagelog.FieldRequestID:
 		m.ResetRequestID()

@@ -808,7 +808,14 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 
 	// 计算费用
 	var cost *CostBreakdown
-	if agentGroup {
+	if execution := AsyncImageExecutionFromContext(ctx); execution != nil && execution.Quote != nil {
+		var err error
+		cost, err = calculateFrozenImageCost(ctx, s.billingService, s.resolver, execution.Quote, UsageTokens{InputTokens: result.Usage.InputTokens, OutputTokens: result.Usage.OutputTokens, ImageOutputTokens: result.Usage.ImageOutputTokens, CacheCreationTokens: result.Usage.CacheCreationInputTokens, CacheReadTokens: result.Usage.CacheReadInputTokens}, result.ImageCount)
+		if err != nil {
+			return err
+		}
+		multiplier = execution.Quote.Multiplier
+	} else if agentGroup {
 		agentCost, agentMultiplier, agentErr := s.calculateAgentRecordUsageCost(ctx, result, apiKey.Group, account,
 			usageBillingModelCandidates(billingModel, result.UpstreamModel, result.Model, requestedModel), pricingAt)
 		if agentErr != nil {
@@ -870,6 +877,10 @@ func (s *GatewayService) recordUsageCore(ctx context.Context, input *recordUsage
 			},
 			cost.TotalCost, pricingAt,
 		)
+	}
+
+	if captureAsyncImageUsage(ctx, usageLog) {
+		return nil
 	}
 
 	if s.cfg != nil && s.cfg.RunMode == config.RunModeSimple {

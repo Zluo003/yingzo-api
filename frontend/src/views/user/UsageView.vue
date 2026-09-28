@@ -665,7 +665,7 @@ const exportToCSV = async () => {
       'Billed Cost',
       'Original Cost',
       'First Token (ms)',
-      'Duration (ms)',
+      'Duration (ms)', 'Image Task ID', 'Funds Event', 'Task Status',
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
@@ -684,7 +684,7 @@ const exportToCSV = async () => {
       log.actual_cost.toFixed(8),
       log.total_cost.toFixed(8),
       log.first_token_ms ?? '',
-      log.duration_ms ?? '',
+      log.duration_ms ?? '', log.image_task_id ?? '', log.funds_event ?? '', log.image_task_status ?? '',
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),

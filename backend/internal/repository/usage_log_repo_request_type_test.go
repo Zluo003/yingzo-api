@@ -913,7 +913,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int64(4),
 			int64(13),
 			int64(23),
-			int64(33),
+			sql.NullInt64{Int64: 33, Valid: true},
 			sql.NullString{Valid: true, String: "req-image-metadata"},
 			"gpt-image-2",
 			sql.NullString{Valid: true, String: "gpt-image-2"},
@@ -960,6 +960,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{}, // upstream_request_id
 			sql.NullString{},
 			false, // native_compaction_v2
+			sql.NullString{}, sql.NullString{}, sql.NullString{},
 			now,
 		}})
 		require.NoError(t, err)
@@ -978,10 +979,10 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 	t.Run("request_type_ws_v2_overrides_legacy", func(t *testing.T) {
 		now := time.Now().UTC()
 		log, err := scanUsageLog(usageLogScannerStub{values: []any{
-			int64(1),  // id
-			int64(10), // user_id
-			int64(20), // api_key_id
-			int64(30), // account_id
+			int64(1),                              // id
+			int64(10),                             // user_id
+			int64(20),                             // api_key_id
+			sql.NullInt64{Int64: 30, Valid: true}, // account_id
 			sql.NullString{Valid: true, String: "req-1"},
 			"gpt-5", // model
 			sql.NullString{Valid: true, String: "gpt-5"}, // requested_model
@@ -1040,6 +1041,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
 			false,             // native_compaction_v2
+			sql.NullString{}, sql.NullString{}, sql.NullString{},
 			now,
 		}})
 		require.NoError(t, err)
@@ -1056,7 +1058,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int64(2),
 			int64(11),
 			int64(21),
-			int64(31),
+			sql.NullInt64{Int64: 31, Valid: true},
 			sql.NullString{Valid: true, String: "req-2"},
 			"gpt-5",
 			sql.NullString{Valid: true, String: "gpt-5"},
@@ -1103,6 +1105,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
 			true,              // native_compaction_v2
+			sql.NullString{}, sql.NullString{}, sql.NullString{},
 			now,
 		}})
 		require.NoError(t, err)
@@ -1120,7 +1123,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			int64(3),
 			int64(12),
 			int64(22),
-			int64(32),
+			sql.NullInt64{Int64: 32, Valid: true},
 			sql.NullString{Valid: true, String: "req-3"},
 			"gpt-5.4",
 			sql.NullString{Valid: true, String: "gpt-5.4"},
@@ -1167,6 +1170,7 @@ func TestScanUsageLogRequestTypeAndLegacyFallback(t *testing.T) {
 			sql.NullString{},  // upstream_request_id
 			sql.NullString{},  // session_id
 			false,             // native_compaction_v2
+			sql.NullString{}, sql.NullString{}, sql.NullString{},
 			now,
 		}})
 		require.NoError(t, err)

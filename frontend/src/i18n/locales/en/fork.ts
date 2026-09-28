@@ -25,6 +25,10 @@ export default {
     videoBillableSeconds: 'Billable seconds',
     videoUnitPrice: 'Per-second price',
     videoResultUrl: 'Result URL',
+    asyncImage: 'Async image',
+    imageFailureRefund: 'Failure refund',
+    imageFunds: { precharge: 'Precharge', settlement: 'Settlement charge', settlement_refund: 'Settlement refund', failure_refund: 'Failure refund' },
+    imageStates: { refunding: 'Refund pending', processing: 'Processing', completed: 'Completed', failed: 'Failed' },
     asyncTaskRefund: 'Async task refund',
   },
   modelPlaza: {
@@ -401,6 +405,12 @@ export default {
       },
       // Generated results = files the gateway rehosts from upstream and delivers.
       generated: {
+        asyncHint: 'Controls new asynchronous image tasks. Synchronous generation remains available; accepted tasks continue through storage and settlement. Videos are unaffected.',
+        migrationHint: 'Until the first save, images and videos keep their legacy storage locations. Saving unifies new outputs without moving existing files.',
+        directDownloadHint: 'Images and videos share this storage. Leave the public domain blank for signed URLs. Existing files retain the storage version used when written.',
+        moved: 'Asynchronous image generation and output storage have moved to Asset Storage → Generated outputs.',
+        openSettings: 'Open generated output settings',
+
         title: 'Generated results (rehosted upstream)',
         description:
           'Generated videos, images, and other deliverables rehosted by the gateway are metered separately, with retention, a capacity budget, and a daily quota independent of reference materials, so reference uploads cannot evict them and never consume the upload quota.',

@@ -521,6 +521,8 @@
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
             {{ t('admin.assetStorage.generated.description') }}
           </p>
+        <GeneratedStorageFields v-if="form.generated" v-model:config="form.generated" :migration-pending="settings?.generated_migration_pending" />
+
         </div>
 
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -667,6 +669,7 @@
         </button>
       </div>
     </template>
+    <TotpStepUpDialog :controller="storageStepUp" />
   </div>
 </template>
 
@@ -675,6 +678,9 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { adminAPI } from '@/api'
 import { useAppStore } from '@/stores'
+import GeneratedStorageFields from '@/components/admin/GeneratedStorageFields.vue'
+import TotpStepUpDialog from '@/components/auth/TotpStepUpDialog.vue'
+import { useStepUp, isStepUpCancelled, isStepUpBlocked, stepUpBlockReason } from '@/composables/useStepUp'
 import { formatBytes, formatNumberLocaleString } from '@/utils/format'
 import type {
   FileStorageBackend,
@@ -685,6 +691,7 @@ import type {
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const storageStepUp = useStepUp()
 
 const MIB = 1024 * 1024
 const GIB = 1024 * MIB
@@ -713,6 +720,7 @@ const EMPTY_USAGE: FileStorageUsage = {
 
 function emptyConfig(): FileStorageConfig {
   return {
+    generated: { async_images_enabled: false, backend: 'local', local_dir: '', presign_expiry_hours: 24, s3: { endpoint: '', region: 'auto', bucket: '', prefix: 'generated/', access_key_id: '', secret_access_key: '', custom_domain: '', force_path_style: false } },
     schema_version: 1,
     backend: 'local',
     // 空值 = 使用默认目录（<data_dir>/agent-assets），与后端的默认行为一致
@@ -916,6 +924,7 @@ function applySettings(data: FileStorageSettings): void {
     ...base,
     ...data,
     schema_version: data.schema_version || base.schema_version,
+    generated: structuredClone(data.generated ?? data.generated_defaults ?? base.generated),
     // 更早版本的配置里没有 local_dir：缺失时按空值（默认目录）处理，而不是 undefined
     local_dir: typeof data.local_dir === 'string' ? data.local_dir : '',
     capacity_reserve_percent: normalizeReservePercent(data.capacity_reserve_percent),
@@ -1112,6 +1121,7 @@ function buildConfig(): FileStorageConfig | null {
 
   return {
     schema_version: form.value.schema_version || 1,
+    generated: form.value.generated ? { ...form.value.generated, s3: { ...form.value.generated.s3 } } : undefined,
     backend,
     // 始终提交：空字符串表示使用默认目录，而不是"保持原值"
     local_dir: localDir,
@@ -1150,11 +1160,13 @@ async function saveSettings() {
   if (!config) return
   saving.value = true
   try {
-    const data = await adminAPI.fileStorage.updateFileStorageSettings(config)
+    const data = await storageStepUp.run(() => adminAPI.fileStorage.updateFileStorageSettings(config))
     settings.value = data
     applySettings(data)
     appStore.showSuccess(t('admin.assetStorage.saved'))
   } catch (error) {
+    if (isStepUpCancelled(error)) return
+    if (isStepUpBlocked(error)) { appStore.showError(t(stepUpBlockReason(error) === 'STEP_UP_ADMIN_API_KEY_FORBIDDEN' ? 'stepUp.adminApiKeyForbidden' : 'stepUp.notEnabled')); return }
     appStore.showError(
       (error as { message?: string })?.message || t('admin.assetStorage.saveFailed'),
     )

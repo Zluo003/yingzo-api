@@ -89,6 +89,9 @@ func RegisterGatewayRoutes(
 		return getGroupPlatform(c) == service.PlatformOpenAI
 	}
 	imagesHandler := func(c *gin.Context) {
+		if h.AsyncImage != nil && h.AsyncImage.Prefer(c, agentOrGroupPlatform(c)) {
+			return
+		}
 		switch agentOrGroupPlatform(c) {
 		case service.PlatformOpenAI:
 			h.OpenAIGateway.Images(c)
@@ -325,6 +328,7 @@ func RegisterGatewayRoutes(
 		gateway.POST("/images/generations/async", h.AsyncImage.Submit)
 		gateway.POST("/images/edits/async", h.AsyncImage.Submit)
 		gateway.GET("/images/tasks/:task_id", h.AsyncImage.Get)
+		gateway.GET("/images/tasks/by-idempotency/:idempotency_key", h.AsyncImage.GetByIdempotency)
 		gateway.POST("/images/batches", h.BatchImage.Submit)
 		gateway.GET("/images/batches", h.BatchImage.List)
 		gateway.GET("/images/batches/models", h.BatchImage.Models)
@@ -426,7 +430,12 @@ func RegisterGatewayRoutes(
 		gemini.GET("/models", h.Gateway.GeminiV1BetaListModels)
 		gemini.GET("/models/:model", h.Gateway.GeminiV1BetaGetModel)
 		// Gin treats ":" as a param marker, but Gemini uses "{model}:{action}" in the same segment.
-		gemini.POST("/models/*modelAction", h.Gateway.GeminiV1BetaModels)
+		gemini.POST("/models/*modelAction", func(c *gin.Context) {
+			if h.AsyncImage != nil && h.AsyncImage.Prefer(c, service.PlatformGemini) {
+				return
+			}
+			h.Gateway.GeminiV1BetaModels(c)
+		})
 	}
 
 	// OpenAI Responses API（不带v1前缀的别名）— auto-route based on group platform
@@ -651,6 +660,11 @@ func agentModelPlatformMiddleware(catalog *service.AgentModelCatalogService) gin
 			c.Next()
 			return
 		}
+		if execution := service.AsyncImageExecutionFromContext(c.Request.Context()); execution != nil && execution.Platform != "" {
+			c.Set(agentResolvedPlatformKey, execution.Platform)
+			c.Next()
+			return
+		}
 		if model := agentRequestModel(c); model != "" && !c.IsAborted() {
 			if platform, found, err := catalog.ResolveModelPlatform(c.Request.Context(), apiKey.Group.ID, model); err == nil && found {
 				c.Set(agentResolvedPlatformKey, platform)
@@ -760,7 +774,11 @@ func compositeTargetPlatformMiddleware(resolver *service.CompositeRouteResolver)
 		routePath := c.FullPath()
 		model := requestmodel.FromBodyForRoute(routePath, c.GetHeader("Content-Type"), body)
 		if model != "" {
-			decision, err := resolver.Resolve(c.Request.Context(), apiKey.Group.ID, model, compositeRouteEndpointForPath(c.Request.URL.Path))
+			decision, frozen := service.AsyncImageRouteFromContext(c.Request.Context())
+			var err error
+			if !frozen {
+				decision, err = resolver.Resolve(c.Request.Context(), apiKey.Group.ID, model, compositeRouteEndpointForPath(c.Request.URL.Path))
+			}
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"type": "server_error", "message": "Failed to resolve composite model route"}})
 				c.Abort()
@@ -791,7 +809,11 @@ func compositeGeminiTargetPlatformMiddleware(resolver *service.CompositeRouteRes
 		if ok && apiKey != nil && apiKey.Group != nil && apiKey.Group.Platform == service.PlatformComposite {
 			model := compositeGeminiModelFromParams(c)
 			if model != "" {
-				decision, err := resolver.Resolve(c.Request.Context(), apiKey.Group.ID, model, service.CompositeRouteEndpointGemini)
+				decision, frozen := service.AsyncImageRouteFromContext(c.Request.Context())
+				var err error
+				if !frozen {
+					decision, err = resolver.Resolve(c.Request.Context(), apiKey.Group.ID, model, service.CompositeRouteEndpointGemini)
+				}
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"type": "server_error", "message": "Failed to resolve composite model route"}})
 					c.Abort()

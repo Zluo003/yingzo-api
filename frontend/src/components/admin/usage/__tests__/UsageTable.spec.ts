@@ -93,6 +93,7 @@ const DataTableStub = {
         <slot name="cell-billing_mode" :row="row" />
         <slot name="cell-tokens" :row="row" />
         <slot name="cell-cost" :row="row" />
+        <slot name="cell-stream" :row="row" />
         <slot name="cell-request_id" :row="row" />
         <slot name="cell-upstream_request_id" :row="row" />
       </div>
@@ -806,4 +807,19 @@ describe('admin UsageTable deleted-user badge', () => {
     expect(wrapper.text()).not.toContain('Deleted')
     expect(wrapper.text()).toContain('active@test.com')
   })
+})
+
+it('shows the retained precharge and a distinct negative failure refund', () => {
+  const wrapper = mount(UsageTable, {
+    props: {
+      data: [
+        { ...baseImageRow, request_id: 'precharge', image_task_id: 'imgtask_one', funds_event: 'precharge', image_task_status: 'failed' },
+        { ...baseImageRow, request_id: 'refund', image_task_id: 'imgtask_one', funds_event: 'failure_refund', image_task_status: 'failed', actual_cost: -0.4, total_cost: 0, image_count: 0 },
+      ], loading: false, columns: [{ key: 'cost', label: 'Cost' }],
+    },
+    global: { stubs: { DataTable: DataTableStub, EmptyState: true, Teleport: true } },
+  })
+  expect(wrapper.text()).toContain('usage.imageFunds.precharge')
+  expect(wrapper.text()).toContain('usage.imageFailureRefund')
+  expect(wrapper.text()).toContain('-0.4')
 })

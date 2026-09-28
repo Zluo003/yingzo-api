@@ -816,4 +816,30 @@ describe('admin AssetStorageView', () => {
 
     expect(showError).toHaveBeenCalledWith('admin.assetStorage.loadFailed')
   })
+  it('keeps reference storage independent and saves the generated async switch', async () => {
+    const wrapper = await mountView()
+    expect((wrapper.get('[data-testid="async-images-enabled"]').element as HTMLInputElement).checked).toBe(false)
+    await wrapper.get('[data-testid="async-images-enabled"]').setValue(true)
+    await wrapper.get('[data-testid="asset-storage-save"]').trigger('click')
+    await flushPromises()
+    expect(updateFileStorageSettings).toHaveBeenCalledWith(expect.objectContaining({
+      backend: 'local', retention_hours: 24,
+      generated: expect.objectContaining({ async_images_enabled: true, backend: 'local' }),
+    }))
+  })
+
+  it('shows legacy defaults until the first unified save', async () => {
+    getFileStorageSettings.mockResolvedValue(baseSettings({
+      generated_migration_pending: true,
+      generated_defaults: { async_images_enabled: true, backend: 's3', local_dir: '',
+        presign_expiry_hours: 24, secret_access_key_configured: true,
+        s3: { ...baseSettings().s3, bucket: 'legacy-images', prefix: 'images/' } },
+    }))
+    const wrapper = await mountView()
+    expect(wrapper.text()).toContain('admin.assetStorage.generated.migrationHint')
+    expect((wrapper.get('[data-testid="async-images-enabled"]').element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.get('[data-testid="generated-storage-backend"]').element).toHaveProperty('value', 's3')
+    expect(wrapper.find('[data-testid="generated-storage-settings"] input[type="password"]').element).toHaveProperty('value', '')
+  })
+
 })

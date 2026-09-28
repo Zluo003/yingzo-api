@@ -2536,6 +2536,10 @@ func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task serv
 	if task == nil {
 		return
 	}
+	if service.IsAsyncImageExecution(parent) {
+		task(parent)
+		return
+	}
 	task = wrapUsageRecordTaskContext(parent, task)
 	if h.usageRecordWorkerPool != nil {
 		if mode := h.usageRecordWorkerPool.Submit(task); mode != service.UsageRecordSubmitModeDroppedStopped {
@@ -2564,6 +2568,10 @@ func (h *GatewayHandler) submitUsageRecordTask(parent context.Context, task serv
 // submitMandatoryUsageRecordTask never silently drops billing work on pool overflow.
 func (h *GatewayHandler) submitMandatoryUsageRecordTask(parent context.Context, task service.UsageRecordTask) {
 	if task == nil {
+		return
+	}
+	if service.IsAsyncImageExecution(parent) {
+		task(parent)
 		return
 	}
 	task = wrapUsageRecordTaskContext(parent, task)

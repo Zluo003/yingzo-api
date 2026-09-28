@@ -255,7 +255,7 @@ var ProviderSet = wire.NewSet(
 	NewAgentHandler,
 	ProvideVideoHandler,
 	NewModelPlazaHandler,
-	NewAsyncImageHandler,
+	ProvideAsyncImageHandler,
 	ProvideBatchImageHandler,
 
 	// Admin handlers

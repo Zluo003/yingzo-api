@@ -178,21 +178,40 @@ func (p *TemporaryAssetPublisher) PublishGeneratedImage(
 	}
 
 	id := uuid.New()
+	if stable, ok := ctx.Value(generatedAssetIDKey{}).(uuid.UUID); ok {
+		id = stable
+		var exists bool
+		if err := p.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM temporary_assets WHERE id=$1 AND user_id=$2 AND api_key_id=$3 AND deleted_at IS NULL AND expires_at>NOW())`, id, owner.UserID, owner.APIKeyID).Scan(&exists); err != nil {
+			return "", err
+		}
+		if exists {
+			return strings.TrimRight(publicBaseURL, "/") + "/media/" + id.String() + "/asset" + extension, nil
+		}
+	}
+
 	token, err := generatedAssetRandomToken(32)
 	if err != nil {
 		return "", fmt.Errorf("generate temporary asset token: %w", err)
 	}
+	storageVersion := ""
+	if runtime.Config.Generated != nil {
+		storageVersion, err = p.fileStorage.generatedVersion(ctx, runtime.Config.Generated)
+		if err != nil {
+			return "", err
+		}
+	}
 	metadata, err := json.Marshal(map[string]any{
-		"width":  config.Width,
-		"height": config.Height,
-		"probe":  "go-image",
-		"source": "generated",
+		"storage_version": storageVersion,
+		"width":           config.Width,
+		"height":          config.Height,
+		"probe":           "go-image",
+		"source":          "generated",
 	})
 	if err != nil {
 		return "", fmt.Errorf("encode temporary asset metadata: %w", err)
 	}
 
-	localRoot, err := p.fileStorage.EffectiveLocalPath(ctx)
+	localRoot, err := p.fileStorage.GeneratedLocalPath(ctx, runtime.Config.Generated)
 	if err != nil {
 		return "", fmt.Errorf("resolve local asset directory: %w", err)
 	}
@@ -206,8 +225,20 @@ func (p *TemporaryAssetPublisher) PublishGeneratedImage(
 		return "", err
 	}
 
-	backend := "local"
-	storageKey := localPath
+	backend, storageKey, err := p.fileStorage.storeGeneratedFile(ctx, runtime.Config.Generated, id.String(), localPath, mimeType)
+	if err != nil {
+		_ = os.RemoveAll(assetDir) //nolint:gosec // G703: configured storage root plus a generated UUID, never a caller-supplied path.
+		return "", fmt.Errorf("store generated output: %w", err)
+	}
+	stored := false
+	defer func() {
+		if backend == "s3" {
+			_ = os.RemoveAll(assetDir) //nolint:gosec // G703: configured storage root plus a generated UUID; removes only this upload's staging directory.
+			if !stored {
+				_ = runtime.Store.Delete(context.WithoutCancel(ctx), storageKey)
+			}
+		}
+	}()
 
 	checksum := sha256.Sum256(imageBytes)
 	// 产物按自己的保存时长存放，与下游上传的参考素材分开。
@@ -226,6 +257,7 @@ func (p *TemporaryAssetPublisher) PublishGeneratedImage(
 		return "", fmt.Errorf("record temporary asset: %w", err)
 	}
 
+	stored = true
 	return strings.TrimRight(publicBaseURL, "/") + "/media/" + id.String() + "/asset" + extension, nil
 }
 
@@ -309,7 +341,7 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 	}
 
 	id := uuid.New()
-	localRoot, err := p.fileStorage.EffectiveLocalPath(ctx)
+	localRoot, err := p.fileStorage.GeneratedLocalPath(ctx, runtime.Config.Generated)
 	if err != nil {
 		return "", fmt.Errorf("resolve local asset directory: %w", err)
 	}
@@ -365,16 +397,35 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 		return "", capacityErr
 	}
 
-	// 产物固定保存在本地磁盘：对象存储只承载参考素材（递给上游后即删），交付给下游的
-	// 产物始终从本地经平台代理分发。
-	backend := "local"
-	storageKey := localPath
+	// Keep a stable media identity; the media endpoint resolves its storage version.
+	backend, storageKey, err := p.fileStorage.storeGeneratedFile(ctx, runtime.Config.Generated, id.String(), localPath, mimeType)
+	if err != nil {
+		_ = os.RemoveAll(assetDir) //nolint:gosec // G703: configured storage root plus a generated UUID, never a caller-supplied path.
+		return "", fmt.Errorf("store generated output: %w", err)
+	}
+	stored := false
+	defer func() {
+		if backend == "s3" {
+			_ = os.RemoveAll(assetDir) //nolint:gosec // G703: configured storage root plus a generated UUID; removes only this upload's staging directory.
+			if !stored {
+				_ = runtime.Store.Delete(context.WithoutCancel(ctx), storageKey)
+			}
+		}
+	}()
 
 	token, err := generatedAssetRandomToken(32)
 	if err != nil {
 		return "", fmt.Errorf("generate temporary asset token: %w", err)
 	}
+	storageVersion := ""
+	if runtime.Config.Generated != nil {
+		storageVersion, err = p.fileStorage.generatedVersion(ctx, runtime.Config.Generated)
+		if err != nil {
+			return "", err
+		}
+	}
 	metadata, err := json.Marshal(map[string]any{
+		"storage_version":       storageVersion,
 		"probe":                 "iso-bmff",
 		"provider_url_rehosted": true,
 		"source":                "generated_video",
@@ -398,6 +449,7 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 	}
 
 	cleanupLocal = false
+	stored = true
 	return strings.TrimRight(publicBaseURL, "/") + "/media/" + id.String() + "/asset" + extension, nil
 }
 
@@ -673,4 +725,30 @@ func (p *TemporaryAssetPublisher) releaseReferenceAsset(ctx context.Context, sto
 		return false
 	}
 	return true
+}
+
+// RefreshGeneratedURL returns a fresh direct object URL for a generated artifact,
+// while the task itself continues to persist its stable /media/{asset_id} URL.
+func (p *TemporaryAssetPublisher) RefreshGeneratedURL(ctx context.Context, owner TemporaryAssetOwner, raw string) (string, error) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", err
+	}
+	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+	if len(parts) != 3 || parts[0] != "media" {
+		return raw, nil
+	}
+	var key string
+	err = p.db.QueryRowContext(ctx, `SELECT storage_key FROM temporary_assets WHERE id=$1 AND user_id=$2 AND api_key_id=$3 AND purpose='generated' AND deleted_at IS NULL AND expires_at>NOW()`, parts[1], owner.UserID, owner.APIKeyID).Scan(&key)
+	if err != nil {
+		return "", err
+	}
+	direct, err := p.fileStorage.GeneratedObjectURL(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	if direct != "" {
+		return direct, nil
+	}
+	return raw, nil
 }

@@ -74,6 +74,72 @@ func (_u *UsageLogUpdate) SetNillableAccountID(v *int64) *UsageLogUpdate {
 	return _u
 }
 
+// ClearAccountID clears the value of the "account_id" field.
+func (_u *UsageLogUpdate) ClearAccountID() *UsageLogUpdate {
+	_u.mutation.ClearAccountID()
+	return _u
+}
+
+// SetImageTaskID sets the "image_task_id" field.
+func (_u *UsageLogUpdate) SetImageTaskID(v string) *UsageLogUpdate {
+	_u.mutation.SetImageTaskID(v)
+	return _u
+}
+
+// SetNillableImageTaskID sets the "image_task_id" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableImageTaskID(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetImageTaskID(*v)
+	}
+	return _u
+}
+
+// ClearImageTaskID clears the value of the "image_task_id" field.
+func (_u *UsageLogUpdate) ClearImageTaskID() *UsageLogUpdate {
+	_u.mutation.ClearImageTaskID()
+	return _u
+}
+
+// SetFundsEvent sets the "funds_event" field.
+func (_u *UsageLogUpdate) SetFundsEvent(v string) *UsageLogUpdate {
+	_u.mutation.SetFundsEvent(v)
+	return _u
+}
+
+// SetNillableFundsEvent sets the "funds_event" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableFundsEvent(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetFundsEvent(*v)
+	}
+	return _u
+}
+
+// ClearFundsEvent clears the value of the "funds_event" field.
+func (_u *UsageLogUpdate) ClearFundsEvent() *UsageLogUpdate {
+	_u.mutation.ClearFundsEvent()
+	return _u
+}
+
+// SetImageTaskStatus sets the "image_task_status" field.
+func (_u *UsageLogUpdate) SetImageTaskStatus(v string) *UsageLogUpdate {
+	_u.mutation.SetImageTaskStatus(v)
+	return _u
+}
+
+// SetNillableImageTaskStatus sets the "image_task_status" field if the given value is not nil.
+func (_u *UsageLogUpdate) SetNillableImageTaskStatus(v *string) *UsageLogUpdate {
+	if v != nil {
+		_u.SetImageTaskStatus(*v)
+	}
+	return _u
+}
+
+// ClearImageTaskStatus clears the value of the "image_task_status" field.
+func (_u *UsageLogUpdate) ClearImageTaskStatus() *UsageLogUpdate {
+	_u.mutation.ClearImageTaskStatus()
+	return _u
+}
+
 // SetRequestID sets the "request_id" field.
 func (_u *UsageLogUpdate) SetRequestID(v string) *UsageLogUpdate {
 	_u.mutation.SetRequestID(v)
@@ -1198,9 +1264,6 @@ func (_u *UsageLogUpdate) check() error {
 	if _u.mutation.APIKeyCleared() && len(_u.mutation.APIKeyIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "UsageLog.api_key"`)
 	}
-	if _u.mutation.AccountCleared() && len(_u.mutation.AccountIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "UsageLog.account"`)
-	}
 	return nil
 }
 
@@ -1215,6 +1278,24 @@ func (_u *UsageLogUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.ImageTaskID(); ok {
+		_spec.SetField(usagelog.FieldImageTaskID, field.TypeString, value)
+	}
+	if _u.mutation.ImageTaskIDCleared() {
+		_spec.ClearField(usagelog.FieldImageTaskID, field.TypeString)
+	}
+	if value, ok := _u.mutation.FundsEvent(); ok {
+		_spec.SetField(usagelog.FieldFundsEvent, field.TypeString, value)
+	}
+	if _u.mutation.FundsEventCleared() {
+		_spec.ClearField(usagelog.FieldFundsEvent, field.TypeString)
+	}
+	if value, ok := _u.mutation.ImageTaskStatus(); ok {
+		_spec.SetField(usagelog.FieldImageTaskStatus, field.TypeString, value)
+	}
+	if _u.mutation.ImageTaskStatusCleared() {
+		_spec.ClearField(usagelog.FieldImageTaskStatus, field.TypeString)
 	}
 	if value, ok := _u.mutation.RequestID(); ok {
 		_spec.SetField(usagelog.FieldRequestID, field.TypeString, value)
@@ -1687,6 +1768,72 @@ func (_u *UsageLogUpdateOne) SetNillableAccountID(v *int64) *UsageLogUpdateOne {
 	if v != nil {
 		_u.SetAccountID(*v)
 	}
+	return _u
+}
+
+// ClearAccountID clears the value of the "account_id" field.
+func (_u *UsageLogUpdateOne) ClearAccountID() *UsageLogUpdateOne {
+	_u.mutation.ClearAccountID()
+	return _u
+}
+
+// SetImageTaskID sets the "image_task_id" field.
+func (_u *UsageLogUpdateOne) SetImageTaskID(v string) *UsageLogUpdateOne {
+	_u.mutation.SetImageTaskID(v)
+	return _u
+}
+
+// SetNillableImageTaskID sets the "image_task_id" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableImageTaskID(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetImageTaskID(*v)
+	}
+	return _u
+}
+
+// ClearImageTaskID clears the value of the "image_task_id" field.
+func (_u *UsageLogUpdateOne) ClearImageTaskID() *UsageLogUpdateOne {
+	_u.mutation.ClearImageTaskID()
+	return _u
+}
+
+// SetFundsEvent sets the "funds_event" field.
+func (_u *UsageLogUpdateOne) SetFundsEvent(v string) *UsageLogUpdateOne {
+	_u.mutation.SetFundsEvent(v)
+	return _u
+}
+
+// SetNillableFundsEvent sets the "funds_event" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableFundsEvent(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetFundsEvent(*v)
+	}
+	return _u
+}
+
+// ClearFundsEvent clears the value of the "funds_event" field.
+func (_u *UsageLogUpdateOne) ClearFundsEvent() *UsageLogUpdateOne {
+	_u.mutation.ClearFundsEvent()
+	return _u
+}
+
+// SetImageTaskStatus sets the "image_task_status" field.
+func (_u *UsageLogUpdateOne) SetImageTaskStatus(v string) *UsageLogUpdateOne {
+	_u.mutation.SetImageTaskStatus(v)
+	return _u
+}
+
+// SetNillableImageTaskStatus sets the "image_task_status" field if the given value is not nil.
+func (_u *UsageLogUpdateOne) SetNillableImageTaskStatus(v *string) *UsageLogUpdateOne {
+	if v != nil {
+		_u.SetImageTaskStatus(*v)
+	}
+	return _u
+}
+
+// ClearImageTaskStatus clears the value of the "image_task_status" field.
+func (_u *UsageLogUpdateOne) ClearImageTaskStatus() *UsageLogUpdateOne {
+	_u.mutation.ClearImageTaskStatus()
 	return _u
 }
 
@@ -2827,9 +2974,6 @@ func (_u *UsageLogUpdateOne) check() error {
 	if _u.mutation.APIKeyCleared() && len(_u.mutation.APIKeyIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "UsageLog.api_key"`)
 	}
-	if _u.mutation.AccountCleared() && len(_u.mutation.AccountIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "UsageLog.account"`)
-	}
 	return nil
 }
 
@@ -2861,6 +3005,24 @@ func (_u *UsageLogUpdateOne) sqlSave(ctx context.Context) (_node *UsageLog, err 
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.ImageTaskID(); ok {
+		_spec.SetField(usagelog.FieldImageTaskID, field.TypeString, value)
+	}
+	if _u.mutation.ImageTaskIDCleared() {
+		_spec.ClearField(usagelog.FieldImageTaskID, field.TypeString)
+	}
+	if value, ok := _u.mutation.FundsEvent(); ok {
+		_spec.SetField(usagelog.FieldFundsEvent, field.TypeString, value)
+	}
+	if _u.mutation.FundsEventCleared() {
+		_spec.ClearField(usagelog.FieldFundsEvent, field.TypeString)
+	}
+	if value, ok := _u.mutation.ImageTaskStatus(); ok {
+		_spec.SetField(usagelog.FieldImageTaskStatus, field.TypeString, value)
+	}
+	if _u.mutation.ImageTaskStatusCleared() {
+		_spec.ClearField(usagelog.FieldImageTaskStatus, field.TypeString)
 	}
 	if value, ok := _u.mutation.RequestID(); ok {
 		_spec.SetField(usagelog.FieldRequestID, field.TypeString, value)

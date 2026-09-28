@@ -43,8 +43,9 @@ const (
 // FileStorageConfig 是临时素材库的设置。参考素材与生成产物各有独立的保存时长与容量
 // 预算，避免客户端上传的参考素材把已经交付给下游的产物挤掉。
 type FileStorageConfig struct {
-	SchemaVersion int    `json:"schema_version"`
-	Backend       string `json:"backend"`
+	Generated     *GeneratedStorageConfig `json:"generated,omitempty"`
+	SchemaVersion int                     `json:"schema_version"`
+	Backend       string                  `json:"backend"`
 	// LocalDir 是本地素材根目录（绝对路径）。留空时用默认目录（数据目录下的
 	// agent-assets）。Docker 部署时它应当指向从宿主机 bind mount 进来的真实目录，
 	// 而不是容器内的匿名卷；脚本部署时它就是一个普通宿主机目录。
@@ -90,6 +91,8 @@ type FileStorageUsage struct {
 }
 
 type FileStorageSettings struct {
+	GeneratedDefaults         *GeneratedStorageConfig `json:"generated_defaults,omitempty"`
+	GeneratedMigrationPending bool                    `json:"generated_migration_pending"`
 	FileStorageConfig
 	Source                    string           `json:"source"`
 	LocalPath                 string           `json:"local_path"`
@@ -107,6 +110,7 @@ type FileStorageRuntime struct {
 }
 
 type FileStorageService struct {
+	legacyImages     *ImageStorageSettingService
 	db               *sql.DB
 	settingRepo      SettingRepository
 	encryptor        SecretEncryptor
@@ -225,12 +229,27 @@ func (s *FileStorageService) GetSettings(ctx context.Context) (*FileStorageSetti
 	}
 	secretConfigured := strings.TrimSpace(cfg.S3.SecretAccessKey) != ""
 	cfg.S3.SecretAccessKey = ""
+	if cfg.Generated != nil {
+		g := *cfg.Generated
+		g.SecretAccessKeyConfigured = g.S3.SecretAccessKey != ""
+		g.S3.SecretAccessKey = ""
+		cfg.Generated = &g
+	}
 	usage, err := s.Usage(ctx)
 	if err != nil {
 		return nil, err
 	}
+	defaults, err := s.GeneratedDefaults(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if defaults != nil {
+		defaults.SecretAccessKeyConfigured = defaults.S3.SecretAccessKey != ""
+		defaults.S3.SecretAccessKey = ""
+	}
 	return &FileStorageSettings{
-		FileStorageConfig:         cfg,
+		FileStorageConfig: cfg,
+		GeneratedDefaults: defaults, GeneratedMigrationPending: cfg.Generated == nil,
 		Source:                    source,
 		LocalPath:                 s.EffectiveLocalPathOrDefault(ctx),
 		SecretAccessKeyConfigured: secretConfigured,
@@ -244,6 +263,11 @@ func (s *FileStorageService) UpdateSettings(ctx context.Context, input FileStora
 	if strings.TrimSpace(input.S3.SecretAccessKey) == "" {
 		input.S3.SecretAccessKey = current.S3.SecretAccessKey
 	}
+	var err error
+	input.Generated, err = s.prepareGenerated(ctx, input.Generated, current.Generated, true)
+	if err != nil {
+		return nil, infraerrors.BadRequest("GENERATED_STORAGE_INVALID", err.Error())
+	}
 	cfg, err := normalizeFileStorageConfig(input)
 	if err != nil {
 		return nil, infraerrors.BadRequest("FILE_STORAGE_CONFIG_INVALID", err.Error())
@@ -256,6 +280,16 @@ func (s *FileStorageService) UpdateSettings(ctx context.Context, input FileStora
 	}
 
 	stored := cfg
+	if cfg.Generated != nil {
+		g := *cfg.Generated
+		stored.Generated = &g
+		if g.S3.SecretAccessKey != "" {
+			stored.Generated.S3.SecretAccessKey, err = s.encryptor.Encrypt(g.S3.SecretAccessKey)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	if stored.S3.SecretAccessKey != "" {
 		if s.encryptor == nil {
 			return nil, errors.New("file storage secret encryptor is unavailable")
@@ -283,6 +317,11 @@ func (s *FileStorageService) TestSettings(ctx context.Context, input FileStorage
 	current, _, _ := s.loadEffectiveConfig(ctx)
 	if strings.TrimSpace(input.S3.SecretAccessKey) == "" {
 		input.S3.SecretAccessKey = current.S3.SecretAccessKey
+	}
+	var err error
+	input.Generated, err = s.prepareGenerated(ctx, input.Generated, current.Generated, false)
+	if err != nil {
+		return infraerrors.BadRequest("GENERATED_STORAGE_INVALID", err.Error())
 	}
 	cfg, err := normalizeFileStorageConfig(input)
 	if err != nil {
@@ -316,6 +355,9 @@ func (s *FileStorageService) Runtime(ctx context.Context) (*FileStorageRuntime, 
 	if err != nil {
 		return nil, err
 	}
+	if override, ok := ctx.Value(generatedStorageOverrideKey{}).(*GeneratedStorageConfig); ok {
+		cfg.Generated = override
+	}
 	var store BackupObjectStore
 	if cfg.S3.IsConfigured() {
 		store, err = s.storeForConfig(ctx, cfg.S3)
@@ -323,7 +365,7 @@ func (s *FileStorageService) Runtime(ctx context.Context) (*FileStorageRuntime, 
 			return nil, err
 		}
 	}
-	return &FileStorageRuntime{Config: cfg, Store: store}, nil
+	return &FileStorageRuntime{Config: cfg, Store: &versionedAssetStore{service: s, legacy: store}}, nil
 }
 
 func (s *FileStorageService) EffectivePublicBaseURL(ctx context.Context, fallback string) (string, error) {
@@ -375,6 +417,15 @@ func (s *FileStorageService) loadEffectiveConfig(ctx context.Context) (FileStora
 				stored.S3.SecretAccessKey, err = s.encryptor.Decrypt(stored.S3.SecretAccessKey)
 				if err != nil {
 					return FileStorageConfig{}, "", fmt.Errorf("decrypt file storage secret: %w", err)
+				}
+			}
+			if stored.Generated != nil && stored.Generated.S3.SecretAccessKey != "" {
+				if s.encryptor == nil {
+					return FileStorageConfig{}, "", errors.New("generated storage encryption unavailable")
+				}
+				stored.Generated.S3.SecretAccessKey, err = s.encryptor.Decrypt(stored.Generated.S3.SecretAccessKey)
+				if err != nil {
+					return FileStorageConfig{}, "", err
 				}
 			}
 			normalized, err := normalizeFileStorageConfig(stored)
@@ -586,6 +637,11 @@ func normalizeFileStorageConfig(input FileStorageConfig) (FileStorageConfig, err
 	}
 	if input.Backend == "s3" && !input.S3.IsConfigured() {
 		return FileStorageConfig{}, errors.New("S3 backend requires bucket, access key ID, and secret access key")
+	}
+	var generatedErr error
+	input.Generated, generatedErr = normalizeGeneratedStorage(input.Generated)
+	if generatedErr != nil {
+		return FileStorageConfig{}, generatedErr
 	}
 	return input, nil
 }

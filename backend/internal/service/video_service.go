@@ -416,7 +416,19 @@ func (s *VideoService) GetTask(ctx context.Context, publicID string, apiKey *API
 	if task.APIKeyID != apiKey.ID || task.UserID != apiKey.UserID {
 		return nil, ErrVideoTaskNotFound
 	}
-	return videoResponseFromTask(task), nil
+	response := videoResponseFromTask(task)
+	if response.VideoURL != nil {
+		if refresher, ok := s.videoResultPublisher.(interface {
+			RefreshGeneratedURL(context.Context, TemporaryAssetOwner, string) (string, error)
+		}); ok {
+			fresh, err := refresher.RefreshGeneratedURL(ctx, TemporaryAssetOwner{UserID: apiKey.UserID, APIKeyID: apiKey.ID}, *response.VideoURL)
+			if err != nil {
+				return nil, err
+			}
+			response.VideoURL = &fresh
+		}
+	}
+	return response, nil
 }
 
 func (s *VideoService) selectAccountForRequest(ctx context.Context, groupID int64, normalized *normalizedVideoRequest, agentGroup bool) (*Account, error) {

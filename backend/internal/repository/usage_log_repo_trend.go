@@ -43,7 +43,7 @@ func (r *usageLogRepository) GetAPIKeyUsageTrend(ctx context.Context, startTime,
 			TO_CHAR(u.created_at, '%s') as date,
 			u.api_key_id,
 			COALESCE(k.name, '') as key_name,
-			COUNT(*) as requests,
+			COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END) as requests,
 			COALESCE(SUM(u.input_tokens + u.output_tokens + u.cache_creation_tokens + u.cache_read_tokens), 0) as tokens
 		FROM usage_logs u
 		LEFT JOIN api_keys k ON u.api_key_id = k.id
@@ -99,7 +99,7 @@ func (r *usageLogRepository) GetUserUsageTrend(ctx context.Context, startTime, e
 			u.user_id,
 			COALESCE(us.email, '') as email,
 			COALESCE(us.username, '') as username,
-			COUNT(*) as requests,
+			COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END) as requests,
 			COALESCE(SUM(u.input_tokens + u.output_tokens + u.cache_creation_tokens + u.cache_read_tokens), 0) as tokens,
 			COALESCE(SUM(u.total_cost), 0) as cost,
 			COALESCE(SUM(u.actual_cost), 0) as actual_cost
@@ -152,7 +152,7 @@ func (r *usageLogRepository) GetUserSpendingRanking(ctx context.Context, startTi
 				COALESCE(us.email, '') as email,
 				COALESCE(us.username, '') as username,
 				COALESCE(SUM(u.actual_cost), 0) as actual_cost,
-				COUNT(*) as requests,
+				COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END) as requests,
 				COALESCE(SUM(u.input_tokens + u.output_tokens + u.cache_creation_tokens + u.cache_read_tokens), 0) as tokens
 			FROM usage_logs u
 			LEFT JOIN users us ON u.user_id = us.id
@@ -229,7 +229,7 @@ func (r *usageLogRepository) GetUserUsageTrendByUserID(ctx context.Context, user
 	query := fmt.Sprintf(`
 		SELECT
 			TO_CHAR(created_at, '%s') as date,
-			COUNT(*) as requests,
+			COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END) as requests,
 			COALESCE(SUM(input_tokens), 0) as input_tokens,
 			COALESCE(SUM(output_tokens), 0) as output_tokens,
 			COALESCE(SUM(cache_creation_tokens), 0) as cache_creation_tokens,
@@ -290,7 +290,7 @@ func (r *usageLogRepository) getUsageTrendWithFilters(ctx context.Context, start
 	query := fmt.Sprintf(`
 		SELECT
 			TO_CHAR(created_at, '%s') as date,
-			COUNT(*) as requests,
+			COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END) as requests,
 			COALESCE(SUM(input_tokens), 0) as input_tokens,
 			COALESCE(SUM(output_tokens), 0) as output_tokens,
 			COALESCE(SUM(cache_creation_tokens), 0) as cache_creation_tokens,
@@ -456,7 +456,7 @@ func (r *usageLogRepository) getModelStatsWithFiltersBySource(ctx context.Contex
 	query := fmt.Sprintf(`
 		SELECT
 			%s as model,
-			COUNT(*) as requests,
+			COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END) as requests,
 			COALESCE(SUM(input_tokens), 0) as input_tokens,
 			COALESCE(SUM(output_tokens), 0) as output_tokens,
 			COALESCE(SUM(cache_creation_tokens), 0) as cache_creation_tokens,
@@ -536,7 +536,7 @@ func (r *usageLogRepository) getGroupStatsWithFilters(ctx context.Context, start
 		SELECT
 			COALESCE(ul.group_id, 0) as group_id,
 			COALESCE(g.name, '') as group_name,
-			COUNT(*) as requests,
+			COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END) as requests,
 			COALESCE(SUM(ul.input_tokens + ul.output_tokens + ul.cache_creation_tokens + ul.cache_read_tokens), 0) as total_tokens,
 			COALESCE(SUM(ul.total_cost), 0) as cost,
 			COALESCE(SUM(ul.actual_cost), 0) as actual_cost,
@@ -619,7 +619,7 @@ func (r *usageLogRepository) GetUserBreakdownStats(ctx context.Context, startTim
 		SELECT
 			COALESCE(ul.user_id, 0) as user_id,
 			COALESCE(u.email, '') as email,
-			COUNT(*) as requests,
+			COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END) as requests,
 			COALESCE(SUM(ul.input_tokens), 0) as input_tokens,
 			COALESCE(SUM(ul.output_tokens), 0) as output_tokens,
 			COALESCE(SUM(ul.cache_creation_tokens + ul.cache_read_tokens), 0) as cache_tokens,

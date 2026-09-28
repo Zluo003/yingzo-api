@@ -283,6 +283,7 @@ type RateLimitCacheInvalidator interface {
 }
 
 type APIKeyService struct {
+	imageTaskLookup           func(context.Context, int64, string) bool
 	apiKeyRepo                APIKeyRepository
 	userRepo                  UserRepository
 	groupRepo                 GroupRepository
@@ -1188,4 +1189,8 @@ func (s *APIKeyService) UpdateRateLimitUsage(ctx context.Context, apiKeyID int64
 		return nil
 	}
 	return s.apiKeyRepo.IncrementRateLimitUsage(ctx, apiKeyID, cost)
+}
+
+func (s *APIKeyService) HasAcceptedImageTask(ctx context.Context, keyID int64, key string) bool {
+	return key != "" && s.imageTaskLookup != nil && s.imageTaskLookup(ctx, keyID, key)
 }

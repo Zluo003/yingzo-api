@@ -70,6 +70,21 @@ func AccountID(v int64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldAccountID, v))
 }
 
+// ImageTaskID applies equality check predicate on the "image_task_id" field. It's identical to ImageTaskIDEQ.
+func ImageTaskID(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldImageTaskID, v))
+}
+
+// FundsEvent applies equality check predicate on the "funds_event" field. It's identical to FundsEventEQ.
+func FundsEvent(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFundsEvent, v))
+}
+
+// ImageTaskStatus applies equality check predicate on the "image_task_status" field. It's identical to ImageTaskStatusEQ.
+func ImageTaskStatus(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldImageTaskStatus, v))
+}
+
 // RequestID applies equality check predicate on the "request_id" field. It's identical to RequestIDEQ.
 func RequestID(v string) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldEQ(FieldRequestID, v))
@@ -363,6 +378,241 @@ func AccountIDIn(vs ...int64) predicate.UsageLog {
 // AccountIDNotIn applies the NotIn predicate on the "account_id" field.
 func AccountIDNotIn(vs ...int64) predicate.UsageLog {
 	return predicate.UsageLog(sql.FieldNotIn(FieldAccountID, vs...))
+}
+
+// AccountIDIsNil applies the IsNil predicate on the "account_id" field.
+func AccountIDIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldAccountID))
+}
+
+// AccountIDNotNil applies the NotNil predicate on the "account_id" field.
+func AccountIDNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldAccountID))
+}
+
+// ImageTaskIDEQ applies the EQ predicate on the "image_task_id" field.
+func ImageTaskIDEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldImageTaskID, v))
+}
+
+// ImageTaskIDNEQ applies the NEQ predicate on the "image_task_id" field.
+func ImageTaskIDNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldImageTaskID, v))
+}
+
+// ImageTaskIDIn applies the In predicate on the "image_task_id" field.
+func ImageTaskIDIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldImageTaskID, vs...))
+}
+
+// ImageTaskIDNotIn applies the NotIn predicate on the "image_task_id" field.
+func ImageTaskIDNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldImageTaskID, vs...))
+}
+
+// ImageTaskIDGT applies the GT predicate on the "image_task_id" field.
+func ImageTaskIDGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldImageTaskID, v))
+}
+
+// ImageTaskIDGTE applies the GTE predicate on the "image_task_id" field.
+func ImageTaskIDGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldImageTaskID, v))
+}
+
+// ImageTaskIDLT applies the LT predicate on the "image_task_id" field.
+func ImageTaskIDLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldImageTaskID, v))
+}
+
+// ImageTaskIDLTE applies the LTE predicate on the "image_task_id" field.
+func ImageTaskIDLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldImageTaskID, v))
+}
+
+// ImageTaskIDContains applies the Contains predicate on the "image_task_id" field.
+func ImageTaskIDContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldImageTaskID, v))
+}
+
+// ImageTaskIDHasPrefix applies the HasPrefix predicate on the "image_task_id" field.
+func ImageTaskIDHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldImageTaskID, v))
+}
+
+// ImageTaskIDHasSuffix applies the HasSuffix predicate on the "image_task_id" field.
+func ImageTaskIDHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldImageTaskID, v))
+}
+
+// ImageTaskIDIsNil applies the IsNil predicate on the "image_task_id" field.
+func ImageTaskIDIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldImageTaskID))
+}
+
+// ImageTaskIDNotNil applies the NotNil predicate on the "image_task_id" field.
+func ImageTaskIDNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldImageTaskID))
+}
+
+// ImageTaskIDEqualFold applies the EqualFold predicate on the "image_task_id" field.
+func ImageTaskIDEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldImageTaskID, v))
+}
+
+// ImageTaskIDContainsFold applies the ContainsFold predicate on the "image_task_id" field.
+func ImageTaskIDContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldImageTaskID, v))
+}
+
+// FundsEventEQ applies the EQ predicate on the "funds_event" field.
+func FundsEventEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldFundsEvent, v))
+}
+
+// FundsEventNEQ applies the NEQ predicate on the "funds_event" field.
+func FundsEventNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldFundsEvent, v))
+}
+
+// FundsEventIn applies the In predicate on the "funds_event" field.
+func FundsEventIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldFundsEvent, vs...))
+}
+
+// FundsEventNotIn applies the NotIn predicate on the "funds_event" field.
+func FundsEventNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldFundsEvent, vs...))
+}
+
+// FundsEventGT applies the GT predicate on the "funds_event" field.
+func FundsEventGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldFundsEvent, v))
+}
+
+// FundsEventGTE applies the GTE predicate on the "funds_event" field.
+func FundsEventGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldFundsEvent, v))
+}
+
+// FundsEventLT applies the LT predicate on the "funds_event" field.
+func FundsEventLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldFundsEvent, v))
+}
+
+// FundsEventLTE applies the LTE predicate on the "funds_event" field.
+func FundsEventLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldFundsEvent, v))
+}
+
+// FundsEventContains applies the Contains predicate on the "funds_event" field.
+func FundsEventContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldFundsEvent, v))
+}
+
+// FundsEventHasPrefix applies the HasPrefix predicate on the "funds_event" field.
+func FundsEventHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldFundsEvent, v))
+}
+
+// FundsEventHasSuffix applies the HasSuffix predicate on the "funds_event" field.
+func FundsEventHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldFundsEvent, v))
+}
+
+// FundsEventIsNil applies the IsNil predicate on the "funds_event" field.
+func FundsEventIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldFundsEvent))
+}
+
+// FundsEventNotNil applies the NotNil predicate on the "funds_event" field.
+func FundsEventNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldFundsEvent))
+}
+
+// FundsEventEqualFold applies the EqualFold predicate on the "funds_event" field.
+func FundsEventEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldFundsEvent, v))
+}
+
+// FundsEventContainsFold applies the ContainsFold predicate on the "funds_event" field.
+func FundsEventContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldFundsEvent, v))
+}
+
+// ImageTaskStatusEQ applies the EQ predicate on the "image_task_status" field.
+func ImageTaskStatusEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEQ(FieldImageTaskStatus, v))
+}
+
+// ImageTaskStatusNEQ applies the NEQ predicate on the "image_task_status" field.
+func ImageTaskStatusNEQ(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNEQ(FieldImageTaskStatus, v))
+}
+
+// ImageTaskStatusIn applies the In predicate on the "image_task_status" field.
+func ImageTaskStatusIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIn(FieldImageTaskStatus, vs...))
+}
+
+// ImageTaskStatusNotIn applies the NotIn predicate on the "image_task_status" field.
+func ImageTaskStatusNotIn(vs ...string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotIn(FieldImageTaskStatus, vs...))
+}
+
+// ImageTaskStatusGT applies the GT predicate on the "image_task_status" field.
+func ImageTaskStatusGT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGT(FieldImageTaskStatus, v))
+}
+
+// ImageTaskStatusGTE applies the GTE predicate on the "image_task_status" field.
+func ImageTaskStatusGTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldGTE(FieldImageTaskStatus, v))
+}
+
+// ImageTaskStatusLT applies the LT predicate on the "image_task_status" field.
+func ImageTaskStatusLT(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLT(FieldImageTaskStatus, v))
+}
+
+// ImageTaskStatusLTE applies the LTE predicate on the "image_task_status" field.
+func ImageTaskStatusLTE(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldLTE(FieldImageTaskStatus, v))
+}
+
+// ImageTaskStatusContains applies the Contains predicate on the "image_task_status" field.
+func ImageTaskStatusContains(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContains(FieldImageTaskStatus, v))
+}
+
+// ImageTaskStatusHasPrefix applies the HasPrefix predicate on the "image_task_status" field.
+func ImageTaskStatusHasPrefix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasPrefix(FieldImageTaskStatus, v))
+}
+
+// ImageTaskStatusHasSuffix applies the HasSuffix predicate on the "image_task_status" field.
+func ImageTaskStatusHasSuffix(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldHasSuffix(FieldImageTaskStatus, v))
+}
+
+// ImageTaskStatusIsNil applies the IsNil predicate on the "image_task_status" field.
+func ImageTaskStatusIsNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldIsNull(FieldImageTaskStatus))
+}
+
+// ImageTaskStatusNotNil applies the NotNil predicate on the "image_task_status" field.
+func ImageTaskStatusNotNil() predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldNotNull(FieldImageTaskStatus))
+}
+
+// ImageTaskStatusEqualFold applies the EqualFold predicate on the "image_task_status" field.
+func ImageTaskStatusEqualFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldEqualFold(FieldImageTaskStatus, v))
+}
+
+// ImageTaskStatusContainsFold applies the ContainsFold predicate on the "image_task_status" field.
+func ImageTaskStatusContainsFold(v string) predicate.UsageLog {
+	return predicate.UsageLog(sql.FieldContainsFold(FieldImageTaskStatus, v))
 }
 
 // RequestIDEQ applies the EQ predicate on the "request_id" field.

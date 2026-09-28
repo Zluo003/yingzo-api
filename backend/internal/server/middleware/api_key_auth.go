@@ -169,7 +169,9 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// Async image task polling only reads data that already belongs to the
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
-		skipBilling := c.Request.URL.Path == "/v1/usage" || c.Request.URL.Path == "/v1/account" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		replay := isAsyncImageSubmission(c.Request.Method, c.Request.URL.Path, c.GetHeader("Prefer")) && apiKeyService.HasAcceptedImageTask(c.Request.Context(), apiKey.ID, c.GetHeader("Idempotency-Key"))
+		c.Set(ContextKeyAsyncImageTaskReplay, replay)
+		skipBilling := service.IsAsyncImageExecution(c.Request.Context()) || replay || c.Request.URL.Path == "/v1/usage" || c.Request.URL.Path == "/v1/account" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
@@ -327,6 +329,30 @@ func isOpenAICompatibleAPIKeyRequest(c *gin.Context) bool {
 		"/backend-api/codex/responses",
 	} {
 		if path == root || strings.HasPrefix(path, root+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+const ContextKeyAsyncImageTaskReplay = "async_image_accepted_replay"
+
+func isAsyncImageSubmission(method, path, prefer string) bool {
+	if method != http.MethodPost {
+		return false
+	}
+	explicit := strings.HasSuffix(path, "/async")
+	base := strings.TrimSuffix(path, "/async")
+	nativeGemini := strings.HasPrefix(base, "/v1beta/models/") && strings.HasSuffix(base, ":generateContent") && !explicit
+	if base != "/v1/images/generations" && base != "/v1/images/edits" &&
+		base != "/images/generations" && base != "/images/edits" && !nativeGemini {
+		return false
+	}
+	if explicit {
+		return true
+	}
+	for _, value := range strings.Split(prefer, ",") {
+		if strings.EqualFold(strings.TrimSpace(strings.SplitN(value, ";", 2)[0]), "respond-async") {
 			return true
 		}
 	}

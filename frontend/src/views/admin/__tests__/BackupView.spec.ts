@@ -77,6 +77,7 @@ function mountBackupView() {
     global: {
       stubs: {
         TotpStepUpDialog: true,
+        RouterLink: { template: '<a :href="to"><slot /></a>', props: ['to'] },
       },
     },
   })
