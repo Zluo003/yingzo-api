@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,6 +23,8 @@ type videoFailoverServer struct {
 	createCalls atomic.Int64
 	pollCalls   atomic.Int64
 	server      *httptest.Server
+	onRequest   func(*http.Request)
+	pollStatus  int
 }
 
 func newVideoFailoverServer(t *testing.T, createStatus int, createBody string, pollBody string) *videoFailoverServer {
@@ -28,14 +32,23 @@ func newVideoFailoverServer(t *testing.T, createStatus int, createBody string, p
 	fake := &videoFailoverServer{}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/videos", func(w http.ResponseWriter, r *http.Request) {
+		if fake.onRequest != nil {
+			fake.onRequest(r)
+		}
 		fake.createCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(createStatus)
 		_, _ = w.Write([]byte(createBody))
 	})
 	mux.HandleFunc("GET /v1/videos/", func(w http.ResponseWriter, r *http.Request) {
+		if fake.onRequest != nil {
+			fake.onRequest(r)
+		}
 		fake.pollCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
+		if fake.pollStatus != 0 {
+			w.WriteHeader(fake.pollStatus)
+		}
 		_, _ = w.Write([]byte(pollBody))
 	})
 	fake.server = httptest.NewServer(mux)
@@ -160,6 +173,189 @@ func TestVideoCreateFailoverSwitchesToNextCapableAccount(t *testing.T) {
 	last := usageLogs.videoResultUpdates[len(usageLogs.videoResultUpdates)-1]
 	require.NotNil(t, last.update.AccountID)
 	require.Equal(t, int64(31), *last.update.AccountID)
+}
+
+func TestVideoConfirmedFailureRetriesByPriorityWithoutRebilling(t *testing.T) {
+	upstreamA := newVideoFailoverServer(t, http.StatusOK, `{"id":"task-a","status":"queued"}`, `{"id":"task-a","status":"failed","error":{"code":"InternalError"}}`)
+	upstreamB := newVideoFailoverServer(t, http.StatusOK, `{"id":"task-b","status":"queued"}`, `{"id":"task-b","status":"failed"}`)
+	upstreamC := newVideoFailoverServer(t, http.StatusOK, `{"id":"task-c","status":"queued"}`, `{"id":"task-c","status":"completed","video_url":"https://media.example/result.mp4"}`)
+	accounts := []Account{
+		newVideoFailoverAccount(32, 20, upstreamC.server.URL, map[string]any{"poll_interval_ms": 5}),
+		newVideoFailoverAccount(30, 0, upstreamA.server.URL, map[string]any{"poll_interval_ms": 5}),
+		newVideoFailoverAccount(31, 10, upstreamB.server.URL, map[string]any{"poll_interval_ms": 5}),
+	}
+	for i := range accounts {
+		accounts[i].Credentials["api_key"] = fmt.Sprintf("key-%d", accounts[i].ID)
+	}
+	service, taskRepo, logs, billing := newVideoFailoverService(t, accounts, newVideoFailoverPricing(VideoResolution720P, 0.2))
+	publisher := &videoFailoverPublisher{recordingVideoResultPublisher: recordingVideoResultPublisher{returnedURL: "https://gateway.example/result.mp4"}}
+	service.SetVideoResultPublisher(publisher)
+	events := make(chan string, 6)
+	var publicID string
+	for i, upstream := range []*videoFailoverServer{upstreamA, upstreamB, upstreamC} {
+		accountID := int64(30 + i)
+		upstream.onRequest = func(r *http.Request) {
+			events <- fmt.Sprintf("%d %s %s %s", accountID, r.Method, r.URL.Path, r.Header.Get("Authorization"))
+			// No intermediate refund, reference cleanup or downstream terminal state.
+			task, err := taskRepo.GetByPublicID(r.Context(), publicID)
+			assert.NoError(t, err)
+			assert.Nil(t, task.RefundedAt)
+			assert.NotEqual(t, VideoTaskStatusFailed, task.Status)
+			assert.Zero(t, publisher.releases.Load())
+			if r.Method == http.MethodGet {
+				assert.Equal(t, accountID, task.AccountID)
+				assert.Equal(t, "/v1/videos/"+*task.UpstreamTaskID, r.URL.Path)
+			}
+		}
+	}
+	// Run the lifecycle synchronously so billing assertions do not race its tail.
+	service.startLifecycleFunc = func(input VideoTaskLifecycleInput) {
+		publicID = input.PublicID
+		service.runLifecycle(input)
+	}
+	input := newVideoFailoverCreateInput(VideoResolution720P)
+	input.Request.AbilityCode = videoAbilityReferenceToVideo
+	input.Request.Content = []VideoContent{{Type: "image_url", ImageURL: &VideoContentURL{URL: "https://gateway.example/reference.png"}}}
+	resp, err := service.CreateTask(context.Background(), input)
+	require.NoError(t, err)
+	task := waitForVideoTaskStatus(t, taskRepo, resp.ID, VideoTaskStatusCompleted)
+	require.Equal(t, publicID, resp.ID)
+	require.Equal(t, int64(32), task.AccountID)
+	require.Equal(t, "task-c", *task.UpstreamTaskID)
+	require.Nil(t, task.RefundedAt)
+	require.Len(t, billing.commands, 1, "account failover must retain the original precharge")
+	require.Len(t, logs.logs, 1)
+	require.Equal(t, int64(1), publisher.releases.Load(), "release references only after final success")
+	require.Equal(t, int64(1), upstreamA.createCalls.Load())
+	require.Equal(t, int64(1), upstreamB.createCalls.Load())
+	require.Equal(t, int64(1), upstreamC.createCalls.Load())
+	for _, expected := range []string{
+		"30 POST /v1/videos Bearer key-30", "30 GET /v1/videos/task-a Bearer key-30",
+		"31 POST /v1/videos Bearer key-31", "31 GET /v1/videos/task-b Bearer key-31",
+		"32 POST /v1/videos Bearer key-32", "32 GET /v1/videos/task-c Bearer key-32",
+	} {
+		select {
+		case event := <-events:
+			require.Equal(t, expected, event)
+		default:
+			t.Fatalf("missing upstream request %s", expected)
+		}
+	}
+}
+
+type videoFailoverPublisher struct {
+	recordingVideoResultPublisher
+	releases atomic.Int64
+}
+
+func (p *videoFailoverPublisher) ReleaseTaskReferenceAssets(context.Context, *APIKey, []VideoContent) {
+	p.releases.Add(1)
+}
+
+func TestVideoConfirmedFailureExhaustionRefundsOnce(t *testing.T) {
+	for _, mixed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("mixed_create_and_generation_failures=%t", mixed), func(t *testing.T) {
+			var upstreams []*videoFailoverServer
+			var accounts []Account
+			for i := 0; i < MediaFailoverMaxAccounts+1; i++ {
+				status := http.StatusOK
+				if mixed && i != 1 {
+					status = http.StatusServiceUnavailable
+				}
+				upstream := newVideoFailoverServer(t, status, fmt.Sprintf(`{"id":"task-%d"}`, i), `{"status":"failed"}`)
+				upstreams = append(upstreams, upstream)
+				accounts = append(accounts, newVideoFailoverAccount(int64(30+i), i, upstream.server.URL, map[string]any{"poll_interval_ms": 5}))
+			}
+			service, repo, logs, billing := newVideoFailoverService(t, accounts, newVideoFailoverPricing(VideoResolution720P, 0.2))
+			service.startLifecycleFunc = service.runLifecycle
+			resp, err := service.CreateTask(context.Background(), newVideoFailoverCreateInput(VideoResolution720P))
+			require.NoError(t, err)
+			task := waitForVideoTaskStatus(t, repo, resp.ID, VideoTaskStatusFailed)
+			require.NotNil(t, task.RefundedAt)
+			require.Equal(t, int64(32), task.AccountID)
+			if mixed {
+				require.Empty(t, *task.UpstreamTaskID, "failed creation must not keep the previous account's ID")
+			} else {
+				require.Equal(t, "task-2", *task.UpstreamTaskID)
+			}
+			require.Len(t, billing.commands, 2, "one precharge and one refund, across all attempts")
+			require.InDelta(t, 0, billing.commands[0].BalanceCost+billing.commands[1].BalanceCost, 1e-8)
+			require.Equal(t, "video:"+resp.ID+":refund", billing.commands[1].RequestID)
+			require.Len(t, logs.logs, 2)
+			require.InDelta(t, 0, logs.logs[0].ActualCost+logs.logs[1].ActualCost, 1e-8)
+			for i, upstream := range upstreams {
+				want := int64(1)
+				if i == MediaFailoverMaxAccounts {
+					want = 0
+				}
+				require.Equal(t, want, upstream.createCalls.Load())
+			}
+		})
+	}
+}
+
+func TestVideoConfirmedFailureDoesNotRetryTerminalInputErrors(t *testing.T) {
+	for _, body := range []string{
+		`{"status":"cancelled"}`,
+		`{"status":"failed","error":{"code":"ContentPolicyViolation"}}`,
+		`{"status":"failed","error":{"code":"InvalidParameter"}}`,
+		`{"status":"failed","error":{"status_code":400}}`,
+	} {
+		t.Run(body, func(t *testing.T) {
+			upstreamA := newVideoFailoverServer(t, http.StatusOK, `{"id":"task-a"}`, body)
+			upstreamB := newVideoFailoverServer(t, http.StatusOK, `{"id":"task-b"}`, `{"status":"failed"}`)
+			service, repo, _, billing := newVideoFailoverService(t, []Account{
+				newVideoFailoverAccount(30, 0, upstreamA.server.URL, map[string]any{"poll_interval_ms": 5}),
+				newVideoFailoverAccount(31, 10, upstreamB.server.URL, nil),
+			}, newVideoFailoverPricing(VideoResolution720P, 0.2))
+			service.startLifecycleFunc = service.runLifecycle
+			resp, err := service.CreateTask(context.Background(), newVideoFailoverCreateInput(VideoResolution720P))
+			require.NoError(t, err)
+			task := waitForVideoTaskStatus(t, repo, resp.ID, VideoTaskStatusFailed, VideoTaskStatusCancelled)
+			require.NotNil(t, task.RefundedAt)
+			require.Zero(t, upstreamB.createCalls.Load())
+			require.Len(t, billing.commands, 2)
+		})
+	}
+}
+
+func TestVideoConfirmedFailureRespectsNextAccountCapability(t *testing.T) {
+	upstreamA := newVideoFailoverServer(t, http.StatusOK, `{"id":"task-a"}`, `{"status":"failed"}`)
+	upstreamB := newVideoFailoverServer(t, http.StatusOK, `{"id":"task-b"}`, `{"status":"failed"}`)
+	service, repo, _, billing := newVideoFailoverService(t, []Account{
+		newVideoFailoverAccount(30, 0, upstreamA.server.URL, map[string]any{"poll_interval_ms": 5}),
+		newVideoFailoverAccount(31, 10, upstreamB.server.URL, map[string]any{
+			"video_model_resolutions": map[string]any{VideoModelSeedance20: []any{VideoResolution720P}},
+		}),
+	}, newVideoFailoverPricing(VideoResolution1080P, 0.4))
+	service.startLifecycleFunc = service.runLifecycle
+	resp, err := service.CreateTask(context.Background(), newVideoFailoverCreateInput(VideoResolution1080P))
+	require.NoError(t, err)
+	task := waitForVideoTaskStatus(t, repo, resp.ID, VideoTaskStatusFailed)
+	require.NotNil(t, task.RefundedAt)
+	require.Zero(t, upstreamB.createCalls.Load())
+	require.Len(t, billing.commands, 2)
+}
+
+func TestVideoUnknownPollOutcomeNeverResubmits(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusServiceUnavailable, http.StatusOK} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			upstreamA := newVideoFailoverServer(t, http.StatusOK, `{"id":"task-a"}`, `{"status":"processing"}`)
+			upstreamA.pollStatus = status
+			upstreamB := newVideoFailoverServer(t, http.StatusOK, `{"id":"task-b"}`, `{"status":"failed"}`)
+			service, repo, _, billing := newVideoFailoverService(t, []Account{
+				newVideoFailoverAccount(30, 0, upstreamA.server.URL, map[string]any{"poll_interval_ms": 5, "poll_timeout_ms": 50}),
+				newVideoFailoverAccount(31, 10, upstreamB.server.URL, nil),
+			}, newVideoFailoverPricing(VideoResolution720P, 0.2))
+			service.startLifecycleFunc = service.runLifecycle
+			resp, err := service.CreateTask(context.Background(), newVideoFailoverCreateInput(VideoResolution720P))
+			require.NoError(t, err)
+			task := waitForVideoTaskStatus(t, repo, resp.ID, VideoTaskStatusFailed)
+			require.Equal(t, "task-a", *task.UpstreamTaskID)
+			require.Zero(t, upstreamB.createCalls.Load(), "unknown upstream state must not trigger a duplicate generation")
+			require.Len(t, billing.commands, 2)
+		})
+	}
 }
 
 func TestVideoCreateFailoverRespectsResolutionCapability(t *testing.T) {

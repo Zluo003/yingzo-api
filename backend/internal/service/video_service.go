@@ -598,6 +598,9 @@ func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, u
 	rawStatus := stringFromMap(payload, "status")
 	status := normalizeVideoUpstreamStatus(rawStatus)
 	result := &videoPollResult{Status: status}
+	if status == VideoTaskStatusFailed {
+		result.Failure = videoTaskFailure(payload)
+	}
 	if status == VideoTaskStatusCompleted {
 		// 成片地址由适配器决定：多数上游把地址放在状态响应里，mikuapi 只提供
 		// /v1/videos/{id}/content，需要按任务 id 拼出来。注意这里传的是**基础**
@@ -630,101 +633,111 @@ func (s *VideoService) startLifecycle(input VideoTaskLifecycleInput) {
 	if s == nil || input.Account == nil || input.APIKey == nil || strings.TrimSpace(input.PublicID) == "" {
 		return
 	}
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("video lifecycle panic", "task_id", input.PublicID, "panic", r)
-			}
-		}()
-
-		// 媒体故障转移：创建上游任务失败且属于可切换故障（401/402/403/404/408/
-		// 425/429/5xx/网络错误）时，排除已失败账号重选下一个满足能力要求的上游
-		// 重新创建，最多尝试 MediaFailoverMaxAccounts 个；内容类错误（400/451，
-		// 换上游结果相同）或没有更多候选时，直接按最后一个上游的错误判失败并退费。
-		account := input.Account
-		upstreamBody := input.UpstreamBody
-		upstreamEndpoint := input.UpstreamEndpoint
-		excluded := make(map[int64]struct{})
-		switchedUpstream := false
-		var lastCreateErr error
-		for attempt := 1; ; attempt++ {
-			created, err := s.createUpstreamTask(context.Background(), account, upstreamBody)
-			if err == nil {
-				if switchedUpstream {
-					s.reattributeVideoTaskAfterFailover(context.Background(), input, account)
-				}
-				processingStatus := VideoTaskStatusProcessing
-				if _, err := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
-					Status:         &processingStatus,
-					UpstreamTaskID: &created.ID,
-				}); err != nil {
-					slog.Warn("video task submit state update failed", "task_id", input.PublicID, "error", err)
-					return
-				}
-				s.pollLifecycle(input, created.ID)
-				return
-			}
-			lastCreateErr = err
-			s.recordVideoAccountFailure(context.Background(), account, mapVideoUpstreamError(err, false), err)
-			if attempt >= MediaFailoverMaxAccounts || input.Normalized == nil || !isVideoCreateFailoverError(err) {
-				break
-			}
-			excluded[account.ID] = struct{}{}
-			next, selErr := s.selectAccountForRequestWithExclusion(context.Background(), input.GroupID, input.Normalized, input.AgentGroup, excluded)
-			if selErr != nil {
-				// 没有更多满足能力要求的上游：按最后一个上游的错误判失败。
-				slog.Info("video create failover exhausted: no more capable accounts",
-					"task_id", input.PublicID,
-					"model", input.Normalized.Model,
-					"tried_accounts", len(excluded),
-					"error", err)
-				break
-			}
-			upstreamModel := videoUpstreamModelForAccount(next, input.Normalized)
-			upstreamBody = videoUpstreamBodyForAccount(next, input.Normalized, upstreamModel)
-			if accountEndpoint := videoAccountAPIPath(next); accountEndpoint != "" {
-				upstreamEndpoint = normalizedVideoEndpoint(accountEndpoint)
-			}
-			account = next
-			input.Account = account
-			input.UpstreamEndpoint = upstreamEndpoint
-			switchedUpstream = true
-			slog.Warn("video create failover switching account",
-				"task_id", input.PublicID,
-				"model", input.Normalized.Model,
-				"next_account_id", account.ID,
-				"attempt", attempt+1,
-				"max_attempts", MediaFailoverMaxAccounts,
-				"error", err)
-		}
-
-		clientErr := mapVideoUpstreamError(lastCreateErr, false)
-		if switchedUpstream {
-			s.reattributeVideoTaskAfterFailover(context.Background(), input, account)
-		}
-		task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
-			Status:    stringPtr(VideoTaskStatusFailed),
-			ErrorJSON: videoErrorJSON(clientErr.VideoClientError),
-		})
-		_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
-		s.releaseTaskReferenceAssets(input)
-	}()
+	go s.runLifecycle(input)
 }
 
-// reattributeVideoTaskAfterFailover 在创建阶段切换上游后，把任务记录与计费流水
-// 的账号/上游模型归属修正为实际服务本任务的上游。
-func (s *VideoService) reattributeVideoTaskAfterFailover(ctx context.Context, input VideoTaskLifecycleInput, account *Account) {
+func (s *VideoService) runLifecycle(input VideoTaskLifecycleInput) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("video lifecycle panic", "task_id", input.PublicID, "panic", r)
+		}
+	}()
+
+	// 创建失败或上游明确报告生成失败，共用一次账号尝试预算。每次换号都重新
+	// 创建上游任务；仅网关任务 ID 和预扣保持不变。查询故障不能触发重新生成。
+	account := input.Account
+	upstreamBody := input.UpstreamBody
+	upstreamEndpoint := input.UpstreamEndpoint
+	excluded := make(map[int64]struct{})
+	switchedUpstream := false
+	var lastErr error
+	var upstreamTaskID string
+	for attempt := 1; ; attempt++ {
+		upstreamTaskID = ""
+		created, err := s.createUpstreamTask(context.Background(), account, upstreamBody)
+		if err == nil {
+			upstreamTaskID = created.ID
+			upstreamModel := stringFromMap(upstreamBody, "model")
+			processingStatus := VideoTaskStatusProcessing
+			if _, err := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
+				Status:         &processingStatus,
+				UpstreamTaskID: &created.ID,
+				AccountID:      &account.ID,
+				UpstreamModel:  &upstreamModel,
+			}); err != nil {
+				slog.Warn("video task submit state update failed", "task_id", input.PublicID, "error", err)
+				return
+			}
+			if switchedUpstream {
+				s.reattributeVideoUsageAfterFailover(context.Background(), input, account)
+			}
+			err = s.pollLifecycle(input, created.ID)
+			if err == nil {
+				return
+			}
+		}
+		lastErr = err
+		s.recordVideoAccountFailure(context.Background(), account, mapVideoUpstreamError(err, false), err)
+		if attempt >= MediaFailoverMaxAccounts || input.Normalized == nil || !isVideoCreateFailoverError(err) {
+			break
+		}
+		excluded[account.ID] = struct{}{}
+		next, selErr := s.selectAccountForRequestWithExclusion(context.Background(), input.GroupID, input.Normalized, input.AgentGroup, excluded)
+		if selErr != nil {
+			// 没有更多满足能力要求的上游：按最后一个上游的错误判失败。
+			slog.Info("video failover exhausted: no more capable accounts",
+				"task_id", input.PublicID,
+				"model", input.Normalized.Model,
+				"tried_accounts", len(excluded),
+				"error", err)
+			break
+		}
+		upstreamModel := videoUpstreamModelForAccount(next, input.Normalized)
+		upstreamBody = videoUpstreamBodyForAccount(next, input.Normalized, upstreamModel)
+		if accountEndpoint := videoAccountAPIPath(next); accountEndpoint != "" {
+			upstreamEndpoint = normalizedVideoEndpoint(accountEndpoint)
+		}
+		previousAccountID := account.ID
+		account = next
+		input.Account = account
+		input.UpstreamBody = upstreamBody
+		input.UpstreamEndpoint = upstreamEndpoint
+		switchedUpstream = true
+		slog.Warn("video failover switching account",
+			"task_id", input.PublicID,
+			"model", input.Normalized.Model,
+			"previous_account_id", previousAccountID,
+			"previous_upstream_task_id", upstreamTaskID,
+			"next_account_id", account.ID,
+			"attempt", attempt+1,
+			"max_attempts", MediaFailoverMaxAccounts,
+			"error", err)
+	}
+
+	clientErr := mapVideoUpstreamError(lastErr, false)
+	upstreamModel := stringFromMap(upstreamBody, "model")
+	// 账号和任务 ID 必须一起写入。最后一次创建失败时清空旧账号的上游 ID。
+	task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
+		Status:         stringPtr(VideoTaskStatusFailed),
+		ErrorJSON:      videoErrorJSON(clientErr.VideoClientError),
+		AccountID:      &account.ID,
+		UpstreamModel:  &upstreamModel,
+		UpstreamTaskID: &upstreamTaskID,
+	})
+	if switchedUpstream {
+		s.reattributeVideoUsageAfterFailover(context.Background(), input, account)
+	}
+	_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
+	s.releaseTaskReferenceAssets(input)
+}
+
+// 任务的账号和上游 ID 已原子更新，再同步原预扣流水的实际账号/模型归属。
+func (s *VideoService) reattributeVideoUsageAfterFailover(ctx context.Context, input VideoTaskLifecycleInput, account *Account) {
 	if s == nil || input.APIKey == nil {
 		return
 	}
 	upstreamModel := videoUpstreamModelForAccount(account, input.Normalized)
 	accountID := account.ID
-	if _, err := s.taskRepo.UpdateByPublicID(ctx, input.PublicID, VideoTaskUpdate{
-		AccountID:     &accountID,
-		UpstreamModel: &upstreamModel,
-	}); err != nil {
-		slog.Warn("video failover task reattribution failed", "task_id", input.PublicID, "error", err)
-	}
 	if updater, ok := s.usageLogRepo.(VideoUsageResultUpdater); ok {
 		if err := updater.UpdateVideoResult(ctx, "video:"+input.PublicID, input.APIKey.ID, VideoUsageResultUpdate{
 			AccountID:     &accountID,
@@ -740,7 +753,7 @@ func (s *VideoService) reattributeVideoTaskAfterFailover(ctx context.Context, in
 // 算上游侧故障；本地构造错误（非 videoUpstreamError）不切换。
 func isVideoCreateFailoverError(err error) bool {
 	var upstreamErr *videoUpstreamError
-	if !errors.As(err, &upstreamErr) {
+	if !errors.As(err, &upstreamErr) || upstreamErr == nil {
 		return false
 	}
 	if upstreamErr.StatusCode == 0 {
@@ -752,7 +765,9 @@ func isVideoCreateFailoverError(err error) bool {
 	return IsMediaFailoverStatus(upstreamErr.StatusCode)
 }
 
-func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTaskID string) {
+// 仅确认生成失败且允许换号时返回错误，让外层重新创建任务。查询异常、超时、
+// 取消和内容拒绝均在本轮终结，不能把结果未知的任务再次提交到其他上游。
+func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTaskID string) error {
 	intervalFallback := videoAccountDefaultDuration(input.Account, "poll_interval_ms")
 	timeoutFallback := videoAccountDefaultDuration(input.Account, "poll_timeout_ms")
 	interval := videoAccountDuration(input.Account, "poll_interval_ms", intervalFallback)
@@ -783,7 +798,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 			})
 			_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 			s.releaseTaskReferenceAssets(input)
-			return
+			return nil
 		case <-ticker.C:
 			result, err := s.pollUpstreamTask(ctx, input.Account, upstreamTaskID)
 			if err != nil {
@@ -808,7 +823,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 				})
 				_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 				s.releaseTaskReferenceAssets(input)
-				return
+				return nil
 			}
 			consecutiveFailures = 0
 			switch result.Status {
@@ -832,8 +847,11 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 					_ = s.recordCompletedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 				}
 				s.releaseTaskReferenceAssets(input)
-				return
+				return nil
 			case VideoTaskStatusFailed, VideoTaskStatusCancelled:
+				if result.Status == VideoTaskStatusFailed && isVideoCreateFailoverError(result.Failure) {
+					return result.Failure
+				}
 				clientErr := videoClientError("video_generation_failed", "视频生成失败，请更换提示词或素材后重试")
 				task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
 					Status:    &result.Status,
@@ -841,7 +859,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 				})
 				_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 				s.releaseTaskReferenceAssets(input)
-				return
+				return nil
 			default:
 				_, _ = s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
 					Status: stringPtr(VideoTaskStatusProcessing),
@@ -1644,6 +1662,7 @@ type videoUpstreamCreateResult struct {
 type videoPollResult struct {
 	Status   string
 	VideoURL string
+	Failure  *videoUpstreamError
 }
 
 type videoUpstreamError struct {

@@ -367,7 +367,7 @@ func TestXingguangPollLifecycleCompletesFromContentEndpoint(t *testing.T) {
 
 	input := xingguangPollTestInput(account)
 	input.UpstreamBody = map[string]any{"model": videoXingguangSeedance20Model}
-	svc.pollLifecycle(input, "xg-task-1")
+	require.NoError(t, svc.pollLifecycle(input, "xg-task-1"))
 
 	require.Equal(t, VideoTaskStatusCompleted, taskRepo.task.Status)
 	require.Equal(t, []string{server.URL + "/v1/videos/xg-task-1/content"}, publisher.urls,

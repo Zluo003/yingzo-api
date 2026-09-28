@@ -324,7 +324,7 @@ func TestMikuapiPollLifecycleToleratesTransientTaskMisses(t *testing.T) {
 	publisher := &mikuapiResultPublisherStub{}
 	svc := newMikuapiPollTestService(taskRepo, publisher)
 
-	svc.pollLifecycle(mikuapiPollTestInput(account), "task-miku-poll")
+	require.NoError(t, svc.pollLifecycle(mikuapiPollTestInput(account), "task-miku-poll"))
 
 	require.Equal(t, VideoTaskStatusCompleted, taskRepo.task.Status,
 		"前 %d 次 404 不应判失败", transientMisses)
@@ -360,7 +360,7 @@ func TestMikuapiPollLifecycleFailsOnlyAfterToleranceExhausted(t *testing.T) {
 	taskRepo := &mikuapiPollTaskRepoStub{task: &VideoTask{PublicID: "video_miku_poll"}}
 	svc := newMikuapiPollTestService(taskRepo, &mikuapiResultPublisherStub{})
 
-	svc.pollLifecycle(mikuapiPollTestInput(account), "task-miku-dead")
+	require.NoError(t, svc.pollLifecycle(mikuapiPollTestInput(account), "task-miku-dead"))
 
 	require.Equal(t, VideoTaskStatusFailed, taskRepo.task.Status)
 	require.Equal(t, int32(videoMikuapiPollMaxConsecutiveFailures), atomic.LoadInt32(&statusCalls),
@@ -644,7 +644,7 @@ func TestMikuapiGrokPollLifecycleCompletesFromContentEndpoint(t *testing.T) {
 
 	input := mikuapiPollTestInput(account)
 	input.UpstreamBody = map[string]any{"model": videoMikuapiGrokImagineVideo15PreviewModel}
-	svc.pollLifecycle(input, "grok-req-1")
+	require.NoError(t, svc.pollLifecycle(input, "grok-req-1"))
 
 	require.Equal(t, VideoTaskStatusCompleted, taskRepo.task.Status)
 	require.Equal(t, []string{server.URL + "/v1/videos/grok-req-1/content"}, publisher.urls,
@@ -685,7 +685,7 @@ func TestMikuapiKlingPollLifecyclePublishesCDNURL(t *testing.T) {
 
 	input := mikuapiPollTestInput(account)
 	input.UpstreamBody = map[string]any{"model": videoMikuapiKlingVideoV3OmniModel}
-	svc.pollLifecycle(input, "kling-task-1")
+	require.NoError(t, svc.pollLifecycle(input, "kling-task-1"))
 
 	require.Equal(t, VideoTaskStatusCompleted, taskRepo.task.Status)
 	require.Equal(t, []string{cdnURL}, publisher.urls, "可灵成片按状态响应里的 CDN 直链发布")
