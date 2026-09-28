@@ -157,7 +157,7 @@ func (r *usageLogRepository) fillDashboardEntityStats(ctx context.Context, stats
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	stats.OnlineIPCounts = make([]usagestats.OnlineIPCount, 0)
 	for rows.Next() {
 		var entry usagestats.OnlineIPCount

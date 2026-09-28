@@ -13,7 +13,7 @@ import (
 func TestDashboardEntityStatsCountsOnlineUsersAndIPs(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	now := time.Date(2026, 9, 26, 2, 0, 0, 0, time.UTC)
 	today := now.Truncate(24 * time.Hour)

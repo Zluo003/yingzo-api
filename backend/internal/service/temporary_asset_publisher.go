@@ -216,12 +216,12 @@ func (p *TemporaryAssetPublisher) PublishGeneratedImage(
 		return "", fmt.Errorf("resolve local asset directory: %w", err)
 	}
 	assetDir := filepath.Join(localRoot, id.String())
-	if err := os.MkdirAll(assetDir, 0o700); err != nil {
+	if err := os.MkdirAll(assetDir, 0o700); err != nil { //nolint:gosec // G703: configured storage root plus a generated UUID, never a caller-supplied path.
 		return "", fmt.Errorf("create temporary asset directory: %w", err)
 	}
 	localPath := filepath.Join(assetDir, "object")
 	if err := writeGeneratedAssetAtomically(localPath, imageBytes); err != nil {
-		_ = os.RemoveAll(assetDir)
+		_ = os.RemoveAll(assetDir) //nolint:gosec // G703: only this generated UUID's staging directory under the configured root.
 		return "", err
 	}
 

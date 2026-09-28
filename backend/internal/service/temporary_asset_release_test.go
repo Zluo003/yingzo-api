@@ -191,11 +191,11 @@ func TestNormalizeFileStorageConfigValidatesCustomDomain(t *testing.T) {
 
 	withDomain := base
 	withDomain.S3.CustomDomain = "https://cdn.example.com/assets//"
-	value, err := normalizeFileStorageConfig(withDomain)
+	_, err = normalizeFileStorageConfig(withDomain)
 	require.ErrorContains(t, err, "custom domain")
 
 	withDomain.S3.CustomDomain = "https://cdn.example.com/"
-	value, err = normalizeFileStorageConfig(withDomain)
+	value, err := normalizeFileStorageConfig(withDomain)
 	require.NoError(t, err)
 	require.Equal(t, "https://cdn.example.com", value.S3.CustomDomain)
 

@@ -197,7 +197,7 @@ func (s *FileStorageService) EffectiveLocalPath(ctx context.Context) (string, er
 
 // requireExistingDirectory 校验配置的素材目录确实存在且是目录，不做任何创建。
 func requireExistingDirectory(dir string) error {
-	info, err := os.Stat(dir)
+	info, err := os.Stat(dir) //nolint:gosec // G703: checks an administrator-configured absolute storage directory; no request-derived child path is appended.
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return fmt.Errorf("local_dir %q does not exist inside the service; create it where the service runs "+

@@ -15,6 +15,7 @@ import (
 //   - Seedance 2.0 → seedance2.0-933（另有 seedance2.0-933-2，由账号 model_mapping
 //     显式指定，运营可用它给 2.0 建第二条上游）；
 //   - Seedance 2.5 → seedance2.5。
+//
 // seedance-2.0-fast 上游没有对应模型，不接（Compatible 返回 false）。
 //
 // 上游当前只开放参考生视频：参考素材是公网图片（至多 10 张，数组顺序对应

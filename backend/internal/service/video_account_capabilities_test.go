@@ -21,10 +21,12 @@ func TestNormalizeVideoModelCapabilitiesExtra(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	byModel := extra[VideoModelCapabilitiesExtraKey].(map[string]any)
-	settings := byModel[VideoModelSeedance20].(map[string]any)
+	byModel, ok := extra[VideoModelCapabilitiesExtraKey].(map[string]any)
+	require.True(t, ok)
+	settings, ok := byModel[VideoModelSeedance20].(map[string]any)
+	require.True(t, ok)
 	require.Equal(t, 0, settings["max_reference_videos"])
-	require.False(t, settings["image_to_video"].(bool))
+	require.Equal(t, false, settings["image_to_video"])
 }
 
 func TestNormalizeVideoModelCapabilitiesExtraRejectsInvalidLimits(t *testing.T) {

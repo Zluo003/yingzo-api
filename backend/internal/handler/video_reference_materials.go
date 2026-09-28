@@ -245,7 +245,7 @@ func parsePlatformReferenceMaterialURL(rawURL string, ownHosts map[string]bool, 
 		return platformReferenceMaterialRef{}, false
 	}
 	host := strings.ToLower(parsed.Hostname())
-	if !ownHosts[host] && !(access.Enabled() && strings.EqualFold(access.Host(), host)) {
+	if !ownHosts[host] && (!access.Enabled() || !strings.EqualFold(access.Host(), host)) {
 		return platformReferenceMaterialRef{}, false
 	}
 	ref, ok := service.ParseTemporaryAssetRef(trimmed, access.Host(), access.Prefix)

@@ -16,7 +16,7 @@ func TestAgentHeartbeatUsesAuthenticatedUser(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 
 	mock.ExpectExec("INSERT INTO yingzo_agent_heartbeats").WithArgs(int64(42), "203.0.113.42").WillReturnResult(sqlmock.NewResult(0, 1))
 	h := &AgentHandler{db: db}
