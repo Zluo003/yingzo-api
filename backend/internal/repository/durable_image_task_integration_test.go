@@ -101,6 +101,31 @@ func TestDurableImageLedger(t *testing.T) {
 		_, err = ledger.Find(ctx, service.ImageTaskOwner{UserID: user.ID, APIKeyID: key.ID + 1}, id, false)
 		require.ErrorIs(t, err, service.ErrImageTaskNotFound)
 	})
+	t.Run("fractional_image_prices_and_refunds", func(t *testing.T) {
+		for _, actual := range []float64{0.2, 0.25, 0.15, 0} {
+			start := balance()
+			var quotaBefore float64
+			require.NoError(t, integrationDB.QueryRow(`SELECT COALESCE(SUM(daily_usage_usd),0) FROM user_platform_quotas WHERE user_id=$1 AND platform='openai'`, user.ID).Scan(&quotaBefore))
+			task, _, err := ledger.Accept(ctx, makeTask(fmt.Sprintf("fractional-price-%g", actual), 0.2))
+			require.NoError(t, err)
+			require.InDelta(t, start-0.2, balance(), 1e-8)
+			found, err := ledger.Find(ctx, service.ImageTaskOwner{UserID: user.ID, APIKeyID: key.ID}, task.IdempotencyKey, true)
+			require.NoError(t, err)
+			require.Equal(t, task.ID, found.ID)
+			claimed, err := ledger.Claim(ctx)
+			require.NoError(t, err)
+			require.Equal(t, task.ID, claimed.ID)
+			usage := &service.UsageLog{ActualCost: actual, ImageCount: 1}
+			require.NoError(t, ledger.Finalize(ctx, claimed, usage, actual > 0))
+			require.NoError(t, ledger.Finalize(ctx, claimed, usage, actual > 0))
+			require.InDelta(t, start-actual, balance(), 1e-8)
+			var net, quotaAfter float64
+			require.NoError(t, integrationDB.QueryRow(`SELECT SUM(actual_cost) FROM usage_logs WHERE image_task_id=$1`, task.ID).Scan(&net))
+			require.NoError(t, integrationDB.QueryRow(`SELECT daily_usage_usd FROM user_platform_quotas WHERE user_id=$1 AND platform='openai'`, user.ID).Scan(&quotaAfter))
+			require.InDelta(t, actual, net, 1e-8)
+			require.InDelta(t, quotaBefore+actual, quotaAfter, 1e-8)
+		}
+	})
 	t.Run("adjustments_and_refunds_preserve_net_balance", func(t *testing.T) {
 		for i, actual := range []float64{3, 1, 0} {
 			start := balance()
@@ -267,10 +292,10 @@ func TestDurableImageLedger(t *testing.T) {
 		repo := newUsageLogRepositoryWithSQL(client, integrationDB)
 		stats, err := repo.GetStatsWithFilters(ctx, usagestats.UsageLogFilters{UserID: user.ID})
 		require.NoError(t, err)
-		require.Equal(t, int64(10), stats.TotalRequests)
-		require.InDelta(t, 8, stats.TotalActualCost, 1e-8)
+		require.Equal(t, int64(14), stats.TotalRequests)
+		require.InDelta(t, 8.6, stats.TotalActualCost, 1e-8)
 		require.Len(t, stats.Endpoints, 1)
-		require.Equal(t, int64(10), stats.Endpoints[0].Requests)
-		require.InDelta(t, 8, stats.Endpoints[0].ActualCost, 1e-8)
+		require.Equal(t, int64(14), stats.Endpoints[0].Requests)
+		require.InDelta(t, 8.6, stats.Endpoints[0].ActualCost, 1e-8)
 	})
 }

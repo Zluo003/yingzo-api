@@ -324,8 +324,11 @@ func applyImagePlatformQuota(ctx context.Context, tx *sql.Tx, t *service.Durable
 	day, week := timezone.StartOfDay(now), timezone.StartOfWeek(now)
 	var daily, weekly, monthly float64
 	var dailyLimit, weeklyLimit, monthlyLimit sql.NullFloat64
+	// The first use of $3 determines its PostgreSQL parameter type. Without an
+	// explicit numeric cast, GREATEST(0, $3) infers integer and rejects prices
+	// such as $0.20 before admission can commit.
 	err := tx.QueryRowContext(ctx, `INSERT INTO user_platform_quotas(user_id,platform,daily_usage_usd,weekly_usage_usd,monthly_usage_usd,daily_window_start,weekly_window_start,monthly_window_start,created_at,updated_at)
- VALUES($1,$2,GREATEST(0,$3),GREATEST(0,$3),GREATEST(0,$3),$4,$5,$6,$6,$6)
+ VALUES($1,$2,GREATEST(0,$3::numeric),GREATEST(0,$3),GREATEST(0,$3),$4,$5,$6,$6,$6)
  ON CONFLICT(user_id,platform) WHERE deleted_at IS NULL DO UPDATE SET
  daily_usage_usd=CASE WHEN user_platform_quotas.daily_window_start IS DISTINCT FROM $4 THEN GREATEST(0,$3) WHEN $3<0 AND user_platform_quotas.daily_window_start IS DISTINCT FROM $7 THEN user_platform_quotas.daily_usage_usd ELSE GREATEST(0,user_platform_quotas.daily_usage_usd+$3) END,
  weekly_usage_usd=CASE WHEN user_platform_quotas.weekly_window_start IS DISTINCT FROM $5 THEN GREATEST(0,$3) WHEN $3<0 AND user_platform_quotas.weekly_window_start IS DISTINCT FROM $8 THEN user_platform_quotas.weekly_usage_usd ELSE GREATEST(0,user_platform_quotas.weekly_usage_usd+$3) END,

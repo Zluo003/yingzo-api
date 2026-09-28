@@ -124,6 +124,7 @@ func (h *AsyncImageHandler) Prefer(c *gin.Context, platform string) bool {
 	return true
 }
 func (h *AsyncImageHandler) submitDurable(c *gin.Context, key *service.APIKey, platform string, body []byte) {
+	c.Set(ctxKeyLocalImageTaskAdmission, true)
 	model, size, count := "", "", 1
 	switch platform {
 	case service.PlatformGemini:
@@ -158,6 +159,8 @@ func (h *AsyncImageHandler) submitDurable(c *gin.Context, key *service.APIKey, p
 	if count == 0 {
 		count = 1
 	}
+	c.Set(opsModelKey, model)
+	c.Set(opsStreamKey, false)
 	path := strings.TrimSuffix(c.Request.URL.Path, "/async")
 	var route *service.CompositeRouteDecision
 	if public, ok := service.RequestedPublicModelFromContext(c.Request.Context()); ok && key.Group.Platform == service.PlatformComposite {

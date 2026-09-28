@@ -27,6 +27,8 @@ type AsyncImageHandler struct {
 	execute func(platform string, c *gin.Context)
 }
 
+const ctxKeyLocalImageTaskAdmission = "_gateway_local_image_task_admission"
+
 func NewAsyncImageHandler(tasks *service.ImageTaskService, openAI *OpenAIGatewayHandler) *AsyncImageHandler {
 	h := &AsyncImageHandler{tasks: tasks, openAI: openAI}
 	h.execute = h.executeWithGateway
@@ -51,6 +53,9 @@ func (h *AsyncImageHandler) pollable() bool {
 // Submit accepts the same payload as the synchronous Images endpoint and
 // returns before the upstream image generation begins.
 func (h *AsyncImageHandler) Submit(c *gin.Context) {
+	if h != nil && h.durable != nil {
+		c.Set(ctxKeyLocalImageTaskAdmission, true)
+	}
 	if !h.enabled() {
 		imageTaskJSONError(c, http.StatusNotFound, "not_found_error", "async image tasks are not enabled")
 		return
@@ -345,6 +350,9 @@ func imageTaskError(c *gin.Context, err error) {
 	}
 	if strings.TrimSpace(code) == "" {
 		code = "IMAGE_TASK_ERROR"
+	}
+	if status >= http.StatusInternalServerError {
+		requestLogger(c, "handler.async_image").Error("image task request failed", zap.Error(err))
 	}
 	imageTaskJSONError(c, status, code, message)
 }

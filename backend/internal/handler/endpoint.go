@@ -187,6 +187,10 @@ func isBareOrSubpathOf(path, root string) bool {
 //     inbound endpoint is used to distinguish.
 func DeriveUpstreamEndpoint(inbound, rawRequestPath, platform string) string {
 	inbound = strings.TrimSpace(inbound)
+	// Task receipts are served by this gateway's task store, never an upstream.
+	if inbound == EndpointImageTasks {
+		return ""
+	}
 
 	switch platform {
 	case service.PlatformOpenAI, service.PlatformGrok:
@@ -311,6 +315,9 @@ func GetInboundEndpoint(c *gin.Context) string {
 // and the account platform. Handlers call this after scheduling an
 // account, passing account.Platform.
 func GetUpstreamEndpoint(c *gin.Context, platform string) string {
+	if c != nil && c.GetBool(ctxKeyLocalImageTaskAdmission) {
+		return ""
+	}
 	if endpoint := service.GetActualOpenAIUpstreamEndpoint(c); endpoint != "" {
 		return endpoint
 	}

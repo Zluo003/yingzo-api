@@ -952,6 +952,36 @@ func TestOpsErrorLoggerMiddleware_LocalModelConfigurationFields(t *testing.T) {
 	require.Empty(t, job.entry.UpstreamEndpoint)
 }
 
+func TestOpsErrorLoggerMiddleware_LocalImageTasksHaveNoUpstream(t *testing.T) {
+	for _, path := range []string{"/v1/images/tasks/imgtask_missing", "/v1/images/tasks/by-idempotency/missing", "/images/tasks/imgtask_missing", "/v1/images/generations"} {
+		t.Run(path, func(t *testing.T) {
+			setupOpsErrorLogTestQueue(t, 1)
+			ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			router := gin.New()
+			router.Use(OpsErrorLoggerMiddleware(ops), InboundEndpointMiddleware())
+			method, status := http.MethodGet, http.StatusNotFound
+			if path == "/v1/images/generations" {
+				method, status = http.MethodPost, http.StatusInternalServerError
+			}
+			router.Handle(method, path, func(c *gin.Context) {
+				if method == http.MethodPost {
+					// Admission creates a task locally; the worker calls upstream later.
+					c.Set(ctxKeyLocalImageTaskAdmission, true)
+				}
+				imageTaskJSONError(c, status, "IMAGE_TASK_ERROR", "image task request failed")
+			})
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequest(method, path, nil))
+			require.Equal(t, status, w.Code)
+			job := <-opsErrorLogQueue
+			require.NotEmpty(t, job.entry.InboundEndpoint)
+			require.Empty(t, job.entry.UpstreamEndpoint)
+			require.Nil(t, job.entry.UpstreamStatusCode)
+			require.Nil(t, job.entry.AccountID)
+		})
+	}
+}
+
 func TestClassifyOpsAuthClientErrorsExcludedFromSLA(t *testing.T) {
 	tests := []struct {
 		name    string
