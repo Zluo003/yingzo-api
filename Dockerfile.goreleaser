@@ -22,12 +22,14 @@ RUN apk add --no-cache \
     tzdata \
     curl \
     su-exec \
+    ffmpeg \
     libpq \
     zstd-libs \
     lz4-libs \
     krb5-libs \
     libldap \
     libedit \
+    && ffprobe -version >/dev/null \
     && rm -rf /var/cache/apk/*
 
 # Copy pg_dump and psql from a version-matched PostgreSQL image so backup and
@@ -45,6 +47,8 @@ WORKDIR /app
 # Copy the pre-built binary and runtime fallback resources from GoReleaser
 COPY yingzo-api /app/yingzo-api
 COPY --chown=yingzo-api:yingzo-api backend/resources /app/resources
+COPY third-party/ffmpeg /app/third-party/ffmpeg
+COPY deploy/build-ffprobe.sh /app/third-party/ffmpeg/build-ffprobe.sh
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R yingzo-api:yingzo-api /app

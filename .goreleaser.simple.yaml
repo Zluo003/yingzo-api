@@ -13,7 +13,7 @@ builds:
     main: ./cmd/server
     binary: yingzo-api
     flags:
-      - -tags=embed
+      - -tags=embed,bundled_ffprobe
     env:
       - CGO_ENABLED=0
     goos:
@@ -50,6 +50,8 @@ dockers:
     extra_files:
       - deploy/docker-entrypoint.sh
       - backend/resources
+      - deploy/build-ffprobe.sh
+      - third-party/ffmpeg
     build_flag_templates:
       - "--platform=linux/amd64"
       - "--label=org.opencontainers.image.version={{ .Version }}"
@@ -66,7 +68,7 @@ release:
   draft: false
   prerelease: auto
   name_template: "yingzo-api {{.Version}} (Simple)"
-  # 跳过上传二进制包
+  # 跳过上传二进制包；FFmpeg 源代码与许可证随镜像提供。
   skip_upload: true
   header: |
     > AI API Gateway Platform - 将 AI 订阅配额分发和管理

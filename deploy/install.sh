@@ -71,6 +71,7 @@ declare -A MSG_ZH=(
     ["unsupported_os"]="不支持的操作系统"
     ["missing_deps"]="缺少依赖"
     ["install_deps_first"]="请先安装以下依赖"
+    ["preparing_media_runtime"]="正在以服务用户安装并校验内嵌媒体运行时..."
     ["fetching_version"]="正在获取最新版本..."
     ["latest_version"]="最新版本"
     ["failed_get_version"]="获取最新版本失败"
@@ -196,6 +197,7 @@ declare -A MSG_EN=(
     ["unsupported_os"]="Unsupported OS"
     ["missing_deps"]="Missing dependencies"
     ["install_deps_first"]="Please install them first"
+    ["preparing_media_runtime"]="Installing and verifying the bundled media runtime as the service user..."
     ["fetching_version"]="Fetching latest version..."
     ["latest_version"]="Latest version"
     ["failed_get_version"]="Failed to get latest version"
@@ -785,8 +787,25 @@ get_public_ip() {
     return 1
 }
 
+# Provision as the daemon user, so a root-run installer does not leave private
+# runtime files owned by root. Old releases without this flag remain installable.
+prepare_media_runtime() {
+    local help_output
+    help_output=$("$INSTALL_DIR/yingzo-api" --help 2>&1 || true)
+    if [[ "$help_output" != *"-prepare-runtime"* ]]; then
+        return 0
+    fi
+    print_info "$(msg 'preparing_media_runtime')"
+    if command -v runuser >/dev/null 2>&1; then
+        runuser -u "$SERVICE_USER" -- "$INSTALL_DIR/yingzo-api" --prepare-runtime
+    else
+        su -s /bin/sh "$SERVICE_USER" -c 'exec "$1" --prepare-runtime' sh "$INSTALL_DIR/yingzo-api"
+    fi
+}
+
 # Start service
 start_service() {
+    prepare_media_runtime
     print_info "$(msg 'starting_service')"
 
     if systemctl start yingzo-api; then
@@ -884,6 +903,8 @@ upgrade() {
     # Set permissions
     chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/yingzo-api"
 
+    prepare_media_runtime
+
     # Start service
     print_info "$(msg 'starting_service')"
     systemctl start yingzo-api
@@ -945,6 +966,8 @@ install_version() {
 
     # Set permissions
     chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/yingzo-api"
+
+    prepare_media_runtime
 
     # Start service
     print_info "$(msg 'starting_service')"

@@ -26,6 +26,9 @@ permissions:
   packages: write
 
 jobs:
+  media-runtime:
+    uses: ./.github/workflows/ffprobe-runtime.yml
+
   # Update VERSION file with tag version
   update-version:
     runs-on: ubuntu-latest
@@ -99,7 +102,7 @@ jobs:
           retention-days: 1
 
   release:
-    needs: [update-version, build-frontend]
+    needs: [update-version, build-frontend, media-runtime]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -126,6 +129,19 @@ jobs:
           go-version-file: backend/go.mod
           check-latest: false
           cache-dependency-path: backend/go.sum
+
+      - name: Download bundled ffprobe payloads
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ffprobe-*-*
+          merge-multiple: true
+          path: backend/internal/pkg/mediaprobe/
+
+      - name: Download FFmpeg source and license
+        uses: actions/download-artifact@v8
+        with:
+          name: ffprobe-source
+          path: third-party/ffmpeg/
 
       - name: Verify Go version
         run: |

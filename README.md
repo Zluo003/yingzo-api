@@ -114,6 +114,8 @@ curl -sSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/insta
 
 安装到 `/opt/yingzo-api`，注册 systemd 服务 `yingzo-api.service`（`systemctl status yingzo-api`）。脚本会拉取 GitHub Release 产物，可用 `UPDATE_GITHUB_TOKEN` 提高 API 限额。
 
+发行程序内嵌对应平台的 `ffprobe`，首次启动自动释放并校验，用于参考视频和音频探测；无需额外安装系统包。Docker 镜像也包含 `ffmpeg`。
+
 ### 方式三：手动运行二进制
 
 从 [Releases](https://github.com/Zluo003/yingzo-api/releases) 下载 `yingzo-api_<版本>_<系统>_<架构>.tar.gz`，解压后：
@@ -158,6 +160,8 @@ curl -sSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/insta
 - **一键脚本**：重跑 `install.sh` 覆盖 `/opt/yingzo-api` 并重启 systemd 服务。
 - **Docker**：`docker compose pull && docker compose up -d`。
 - **迁移**：启动时自动应用内嵌迁移；也可在升级前手动执行 `./yingzo-api --migrate`。迁移是**前向且校验和锁定**的（见下）。
+
+在线升级即使只替换主程序，新程序启动后也会自动补齐内嵌的 `ffprobe`，无需 root 或再次联网下载。运行时保存在程序目录的 `.runtime/ffprobe-<SHA256>/`；程序目录不可写时使用当前服务用户的缓存目录。新版本与旧版本使用各自的内容哈希目录，回滚不覆盖正在使用的探测程序。可执行 `./yingzo-api --prepare-runtime` 单独验证自动安装。
 
 ---
 

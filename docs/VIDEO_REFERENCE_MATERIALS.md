@@ -155,8 +155,29 @@ docker compose up -d
 
 ## Error codes
 
+### Media probe runtime
+
+Release binaries embed a platform-specific `ffprobe`, built from pinned, checksum-verified
+[FFmpeg source](https://ffmpeg.org/releases/). Startup extracts it atomically into
+`.runtime/ffprobe-<SHA256>/` beside the server, verifies its digest and runs `-version`.
+If the executable directory is read-only, the service user's cache directory is used.
+No root access, package-manager invocation or additional download is required. This also
+repairs old installations after a binary-only online update. Uploads retry preparation if
+startup preparation failed. `yingzo-api --prepare-runtime` performs the same check without
+starting the server or connecting to the database.
+
+The release workflow tests real H.264 video and PCM audio with an empty `PATH` on every
+published platform. Linux probes are statically linked against musl so they work on both
+Alpine containers and glibc hosts. Development builds without `bundled_ffprobe` use the
+system `ffprobe`; all maintained Dockerfiles install and verify it at image build time.
+The unmodified FFmpeg source, LGPL license and build recipe accompany the full release.
+
+### Responses
+
 | Code | HTTP | Meaning |
 | --- | --- | --- |
+| `media_probe_unavailable` | 503 | The server could not prepare its media runtime; diagnostic details are in server logs |
+| `media_probe_failed` | 422 | The media probe could not decode the file or obtain required metadata |
 | `invalid_reference_material` | 400 | Malformed inline payload (not base64, missing comma, empty) |
 | `unsupported_reference_material` | 400 | Sniffed type is not a whitelisted reference media type |
 | `reference_material_download_failed` | 400 | Public URL refused by the SSRF policy, unreachable, non-2xx, or over the size limit |

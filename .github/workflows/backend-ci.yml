@@ -25,6 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - name: Check installer runtime provisioning
+        run: |
+          bash -n deploy/install.sh deploy/build-ffprobe.sh
+          bash deploy/tests/install-media-runtime-test.sh
+          bash deploy/tests/install-github-token-test.sh
       - uses: actions/setup-go@v6
         with:
           go-version-file: backend/go.mod

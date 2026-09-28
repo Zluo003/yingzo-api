@@ -30,10 +30,13 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/mediaprobe"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp"
@@ -749,7 +752,11 @@ func probeTrustedMedia(ctx context.Context, filePath string, policy mediaPolicy,
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	command := exec.CommandContext(probeCtx, "ffprobe",
+	probePath, err := mediaprobe.Ensure(probeCtx)
+	if err != nil {
+		return trustedMediaMetadata{}, err
+	}
+	command := exec.CommandContext(probeCtx, probePath,
 		"-v", "error",
 		"-show_entries", "format=duration,format_name:stream=codec_type,codec_name,width,height,r_frame_rate,duration",
 		"-of", "json",
@@ -1110,8 +1117,19 @@ func (h *AgentHandler) storeTemporaryAssetPart(c *gin.Context, key *service.APIK
 	}
 	metadata, probeErr := probeTrustedMedia(c.Request.Context(), target, policy, contentType)
 	if probeErr != nil {
+		status := http.StatusUnprocessableEntity
+		code := "media_probe_failed"
+		message := probeErr.Error()
+		if errors.Is(probeErr, mediaprobe.ErrUnavailable) {
+			status = http.StatusServiceUnavailable
+			code = "media_probe_unavailable"
+			message = "Trusted media probe is unavailable; the server could not prepare its runtime"
+		}
+		logger.FromContext(c.Request.Context()).Warn("reference media probe failed",
+			zap.String("component", "media.probe"), zap.String("code", code),
+			zap.String("content_type", contentType), zap.Int64("size_bytes", n), zap.Error(probeErr))
 		_ = os.RemoveAll(dir)
-		return nil, &temporaryAssetUploadError{status: http.StatusUnprocessableEntity, code: "media_probe_failed", message: probeErr.Error()}
+		return nil, &temporaryAssetUploadError{status: status, code: code, message: message}
 	}
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/logger"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/mediaprobe"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/setup"
 	"github.com/Wei-Shaw/sub2api/internal/web"
@@ -60,10 +61,18 @@ func main() {
 	setupMode := flag.Bool("setup", false, "Run setup wizard in CLI mode")
 	migrateOnly := flag.Bool("migrate", false, "Apply pending database migrations and exit")
 	showVersion := flag.Bool("version", false, "Show version information")
+	prepareRuntime := flag.Bool("prepare-runtime", false, "Install and verify bundled media runtime, then exit")
 	flag.Parse()
 
 	if *showVersion {
 		log.Printf("Sub2API %s (commit: %s, built: %s)\n", Version, Commit, Date)
+		return
+	}
+	if *prepareRuntime {
+		if _, err := mediaprobe.Ensure(context.Background()); err != nil {
+			log.Fatalf("Media runtime preparation failed: %v", err)
+		}
+		log.Print("Media runtime ready")
 		return
 	}
 
@@ -149,6 +158,9 @@ func runMainServer() {
 	}
 	if err := logger.Init(logger.OptionsFromConfig(cfg.Log)); err != nil {
 		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	if _, err := mediaprobe.Ensure(context.Background()); err != nil {
+		log.Printf("[WARN] Media runtime preparation failed; reference uploads will retry: %v", err)
 	}
 	if cfg.RunMode == config.RunModeSimple {
 		log.Println("⚠️  WARNING: Running in SIMPLE mode - billing and quota checks are DISABLED")

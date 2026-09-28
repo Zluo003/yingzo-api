@@ -102,6 +102,8 @@ RUN apk add --no-cache \
     tzdata \
     curl \
     su-exec \
+    ffmpeg \
+    && ffprobe -version >/dev/null \
     && rm -rf /var/cache/apk/*
 
 # Create non-root user

@@ -177,6 +177,8 @@ func (s *UpdateService) PerformUpdate(ctx context.Context) error {
 
 // applyReleaseAssets downloads the platform archive from the given release assets,
 // verifies its checksum, and atomically swaps the running binary.
+// Release binaries embed ffprobe and provision it on startup, so this binary-only
+// contract also repairs media dependencies when upgrading from older updaters.
 // Shared by PerformUpdate (latest) and RollbackToVersion (specific older version).
 func (s *UpdateService) applyReleaseAssets(ctx context.Context, releaseAssets []Asset) error {
 	// Find matching archive and checksum for current platform
