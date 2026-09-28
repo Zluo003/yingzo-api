@@ -77,7 +77,11 @@ func TestVideoAccountSupportsRequestHonoursZeroMediaAndModes(t *testing.T) {
 	}}
 	require.True(t, videoAccountSupportsRequest(account, video))
 
-	account.Extra[VideoModelCapabilitiesExtraKey].(map[string]any)[VideoModelSeedance20].(map[string]any)["image_to_video"] = false
+	byModel, ok := account.Extra[VideoModelCapabilitiesExtraKey].(map[string]any)
+	require.True(t, ok)
+	settings, ok := byModel[VideoModelSeedance20].(map[string]any)
+	require.True(t, ok)
+	settings["image_to_video"] = false
 	video.AbilityCode = videoAbilityImageToVideo
 	video.Content[0].Role = "first_frame"
 	require.False(t, videoAccountSupportsRequest(account, video))

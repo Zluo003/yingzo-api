@@ -253,7 +253,7 @@ func (p *TemporaryAssetPublisher) PublishGeneratedImage(
 		backend, storageKey, "generated-image"+extension, "image", mimeType, imageSize,
 		hex.EncodeToString(checksum[:]), metadata, expiresAt, TemporaryAssetPurposeGenerated)
 	if err != nil {
-		_ = os.RemoveAll(assetDir)
+		_ = os.RemoveAll(assetDir) //nolint:gosec // G703: only this generated UUID's staging directory under the configured root.
 		return "", fmt.Errorf("record temporary asset: %w", err)
 	}
 
@@ -346,19 +346,19 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 		return "", fmt.Errorf("resolve local asset directory: %w", err)
 	}
 	assetDir := filepath.Join(localRoot, id.String())
-	if err := os.MkdirAll(assetDir, 0o700); err != nil {
+	if err := os.MkdirAll(assetDir, 0o700); err != nil { //nolint:gosec // G703: configured storage root plus a generated UUID, never a caller-supplied path.
 		return "", fmt.Errorf("create temporary asset directory: %w", err)
 	}
 	cleanupLocal := true
 	defer func() {
 		if cleanupLocal {
-			_ = os.RemoveAll(assetDir)
+			_ = os.RemoveAll(assetDir) //nolint:gosec // G703: removes only the generated UUID's directory after an unsuccessful upload.
 		}
 	}()
 
 	localPath := filepath.Join(assetDir, "object")
 	temporaryPath := localPath + ".tmp"
-	temporary, err := os.OpenFile(temporaryPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	temporary, err := os.OpenFile(temporaryPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) //nolint:gosec // G703: fixed object.tmp filename inside the generated UUID's staging directory; O_EXCL rejects an existing file.
 	if err != nil {
 		return "", fmt.Errorf("create temporary asset file: %w", err)
 	}
@@ -385,7 +385,7 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 	if err != nil {
 		return "", err
 	}
-	if err := os.Rename(temporaryPath, localPath); err != nil {
+	if err := os.Rename(temporaryPath, localPath); err != nil { //nolint:gosec // G703: fixed object.tmp and object names in the same generated UUID's staging directory.
 		return "", fmt.Errorf("publish temporary asset file: %w", err)
 	}
 
@@ -478,7 +478,7 @@ func validateGeneratedVideoURL(ctx context.Context, rawURL string, allowPrivate 
 }
 
 func inspectGeneratedVideoFile(path, declaredContentType string) (string, string, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) //nolint:gosec // G703: private helper reads only the staging file created in publishGeneratedVideo, never a request path.
 	if err != nil {
 		return "", "", fmt.Errorf("inspect generated video: %w", err)
 	}
@@ -566,7 +566,7 @@ func generatedAssetHashToken(token string) string {
 }
 
 func writeGeneratedAssetAtomically(target string, data []byte) error {
-	temporary, err := os.OpenFile(target+".tmp", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	temporary, err := os.OpenFile(target+".tmp", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) //nolint:gosec // G703: target is a fixed object filename under an administrator-configured root and generated UUID; O_EXCL rejects existing staging files.
 	if err != nil {
 		return fmt.Errorf("create temporary asset file: %w", err)
 	}
@@ -574,7 +574,7 @@ func writeGeneratedAssetAtomically(target string, data []byte) error {
 	defer func() {
 		_ = temporary.Close()
 		if cleanup {
-			_ = os.Remove(target + ".tmp")
+			_ = os.Remove(target + ".tmp") //nolint:gosec // G703: removes only the fixed staging filename created by this helper.
 		}
 	}()
 	if _, err := temporary.Write(data); err != nil {
@@ -586,7 +586,7 @@ func writeGeneratedAssetAtomically(target string, data []byte) error {
 	if err := temporary.Close(); err != nil {
 		return fmt.Errorf("close temporary asset file: %w", err)
 	}
-	if err := os.Rename(target+".tmp", target); err != nil {
+	if err := os.Rename(target+".tmp", target); err != nil { //nolint:gosec // G703: same generated UUID directory, fixed object.tmp and object filenames.
 		return fmt.Errorf("publish temporary asset file: %w", err)
 	}
 	cleanup = false
