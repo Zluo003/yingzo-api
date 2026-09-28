@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/usagestats"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -20,6 +21,24 @@ func TestDurableImageLedger(t *testing.T) {
 	ctx := context.Background()
 	client := testEntClient(t)
 	user := mustCreateUser(t, client, &service.User{Email: uuid.NewString() + "@image.test", PasswordHash: "hash", Balance: 100})
+	var groupIDs []int64
+	t.Cleanup(func() {
+		// The ledger owns real transactions, so the surrounding test cannot roll
+		// them back. Remove its fixtures before aggregate and user suites run.
+		for _, query := range []string{
+			`DELETE FROM image_tasks WHERE user_id=$1`,
+			`DELETE FROM usage_logs WHERE user_id=$1`,
+			`DELETE FROM user_subscriptions WHERE user_id=$1`,
+			`DELETE FROM users WHERE id=$1`,
+		} {
+			_, err := integrationDB.ExecContext(context.Background(), query, user.ID)
+			require.NoError(t, err)
+		}
+		for _, id := range groupIDs {
+			_, err := integrationDB.ExecContext(context.Background(), `DELETE FROM groups WHERE id=$1`, id)
+			require.NoError(t, err)
+		}
+	})
 	key := mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-" + uuid.NewString(), Name: "async image", Quota: 1000})
 	ledger := NewImageTaskLedger(integrationDB)
 	makeTask := func(idem string, amount float64) *service.DurableImageTask {
@@ -207,6 +226,7 @@ func TestDurableImageLedger(t *testing.T) {
 
 	t.Run("subscription_refund_restores_usage_not_balance", func(t *testing.T) {
 		group := mustCreateGroup(t, client, &service.Group{Name: "image-sub-" + uuid.NewString(), Platform: service.PlatformOpenAI, SubscriptionType: service.SubscriptionTypeSubscription})
+		groupIDs = append(groupIDs, group.ID)
 		sub := mustCreateSubscription(t, client, &service.UserSubscription{UserID: user.ID, GroupID: group.ID})
 		start := balance()
 		task := makeTask("subscription-image", 2)
@@ -243,5 +263,14 @@ func TestDurableImageLedger(t *testing.T) {
 		require.NoError(t, integrationDB.QueryRow(`SELECT usage_5h FROM api_keys WHERE id=$1`, key.ID).Scan(&usage))
 		require.Equal(t, 5.0, usage)
 	})
-
+	t.Run("endpoint_statistics_count_tasks_and_net_customer_cost", func(t *testing.T) {
+		repo := newUsageLogRepositoryWithSQL(client, integrationDB)
+		stats, err := repo.GetStatsWithFilters(ctx, usagestats.UsageLogFilters{UserID: user.ID})
+		require.NoError(t, err)
+		require.Equal(t, int64(10), stats.TotalRequests)
+		require.InDelta(t, 8, stats.TotalActualCost, 1e-8)
+		require.Len(t, stats.Endpoints, 1)
+		require.Equal(t, int64(10), stats.Endpoints[0].Requests)
+		require.InDelta(t, 8, stats.Endpoints[0].ActualCost, 1e-8)
+	})
 }
