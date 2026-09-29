@@ -21,6 +21,7 @@ type ModelPlazaHandler struct {
 	plazaService   *service.ModelPlazaService
 	apiKeyService  *service.APIKeyService
 	settingService *service.SettingService
+	agentCatalog   *service.AgentModelCatalogService
 }
 
 // NewModelPlazaHandler 创建模型广场 handler。
@@ -28,11 +29,13 @@ func NewModelPlazaHandler(
 	plazaService *service.ModelPlazaService,
 	apiKeyService *service.APIKeyService,
 	settingService *service.SettingService,
+	agentCatalog *service.AgentModelCatalogService,
 ) *ModelPlazaHandler {
 	return &ModelPlazaHandler{
 		plazaService:   plazaService,
 		apiKeyService:  apiKeyService,
 		settingService: settingService,
+		agentCatalog:   agentCatalog,
 	}
 }
 

@@ -90,6 +90,8 @@ func RegisterUserRoutes(
 		}
 
 		// 用户可用渠道（非管理员接口）
+		authenticated.GET("/yingzo/models", h.ModelPlaza.GetYingzo)
+
 		channels := authenticated.Group("/channels")
 		{
 			channels.GET("/available", h.AvailableChannel.List)

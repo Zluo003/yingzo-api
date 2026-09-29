@@ -152,12 +152,9 @@ export function sortMethodEntries(entries) {
   })
 }
 
-// ---- Currency / amounts (frontend/src/components/payment/currency.ts) ----
-export function currencySymbol(currency) {
-  const map = { CNY: '¥', RMB: '¥', USD: '$', EUR: '€', GBP: '£', JPY: '¥', HKD: 'HK$', TWD: 'NT$', KRW: '₩' }
-  const key = String(currency || '').trim().toUpperCase()
-  return map[key] || (key || '¥')
-}
+// Yingzo monetary amounts are displayed in RMB. Gateway currency fields remain
+// untouched in order payloads and SDK calls; this is a presentation helper.
+export function currencySymbol() { return '¥' }
 export function formatPaymentAmount(amount, currency) {
   const n = Number(amount)
   if (!Number.isFinite(n)) return `${currencySymbol(currency)}0.00`
