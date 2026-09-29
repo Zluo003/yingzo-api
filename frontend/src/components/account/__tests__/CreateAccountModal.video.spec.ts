@@ -49,6 +49,7 @@ vi.mock('vue-i18n', async () => {
 })
 
 import CreateAccountModal from '../CreateAccountModal.vue'
+import ModelWhitelistSelector from '../ModelWhitelistSelector.vue'
 
 const BaseDialogStub = defineComponent({
   name: 'BaseDialog',
@@ -93,6 +94,15 @@ async function submitVideoAccount(wrapper: ReturnType<typeof mount>) {
   await wrapper.get('form#create-account-form').trigger('submit.prevent')
   await flushPromises()
   return createAccountMock.mock.calls.at(-1)?.[0]
+}
+
+async function selectXingguang(wrapper: ReturnType<typeof mount>) {
+  await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
+  for (const model of ['seedance-2.0-fast', 'grok-imagine-video-1.5', 'kling-v3-omni']) {
+    await wrapper.get(`[data-testid="video-model-${model}"]`).trigger('click')
+  }
+  await wrapper.get('[data-testid="video-provider-select"]').setValue('xingguang')
+  await flushPromises()
 }
 
 describe('CreateAccountModal video mode', () => {
@@ -262,5 +272,54 @@ describe('CreateAccountModal video mode', () => {
     await flushPromises()
 
     expect(createAccountMock.mock.calls[0]?.[0].upstream_billing_probe_enabled).toBeUndefined()
+  })
+
+  it('uses one model selection and saves only the two selected xingguang models', async () => {
+    const wrapper = await mountVideoModal()
+    await selectXingguang(wrapper)
+
+    expect(wrapper.findComponent(ModelWhitelistSelector).exists()).toBe(false)
+    const payload = await submitVideoAccount(wrapper)
+    expect(payload.extra.video_provider).toBe('xingguang')
+    expect(payload.credentials.model_mapping).toEqual({
+      'seedance-2.0': 'seedance-2.0',
+      'seedance-2.5': 'seedance-2.5',
+    })
+  })
+
+  it('saves upstream names for selected models without losing the capability selection', async () => {
+    const wrapper = await mountVideoModal()
+    await selectXingguang(wrapper)
+    await wrapper.get('[data-testid="video-upstream-model-seedance-2.0"]').setValue(' seedance2.0-933-2 ')
+    await wrapper.get('[data-testid="video-upstream-model-seedance-2.5"]').setValue('seedance2.5')
+
+    expect(wrapper.find('[data-testid="video-resolution-seedance-2.0-720p"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="video-duration-seedance-2.5-5"]').exists()).toBe(true)
+    // Changing providers must not erase explicit model mappings.
+    await wrapper.get('[data-testid="video-provider-select"]').setValue('jingyu')
+    await wrapper.get('[data-testid="video-provider-select"]').setValue('xingguang')
+
+    const payload = await submitVideoAccount(wrapper)
+    expect(payload.credentials.model_mapping).toEqual({
+      'seedance-2.0': 'seedance2.0-933-2',
+      'seedance-2.5': 'seedance2.5',
+    })
+    expect(Object.keys(payload.extra.video_model_resolutions)).toEqual(['seedance-2.0', 'seedance-2.5'])
+    expect(Object.keys(payload.extra.video_model_durations)).toEqual(['seedance-2.0', 'seedance-2.5'])
+  })
+
+  it('omits mappings for deselected models and resets upstream names when reopened', async () => {
+    const wrapper = await mountVideoModal()
+    await selectXingguang(wrapper)
+    await wrapper.get('[data-testid="video-upstream-model-seedance-2.0"]').setValue('seedance2.0-933-2')
+    await wrapper.get('[data-testid="video-model-seedance-2.0"]').trigger('click')
+
+    const payload = await submitVideoAccount(wrapper)
+    expect(payload.credentials.model_mapping).toEqual({ 'seedance-2.5': 'seedance-2.5' })
+
+    await wrapper.setProps({ show: false })
+    await wrapper.setProps({ show: true })
+    await flushPromises()
+    expect((wrapper.get('[data-testid="video-upstream-model-seedance-2.0"]').element as HTMLInputElement).value).toBe('')
   })
 })

@@ -607,6 +607,13 @@
         </div>
         </div>
 
+        <VideoModelMappingField
+          v-if="selectedVideoModels.length > 0"
+          v-model="videoUpstreamModels"
+          :models="selectedVideoModels"
+          class="mt-4"
+        />
+
         <!-- 分辨率白名单：按模型勾选该账号实际支持的档位 -->
         <div v-if="selectedVideoModels.length > 0" class="mt-4">
           <label class="input-label">{{ t('admin.accounts.video.resolutions') }}</label>
@@ -1610,8 +1617,8 @@
           <p class="input-hint">{{ t('admin.accounts.gemini.tier.aiStudioHint') }}</p>
         </div>
 
-        <!-- Model Restriction Section (Antigravity 已在上层条件排除) -->
-        <div class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <!-- 视频账号在上方统一配置模型选择与上游模型名。 -->
+        <div v-if="form.platform !== 'video'" class="border-t border-gray-200 pt-4 dark:border-dark-600">
           <label class="input-label">{{ t('admin.accounts.modelRestriction') }}</label>
 
           <div
@@ -4128,6 +4135,8 @@ import {
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
 import VideoModelCapabilitiesField from './VideoModelCapabilitiesField.vue'
+import VideoModelMappingField from './VideoModelMappingField.vue'
+import { buildVideoModelMapping } from './videoModelMapping'
 import {
   parseVideoModelCapabilities,
   serializeVideoModelCapabilities
@@ -4620,12 +4629,9 @@ const upstreamModelsPreviewed = ref(false)
 
 /** 对外提供的视频模型：单一来源见 @/views/admin/videoModelResolutions。 */
 const videoDefaultModels = VIDEO_MODEL_CODES
-/**
- * 弹窗里勾选的视频模型。aigod 与 newtoken 都走“白名单 + 无 model_mapping”：
- * newtoken 把分辨率编进上游模型 id（sd2.0-720p-official 等）由后端按
- * (model, resolution) 路由，扁平的 from→to 映射表达不了，只能限定下游模型。
- */
+/** 视频模型选择与上游名称独立保存，留空名称由适配器按模型/分辨率路由。 */
 const selectedVideoModels = ref<string[]>([...videoDefaultModels])
+const videoUpstreamModels = ref<Record<string, string>>({})
 /**
  * 每个模型在本账号实际支持的分辨率，提交进 extra.video_model_resolutions。
  * 默认勾上模型官方档位的全部档位；运营按该 key 实际支持的能力收敛，
@@ -4713,20 +4719,6 @@ const toggleVideoModel = (model: string) => {
     next.push(model)
   }
   selectedVideoModels.value = videoDefaultModels.filter((item) => next.includes(item))
-  // allowedModels 才是提交进 credentials.model_mapping 的白名单，必须同步。
-  if (form.platform === 'video' && modelRestrictionMode.value === 'whitelist') {
-    allowedModels.value = [...selectedVideoModels.value]
-  }
-}
-
-/**
- * 视频账号一律使用白名单模式：勾选的模型写入 credentials.model_mapping 白名单。
- * 模型/档位与上游解耦，切换上游不再收敛勾选——上游能力差异由适配器闸门兜底。
- */
-const applyVideoModelDefaults = () => {
-  modelRestrictionMode.value = 'whitelist'
-  allowedModels.value = [...selectedVideoModels.value]
-  modelMappings.value = []
 }
 const DEFAULT_POOL_MODE_RETRY_COUNT = 3
 const MAX_POOL_MODE_RETRY_COUNT = 10
@@ -5149,7 +5141,7 @@ watch(
         .catch(() => { tlsFingerprintProfiles.value = [] })
       if (isVideoMode.value) {
         // 视频模式：平台在建单时已固定为 video，form.platform 的 watch 不会触发，
-        // 因此必须在这里补齐上游默认值、超时与模型白名单。
+        // 因此必须在这里补齐上游默认值与超时。
         form.platform = 'video'
         form.type = 'apikey'
         accountCategory.value = 'apikey'
@@ -5161,7 +5153,6 @@ watch(
         videoPollTimeoutMs.value = videoProviderDefaults.value.pollTimeoutMs
         videoRequestTimeoutMs.value = videoProviderDefaults.value.requestTimeoutMs
         videoConnectTimeoutMs.value = videoProviderDefaults.value.connectTimeoutMs
-        applyVideoModelDefaults()
       } else if (isImageMode.value) {
         // 图片账号：平台固定走标准图片接口的 openai / gemini，凭证走 API Key。
         // 模型清单交给原版选择器（「同步上游支持的模型」/ 白名单 / 映射），这里不预置
@@ -5284,6 +5275,7 @@ watch(
       form.load_factor = null
       videoProvider.value = 'aigod'
       selectedVideoModels.value = [...videoDefaultModels]
+      videoUpstreamModels.value = {}
       selectedVideoResolutions.value = defaultVideoModelResolutions()
       selectedVideoDurations.value = defaultVideoModelDurations()
       apiKeyBaseUrl.value = videoProviderDefaults.value.baseUrl
@@ -5292,7 +5284,6 @@ watch(
       videoPollTimeoutMs.value = videoProviderDefaults.value.pollTimeoutMs
       videoRequestTimeoutMs.value = videoProviderDefaults.value.requestTimeoutMs
       videoConnectTimeoutMs.value = videoProviderDefaults.value.connectTimeoutMs
-      applyVideoModelDefaults()
     }
     if (newPlatform !== 'gemini' && newPlatform !== 'anthropic' && accountCategory.value === 'service_account') {
       accountCategory.value = 'oauth-based'
@@ -5366,9 +5357,6 @@ watch(videoProvider, (_newProvider, oldProvider) => {
   if (videoConnectTimeoutMs.value === previousDefaults.connectTimeoutMs) {
     videoConnectTimeoutMs.value = videoProviderDefaults.value.connectTimeoutMs
   }
-  if (form.platform === 'video') {
-    applyVideoModelDefaults()
-  }
 })
 
 // Gemini AI Studio OAuth availability (requires operator-configured OAuth client)
@@ -5430,15 +5418,12 @@ watch(
   [modelRestrictionMode, () => form.platform],
   ([newMode]) => {
     if (newMode === 'whitelist') {
-      // 视频平台的模型清单由勾选项决定，getModelsByPlatform 对它没有分支
-      // （会落到 default 返回 Claude 模型），因此必须单独处理。
+      // 视频账号使用独立的模型选择与上游名称配置。
       // 图片账号同理不能预置平台默认清单：那些是文本模型，勾进来会被登记成图片模型；
       // 它的模型清单由管理员用「同步上游支持的模型」或手填决定。
-      allowedModels.value = form.platform === 'video'
-        ? [...selectedVideoModels.value]
-        : isImageMode.value
-          ? []
-          : [...getModelsByPlatform(form.platform)]
+      allowedModels.value = form.platform === 'video' || isImageMode.value
+        ? []
+        : [...getModelsByPlatform(form.platform)]
     }
   }
 )
@@ -5710,8 +5695,8 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
     const account = await adminAPI.accounts.create(withAntigravityConfirmFlag(payload))
     // 预览过上游模型 / 显式配置了具体映射：创建后立刻落一次能力元数据同步，
     // 否则新账号在调度侧缺少模型能力信息。
-    // 视频账号的 model_mapping 是下游模型白名单（非上游能力映射），且上游不提供
-    // 能力元数据，故不参与同步。
+    // 视频账号的 model_mapping 保存下游模型选择与上游名称，能力由适配器管理，
+    // 不参与上游模型元数据同步。
     const modelMapping = payload.credentials.model_mapping
     const hasConcreteMappedTarget =
       payload.type === 'apikey' &&
@@ -5797,6 +5782,7 @@ const resetForm = () => {
   videoRequestTimeoutMs.value = videoProviderDefaultsMap.aigod.requestTimeoutMs
   videoConnectTimeoutMs.value = videoProviderDefaultsMap.aigod.connectTimeoutMs
   selectedVideoModels.value = [...videoDefaultModels]
+  videoUpstreamModels.value = {}
   selectedVideoCapabilities.value = parseVideoModelCapabilities(undefined)
   selectedVideoResolutions.value = defaultVideoModelResolutions()
   selectedVideoDurations.value = defaultVideoModelDurations()
@@ -5813,12 +5799,8 @@ const resetForm = () => {
   modelMappings.value = []
   openAICompactModelMappings.value = []
   modelRestrictionMode.value = 'whitelist'
-  // Default fill related models（视频模式用 Seedance 三档；图片账号不预置，等选择器同步）
-  allowedModels.value = isVideoMode.value
-    ? [...videoDefaultModels]
-    : isImageMode.value
-      ? []
-      : [...claudeModels]
+  // 视频账号使用独立选择；图片账号不预置，等选择器同步。
+  allowedModels.value = isVideoMode.value || isImageMode.value ? [] : [...claudeModels]
 
   antigravityModelRestrictionMode.value = 'mapping'
   antigravityWhitelistModels.value = []
@@ -6316,7 +6298,9 @@ const handleSubmit = async () => {
 
   // Add model mapping if configured（OpenAI 开启自动透传时不应用）
   if (!isOpenAIModelRestrictionDisabled.value) {
-    const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
+    const modelMapping = form.platform === 'video'
+      ? buildVideoModelMapping(selectedVideoModels.value, videoUpstreamModels.value)
+      : buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
     if (modelMapping) {
       credentials.model_mapping = modelMapping
     }

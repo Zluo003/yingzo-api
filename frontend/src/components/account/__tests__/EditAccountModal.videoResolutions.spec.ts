@@ -2,14 +2,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 
-const { updateAccountMock, checkMixedChannelRiskMock } = vi.hoisted(() => ({
+const { updateAccountMock, checkMixedChannelRiskMock, showErrorMock } = vi.hoisted(() => ({
   updateAccountMock: vi.fn(),
   checkMixedChannelRiskMock: vi.fn(),
+  showErrorMock: vi.fn(),
 }))
 
 vi.mock('@/stores/app', () => ({
   useAppStore: () => ({
-    showError: vi.fn(),
+    showError: showErrorMock,
     showSuccess: vi.fn(),
     showInfo: vi.fn(),
   }),
@@ -46,6 +47,7 @@ vi.mock('vue-i18n', async () => {
 })
 
 import EditAccountModal from '../EditAccountModal.vue'
+import ModelWhitelistSelector from '../ModelWhitelistSelector.vue'
 
 const BaseDialogStub = defineComponent({
   name: 'BaseDialog',
@@ -131,6 +133,78 @@ describe('EditAccountModal video resolutions', () => {
   beforeEach(() => {
     updateAccountMock.mockReset().mockImplementation((_id: number, payload: unknown) => payload)
     checkMixedChannelRiskMock.mockReset().mockResolvedValue({ has_risk: false })
+    showErrorMock.mockReset()
+  })
+
+  it.each([
+    { 'seedance-2.0': 'seedance-2.0', 'seedance-2.5': 'seedance-2.5' },
+    { 'seedance-2.0': 'seedance2.0-933-2', 'seedance-2.5': 'seedance2.5' },
+    { 'seedance-2.0': 'seedance2.0-933-2', 'seedance-2.5': 'seedance-2.5' },
+  ])('restores and preserves a narrowed xingguang model selection: %j', async (mapping) => {
+    const account = buildVideoAccount({ video_provider: 'xingguang' })
+    account.credentials.model_mapping = mapping
+    const wrapper = mountModal(account)
+    await flushPromises()
+
+    expect(wrapper.getComponent(ModelWhitelistSelector).props('modelValue')).toEqual(['seedance-2.0', 'seedance-2.5'])
+    expect(wrapper.find('[data-testid="video-resolution-seedance-2.0-720p"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="video-duration-seedance-2.5-5"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="video-resolution-seedance-2.0-fast-720p"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="video-resolution-grok-imagine-video-1.5-720p"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="video-resolution-kling-v3-omni-720p"]').exists()).toBe(false)
+
+    const payload = await submitEdit(wrapper)
+    expect(payload.credentials.model_mapping).toEqual(mapping)
+    expect(Object.keys(payload.extra.video_model_resolutions)).toEqual(['seedance-2.0', 'seedance-2.5'])
+    expect(Object.keys(payload.extra.video_model_durations)).toEqual(['seedance-2.0', 'seedance-2.5'])
+  })
+
+  it('edits a saved upstream model name and can clear it to use the adapter default', async () => {
+    const account = buildVideoAccount({ video_provider: 'xingguang' })
+    account.credentials.model_mapping = { 'seedance-2.0': 'seedance2.0-933' }
+    const wrapper = mountModal(account)
+    await flushPromises()
+
+    const input = wrapper.get('[data-testid="video-upstream-model-seedance-2.0"]')
+    expect((input.element as HTMLInputElement).value).toBe('seedance2.0-933')
+    await input.setValue(' seedance2.0-933-2 ')
+    expect((await submitEdit(wrapper)).credentials.model_mapping).toEqual({ 'seedance-2.0': 'seedance2.0-933-2' })
+
+    await input.setValue('')
+    expect((await submitEdit(wrapper)).credentials.model_mapping).toEqual({ 'seedance-2.0': 'seedance-2.0' })
+  })
+
+  it('removes mappings when deselected and rejects an empty selection instead of enabling every model', async () => {
+    const account = buildVideoAccount({ video_provider: 'xingguang' })
+    account.credentials.model_mapping = {
+      'seedance-2.0': 'seedance2.0-933-2',
+      'seedance-2.5': 'seedance2.5',
+    }
+    const wrapper = mountModal(account)
+    await flushPromises()
+
+    wrapper.getComponent(ModelWhitelistSelector).vm.$emit('update:modelValue', ['seedance-2.5'])
+    await flushPromises()
+    expect((await submitEdit(wrapper)).credentials.model_mapping).toEqual({ 'seedance-2.5': 'seedance2.5' })
+
+    updateAccountMock.mockClear()
+    wrapper.getComponent(ModelWhitelistSelector).vm.$emit('update:modelValue', [])
+    await flushPromises()
+    expect(wrapper.find('[data-testid^="video-resolution-"]').exists()).toBe(false)
+    await submitEdit(wrapper)
+    expect(updateAccountMock).not.toHaveBeenCalled()
+    expect(showErrorMock).toHaveBeenCalledWith('admin.accounts.video.modelsRequired')
+  })
+
+  it('loads legacy accounts with no model restriction as an explicit selection of all models', async () => {
+    const account = buildVideoAccount()
+    const allModels = Object.keys(account.credentials.model_mapping)
+    delete account.credentials.model_mapping
+    const wrapper = mountModal(account)
+    await flushPromises()
+
+    expect(wrapper.getComponent(ModelWhitelistSelector).props('modelValue')).toEqual(allModels)
+    expect(Object.keys((await submitEdit(wrapper)).credentials.model_mapping)).toEqual(allModels)
   })
 
   it('restores the saved resolution whitelist from extra', async () => {

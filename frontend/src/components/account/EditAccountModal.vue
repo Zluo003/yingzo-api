@@ -199,6 +199,11 @@
             {{ t('admin.accounts.selectedModels', { count: editSelectedVideoModels.length }) }}
           </p>
         </div>
+        <VideoModelMappingField
+          v-if="account.platform === 'video' && editSelectedVideoModels.length > 0"
+          v-model="editVideoUpstreamModels"
+          :models="editSelectedVideoModels"
+        />
         <!--
           分辨率/时长白名单：只展示上方模型白名单中选中的模型。
           新增模型不会自动带入现有账号的能力配置。
@@ -3115,6 +3120,8 @@ import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
 import VideoModelCapabilitiesField from '@/components/account/VideoModelCapabilitiesField.vue'
+import VideoModelMappingField from '@/components/account/VideoModelMappingField.vue'
+import { buildVideoModelMapping } from '@/components/account/videoModelMapping'
 import {
   parseVideoModelCapabilities,
   serializeVideoModelCapabilities
@@ -3262,6 +3269,7 @@ type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang'
 const videoDefaultModels = VIDEO_MODEL_CODES
 
 const editVideoProvider = ref<VideoProvider>('aigod')
+const editVideoUpstreamModels = ref<Record<string, string>>({})
 const editVideoAPIPath = ref('/v1/videos')
 const editVideoPollIntervalMs = ref(2000)
 const editVideoPollTimeoutMs = ref(300000)
@@ -4035,14 +4043,14 @@ const loadModelRestrictionFromMapping = (rawMapping?: Record<string, unknown>) =
 }
 
 const editSelectedVideoModels = computed(() => {
-  if (modelMappings.value.length > 0) return []
-  if (allowedModels.value.length === 0) return [...videoDefaultModels]
   const selected = new Set(allowedModels.value)
   return videoDefaultModels.filter((model) => selected.has(model))
 })
 
 const buildModelRestrictionMapping = () =>
-  buildModelMappingObject('combined', allowedModels.value, modelMappings.value)
+  props.account?.platform === 'video'
+    ? buildVideoModelMapping(allowedModels.value, editVideoUpstreamModels.value)
+    : buildModelMappingObject('combined', allowedModels.value, modelMappings.value)
 
 const applyOpenAIModelMappingCredentials = (credentials: Record<string, unknown>) => {
   const shouldApplyModelMapping = !openaiPassthroughEnabled.value
@@ -4435,8 +4443,18 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     // Load model mappings and detect mode
     loadModelRestrictionFromMapping(credentials.model_mapping as Record<string, unknown> | undefined)
     if (newAccount.platform === 'video') {
-      // Video accounts use a model whitelist; capability sections follow only
-      // the selected downstream models.
+      // 映射的来源模型也属于已选模型；仅旧账号没有限制时初始化为全部模型。
+      // 用户主动清空选择不能再被解释为全选。
+      const selected = new Set([...allowedModels.value, ...modelMappings.value.map(({ from }) => from)])
+      allowedModels.value = selected.size > 0
+        ? [
+            ...videoDefaultModels.filter((model) => selected.has(model)),
+            ...[...selected].filter((model) => !videoDefaultModels.includes(model))
+          ]
+        : [...videoDefaultModels]
+      editVideoUpstreamModels.value = Object.fromEntries(
+        modelMappings.value.map(({ from, to }) => [from, to])
+      )
       modelRestrictionMode.value = 'whitelist'
       modelMappings.value = []
     }
