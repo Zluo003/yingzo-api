@@ -65,13 +65,17 @@ func TestVideoFailureDiagnosticDoesNotChangePublicError(t *testing.T) {
 	client := videoClientError("video_generation_failed", "视频生成失败")
 	payload := []byte(`{"status":"failed","error":{"code":451,"message":"Original policy rejection"}}`)
 	result := videoFailureErrorJSON(client, &videoUpstreamError{StatusCode: 451, Body: payload, TaskFailure: true})
-	require.Equal(t, 451, result["task_error"].(*UsageTaskError).Code)
-	require.Equal(t, "Original policy rejection", result["task_error"].(*UsageTaskError).Message)
+	diagnostic, ok := result["task_error"].(*UsageTaskError)
+	require.True(t, ok)
+	require.Equal(t, 451, diagnostic.Code)
+	require.Equal(t, "Original policy rejection", diagnostic.Message)
 	public := videoErrorFromJSON(result)
 	require.Equal(t, client, *public)
 	// An inferred retry status must not be presented as a real upstream code.
 	result = videoFailureErrorJSON(client, &videoUpstreamError{StatusCode: 503, Body: []byte(`{"error":"render failed"}`), TaskFailure: true})
-	require.Zero(t, result["task_error"].(*UsageTaskError).Code)
+	diagnostic, ok = result["task_error"].(*UsageTaskError)
+	require.True(t, ok)
+	require.Zero(t, diagnostic.Code)
 }
 
 func TestVideoRefundRetainsActualUpstreamError(t *testing.T) {

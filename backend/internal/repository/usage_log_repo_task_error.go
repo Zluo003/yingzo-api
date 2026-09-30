@@ -11,7 +11,7 @@ import (
 
 // Load diagnostics in one query per page, only for failure refunds. The owner
 // and API-key joins prevent a malformed task reference crossing account bounds.
-func (r *usageLogRepository) hydrateUsageTaskErrors(ctx context.Context, logs []service.UsageLog) error {
+func (r *usageLogRepository) hydrateUsageTaskErrors(ctx context.Context, logs []service.UsageLog) (err error) {
 	var args []any
 	var placeholders []string
 	byID := make(map[int64]*service.UsageLog)
@@ -47,7 +47,11 @@ func (r *usageLogRepository) hydrateUsageTaskErrors(ctx context.Context, logs []
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
 	for rows.Next() {
 		var id int64
 		var diagnostic, legacy []byte
