@@ -325,10 +325,11 @@ func TestDurableImageLedger(t *testing.T) {
 		repo := newUsageLogRepositoryWithSQL(client, integrationDB)
 		stats, err := repo.GetStatsWithFilters(ctx, usagestats.UsageLogFilters{UserID: user.ID})
 		require.NoError(t, err)
-		require.Equal(t, int64(14), stats.TotalRequests)
-		require.InDelta(t, 8.6, stats.TotalActualCost, 1e-8)
+		// Include the six successful Midjourney operations at 0.7 each.
+		require.Equal(t, int64(20), stats.TotalRequests)
+		require.InDelta(t, 12.8, stats.TotalActualCost, 1e-8)
 		require.Len(t, stats.Endpoints, 1)
-		require.Equal(t, int64(14), stats.Endpoints[0].Requests)
-		require.InDelta(t, 8.6, stats.Endpoints[0].ActualCost, 1e-8)
+		require.Equal(t, int64(20), stats.Endpoints[0].Requests)
+		require.InDelta(t, 12.8, stats.Endpoints[0].ActualCost, 1e-8)
 	})
 }
