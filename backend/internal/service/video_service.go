@@ -598,8 +598,10 @@ func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, u
 	rawStatus := stringFromMap(payload, "status")
 	status := normalizeVideoUpstreamStatus(rawStatus)
 	result := &videoPollResult{Status: status}
-	if status == VideoTaskStatusFailed {
+	if status == VideoTaskStatusFailed || status == VideoTaskStatusCancelled {
 		result.Failure = videoTaskFailure(payload)
+		result.Failure.Body = respBody
+		result.Failure.TaskFailure = true
 	}
 	if status == VideoTaskStatusCompleted {
 		// 成片地址由适配器决定：多数上游把地址放在状态响应里，mikuapi 只提供
@@ -719,7 +721,7 @@ func (s *VideoService) runLifecycle(input VideoTaskLifecycleInput) {
 	// 账号和任务 ID 必须一起写入。最后一次创建失败时清空旧账号的上游 ID。
 	task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
 		Status:         stringPtr(VideoTaskStatusFailed),
-		ErrorJSON:      videoErrorJSON(clientErr.VideoClientError),
+		ErrorJSON:      videoFailureErrorJSON(clientErr.VideoClientError, lastErr),
 		AccountID:      &account.ID,
 		UpstreamModel:  &upstreamModel,
 		UpstreamTaskID: &upstreamTaskID,
@@ -786,6 +788,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 	// 否则用户被扣费却拿不到成片。容忍次数由适配器声明，见 shouldAbandonVideoPoll。
 	pollTolerance := videoPollFailureTolerance(input.Account)
 	consecutiveFailures := 0
+	var lastPollError error
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -794,7 +797,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 			clientErr := videoClientError("video_service_unavailable", upstreamClientMessageService)
 			task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
 				Status:    stringPtr(VideoTaskStatusFailed),
-				ErrorJSON: videoErrorJSON(clientErr),
+				ErrorJSON: videoFailureErrorJSON(clientErr, lastPollError),
 			})
 			_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 			s.releaseTaskReferenceAssets(input)
@@ -802,6 +805,11 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 		case <-ticker.C:
 			result, err := s.pollUpstreamTask(ctx, input.Account, upstreamTaskID)
 			if err != nil {
+				// The deadline can cancel an in-flight poll. Keep the last actual
+				// upstream response instead of replacing it with local cancellation.
+				if ctx.Err() == nil {
+					lastPollError = err
+				}
 				consecutiveFailures++
 				clientErr := mapVideoUpstreamError(err, true)
 				s.recordVideoAccountFailure(context.Background(), input.Account, clientErr, err)
@@ -819,13 +827,14 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 				}
 				task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
 					Status:    stringPtr(VideoTaskStatusFailed),
-					ErrorJSON: videoErrorJSON(clientErr.VideoClientError),
+					ErrorJSON: videoFailureErrorJSON(clientErr.VideoClientError, err),
 				})
 				_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 				s.releaseTaskReferenceAssets(input)
 				return nil
 			}
 			consecutiveFailures = 0
+			lastPollError = nil
 			switch result.Status {
 			case VideoTaskStatusQueued, VideoTaskStatusProcessing:
 				_, _ = s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
@@ -855,7 +864,7 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 				clientErr := videoClientError("video_generation_failed", "视频生成失败，请更换提示词或素材后重试")
 				task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
 					Status:    &result.Status,
-					ErrorJSON: videoErrorJSON(clientErr),
+					ErrorJSON: videoFailureErrorJSON(clientErr, result.Failure),
 				})
 				_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 				s.releaseTaskReferenceAssets(input)
@@ -1666,6 +1675,7 @@ type videoPollResult struct {
 }
 
 type videoUpstreamError struct {
+	TaskFailure   bool
 	PollRetryable bool // Set only by provider-specific query handling.
 	StatusCode    int
 	Body          []byte

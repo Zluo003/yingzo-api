@@ -196,3 +196,20 @@
   .result-card h1{font-size:34px}
   .ann-detail-card,.ann-popup-card{padding:24px}
 }
+
+/* Usage records keep refund and error actions visible at every viewport size. */
+.usage-table-scroll{overflow-x:auto}
+.usage-table{min-width:750px}
+.usage-table .usage-head,.usage-table .usage-row{grid-template-columns:minmax(155px,1.3fr) minmax(42px,.45fr) minmax(160px,1.5fr) minmax(65px,.65fr) minmax(90px,.8fr) 52px;gap:16px;align-items:center}
+.usage-table .usage-head>span,.usage-table .usage-row>span{display:block;min-width:0}
+.usage-model{overflow-wrap:anywhere}
+.usage-refund{display:inline-block!important;color:#496c4f;background:#e5ebe1;padding:4px 9px;border-radius:6px;font-size:13px;white-space:nowrap}
+.usage-error-cell{text-align:right}
+.usage-error-code{color:#8f3f34;font-size:13px;text-decoration:underline;text-underline-offset:4px;padding:6px 4px;border-radius:4px}
+.usage-error-code:hover{background:#f5dfd7}
+.usage-error-code:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.usage-error-dialog{margin:auto;max-height:80vh;overflow-y:auto;color:var(--ink);width:min(600px,calc(100% - 40px))}
+.usage-error-dialog::backdrop{background:#30241e88}
+.usage-error-dialog h2{margin:0 0 12px;font-size:28px}
+.usage-error-label{margin-top:24px;font-size:13px;color:var(--muted)}
+.usage-error-message{font:14px/1.7 'DM Sans',sans-serif;white-space:pre-wrap;overflow-wrap:anywhere;background:#eee7df;border-radius:8px;padding:16px;max-height:40vh;overflow-y:auto}

@@ -52,11 +52,12 @@ type ImageTaskLedger interface {
 // callback is captured synchronously and the durable ledger owns all debits.
 type asyncImageExecutionKey struct{}
 type AsyncImageExecution struct {
-	Usage    *UsageLog
-	TaskID   string
-	Route    *CompositeRouteDecision
-	Platform string
-	Quote    *ImageTaskQuote
+	TaskError *UsageTaskError
+	Usage     *UsageLog
+	TaskID    string
+	Route     *CompositeRouteDecision
+	Platform  string
+	Quote     *ImageTaskQuote
 }
 
 func WithAsyncImageExecution(ctx context.Context, execution *AsyncImageExecution) context.Context {

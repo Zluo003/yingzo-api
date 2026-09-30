@@ -33,10 +33,11 @@ var (
 // ImageTaskRecord is the private persisted representation of an asynchronous image
 // request. Ownership fields are intentionally omitted from the public view.
 type ImageTaskRecord struct {
-	Phase         string `json:"phase,omitempty"`
-	BillingStatus string `json:"billing_status,omitempty"`
-	RefundStatus  string `json:"refund_status,omitempty"`
-	DeadlineAt    int64  `json:"deadline_at,omitempty"`
+	TaskError     *UsageTaskError `json:"task_error,omitempty"`
+	Phase         string          `json:"phase,omitempty"`
+	BillingStatus string          `json:"billing_status,omitempty"`
+	RefundStatus  string          `json:"refund_status,omitempty"`
+	DeadlineAt    int64           `json:"deadline_at,omitempty"`
 
 	ID          string          `json:"id"`
 	UserID      int64           `json:"user_id"`

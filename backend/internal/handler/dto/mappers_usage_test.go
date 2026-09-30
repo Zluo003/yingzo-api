@@ -8,6 +8,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestUsageLogFromService_IncludesRefundTaskError(t *testing.T) {
+	log := &service.UsageLog{TaskError: &service.UsageTaskError{Code: 451, Message: "Upstream policy rejection"}}
+	raw, err := json.Marshal(UsageLogFromService(log))
+	require.NoError(t, err)
+	var data map[string]any
+	require.NoError(t, json.Unmarshal(raw, &data))
+	require.Equal(t, map[string]any{"code": float64(451), "message": "Upstream policy rejection"}, data["task_error"])
+	raw, err = json.Marshal(UsageLogFromService(&service.UsageLog{}))
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "task_error")
+}
+
 func TestUsageLogFromService_IncludesOpenAIWSMode(t *testing.T) {
 	t.Parallel()
 

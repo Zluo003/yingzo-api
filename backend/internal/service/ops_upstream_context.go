@@ -341,6 +341,7 @@ func SetOpsUpstreamError(c *gin.Context, upstreamStatusCode int, upstreamMessage
 }
 
 func setOpsUpstreamError(c *gin.Context, upstreamStatusCode int, upstreamMessage, upstreamDetail string) {
+	captureAsyncImageError(c, upstreamStatusCode, upstreamMessage, upstreamDetail)
 	if c == nil {
 		return
 	}
@@ -418,6 +419,7 @@ const (
 )
 
 func appendOpsUpstreamError(c *gin.Context, ev OpsUpstreamErrorEvent) {
+	captureAsyncImageError(c, ev.UpstreamStatusCode, ev.Message, ev.UpstreamResponseBody)
 	if c == nil {
 		return
 	}

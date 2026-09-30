@@ -2,14 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import LandingPage from './LandingPage.jsx'
 import ModelPlaza from './ModelPlaza.jsx'
 import DownloadPage from './DownloadPage.jsx'
+import UsageRecords from './UsageRecords.jsx'
 import { request, refreshAuthTokens, clearAuthKeys, AUTH_EXPIRED_EVENT } from './lib.js'
 import { Recharge, PaymentResult, StripePayment, AirwallexPayment } from './recharge.jsx'
 import { AnnouncementBell, AnnouncementPopup, fetchAnnouncements, resetAnnouncements } from './announcements.jsx'
 const nav = [['home','首页'],['download','软件下载'],['keys','API Key 管理'],['models','模型广场'],['usage','使用记录'],['recharge','充值']]
 function dateOnly(value){if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'})}
-function dateTime(value){if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?'—':d.toLocaleString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false})}
-function usageType(value){const v=String(value||'').toLowerCase();if(v.includes('video'))return '视频';if(v.includes('image'))return '图片';return '文本'}
-function duration(value){if(value==null)return '—';const seconds=Number(value)/1000;return seconds<1?`${Math.round(Number(value))} ms`:seconds<60?`${seconds.toFixed(1)} 秒`:`${Math.floor(seconds/60)} 分 ${Math.round(seconds%60)} 秒`}
 function Logo(){return <img className="logo" src="/assets/yingzo-logo.png" alt="Yingzo"/>}
 function Toast({message,onClose}){return message?<div className="toast" onClick={onClose}>{message}</div>:null}
 function Shell({page,setPage,children,user,onLogout}){return <div className="app-shell"><aside><Logo/><div className="eyebrow">YINGZO / CREATIVE AGENT</div><nav>{nav.map(([id,label])=><button key={id} className={page===id?'active':''} onClick={()=>{history.pushState({},'',id==='home'?'/':`/${id}`);setPage(id)}}>{label}</button>)}</nav>{user&&<div className="bell-row"><AnnouncementBell/></div>}<div className="aside-note">让想法自然生长<br/><small>Stories · Images · Video</small></div><button className="user-chip" onClick={()=>setPage('profile')}><span>{user?.avatar_url?<img src={user.avatar_url} alt=""/>:(user?.username||user?.name||user?.email||'Y').slice(0,1)}</span>{user?.username||user?.name||'创作者'}</button></aside><div className="shell-mobile-nav"><Logo/><select aria-label="工作区导航" value={page} onChange={event=>{const id=event.target.value;history.pushState({},'',id==='home'?'/':`/${id}`);setPage(id)}}>{[...nav,['profile','个人资料']].map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></div><main>{children}</main></div>}
@@ -48,8 +46,7 @@ function Usage(){
       </div>
     </div>
     <div className="panel">
-      <div className="table-head usage-head"><span>时间</span><span>类型</span><span>模型</span><span>用时</span><span>消耗</span></div>
-      {rows.length?rows.map((r,i)=><div className="table-row usage-row" key={r.id||i}><span>{dateTime(r.created_at)}</span><span>{usageType(r.request_type||r.media_type||r.billing_mode)}</span><span>{r.model||'—'}</span><span>{duration(r.duration_ms)}</span><span>{`¥${Number(r.actual_cost??r.total_cost??r.cost??0).toFixed(5)}`}</span></div>):<div className="empty">暂无使用记录</div>}
+      <UsageRecords rows={rows}/>
       <div className="usage-foot">
         <span>共 {total} 条记录</span>
         <div className="pager">

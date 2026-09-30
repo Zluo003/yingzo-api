@@ -343,6 +343,10 @@ func (s *DurableImageService) run(parent context.Context, t *DurableImageTask, e
 		status, body, err := execute(execCtx, &snapshot, key, capture)
 		t.CapturedUsage = capture.Usage
 		if err != nil || status < 200 || status >= 300 || !json.Valid(body) {
+			t.TaskError = capture.TaskError
+			if t.TaskError == nil {
+				t.TaskError = NewUsageTaskError(status, body, "image generation failed")
+			}
 			s.fail(t, "image generation failed")
 			return
 		}
@@ -394,9 +398,14 @@ func (s *DurableImageService) run(parent context.Context, t *DurableImageTask, e
 func (s *DurableImageService) fail(t *DurableImageTask, message string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	_ = s.ledger.MarkRefundPending(ctx, t)
-	t.Error = imageTaskErrorJSON("image_generation_failed", message)
+	if t.TaskError == nil {
+		t.TaskError = NewUsageTaskError(0, nil, message)
+	}
+	if len(t.Error) == 0 {
+		t.Error = imageTaskErrorJSON("image_generation_failed", message)
+	}
 	t.HTTPStatus = http.StatusBadGateway
+	_ = s.ledger.MarkRefundPending(ctx, t)
 	t.Result = nil
 	if err := s.ledger.Finalize(ctx, t, t.CapturedUsage, false); err != nil {
 		slog.Warn("image refund will be retried", "task_id", t.ID, "error", err)

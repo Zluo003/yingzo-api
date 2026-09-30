@@ -8,7 +8,8 @@
     "build": "vite build && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview",
     "test:sites": "node --test tests/sites-worker.test.mjs",
-    "test:pricing": "node --test src/model-pricing.test.mjs"
+    "test:pricing": "node --test src/model-pricing.test.mjs",
+    "test:usage": "node --test src/usage-records.test.mjs"
   },
   "dependencies": {
     "@airwallex/components-sdk": "^1.35.2",

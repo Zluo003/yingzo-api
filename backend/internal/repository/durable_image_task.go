@@ -309,10 +309,14 @@ func (r *durableImageLedger) MarkRefundPending(ctx context.Context, t *service.D
 		}
 		usage = string(raw)
 	}
-	_, err := r.db.ExecContext(ctx, `WITH changed AS (
- UPDATE image_tasks SET phase='refunding',captured_usage=COALESCE($3::jsonb,captured_usage),updated_at=NOW()
+	record, err := json.Marshal(t.ImageTaskRecord)
+	if err != nil {
+		return err
+	}
+	_, err = r.db.ExecContext(ctx, `WITH changed AS (
+ UPDATE image_tasks SET phase='refunding',captured_usage=COALESCE($3::jsonb,captured_usage),record=$4::jsonb,updated_at=NOW()
  WHERE id=$1 AND lease_token=$2 AND status='processing' RETURNING id)
- UPDATE usage_logs SET image_task_status='refunding' WHERE image_task_id IN (SELECT id FROM changed)`, t.ID, t.LeaseToken, usage)
+ UPDATE usage_logs SET image_task_status='refunding' WHERE image_task_id IN (SELECT id FROM changed)`, t.ID, t.LeaseToken, usage, string(record))
 	return err
 }
 
