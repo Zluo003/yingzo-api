@@ -12,18 +12,21 @@ var ErrImageIdempotencyConflict = errors.New("idempotency key was already used w
 var ErrImageTaskLeaseLost = errors.New("image task execution lease was lost")
 
 type ImageTaskQuote struct {
-	QuotaPlatform  string
-	Model          string
-	Size           string
-	Count          int
-	PerImage       *CostBreakdown
-	TokenPricing   *ResolvedPricing
-	ChannelPricing *ChannelModelPricing
-	LongContext    bool
-	Multiplier     float64
-	PricingAt      time.Time
-	Charge         UsageBillingCommand
-	Usage          UsageLog
+	// Retained after settlement so owned follow-up selections can resolve their
+	// provider task without retaining prompts or exposing upstream identifiers.
+	EncryptedProviderReference string
+	QuotaPlatform              string
+	Model                      string
+	Size                       string
+	Count                      int
+	PerImage                   *CostBreakdown
+	TokenPricing               *ResolvedPricing
+	ChannelPricing             *ChannelModelPricing
+	LongContext                bool
+	Multiplier                 float64
+	PricingAt                  time.Time
+	Charge                     UsageBillingCommand
+	Usage                      UsageLog
 }
 
 type DurableImageTask struct {
@@ -84,6 +87,7 @@ func captureAsyncImageUsage(ctx context.Context, log *UsageLog) bool {
 }
 
 type ImageRequestSnapshot struct {
+	Midjourney    *MidjourneySnapshot     `json:"midjourney,omitempty"`
 	Route         *CompositeRouteDecision `json:"route,omitempty"`
 	Platform      string                  `json:"platform"`
 	Method        string                  `json:"method"`

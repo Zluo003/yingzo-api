@@ -1,4 +1,4 @@
-name: Bundled media runtime
+name: Bundled Linux media runtime
 
 on:
   workflow_call:
@@ -21,9 +21,6 @@ jobs:
         include:
           - { os: linux, arch: amd64, runner: ubuntu-24.04 }
           - { os: linux, arch: arm64, runner: ubuntu-24.04-arm }
-          - { os: darwin, arch: amd64, runner: macos-15-intel }
-          - { os: darwin, arch: arm64, runner: macos-15 }
-          - { os: windows, arch: amd64, runner: windows-2025 }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
@@ -34,27 +31,11 @@ jobs:
           go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
       - name: Build static Linux ffprobe
-        if: matrix.os == 'linux'
         run: |
           docker run --rm -v "$PWD:/work" -w /work alpine:3.22 sh -ec '
             apk add --no-cache bash build-base curl xz binutils
             bash deploy/build-ffprobe.sh linux "${{ matrix.arch }}"
           '
-      - name: Build macOS ffprobe
-        if: matrix.os == 'darwin'
-        run: bash deploy/build-ffprobe.sh darwin '${{ matrix.arch }}'
-      - uses: msys2/setup-msys2@v2
-        if: matrix.os == 'windows'
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            mingw-w64-ucrt-x86_64-gcc
-            make curl tar xz diffutils
-      - name: Build Windows ffprobe
-        if: matrix.os == 'windows'
-        shell: msys2 {0}
-        run: bash deploy/build-ffprobe.sh windows amd64
       - name: Verify offline runtime provisioning and real media probing
         working-directory: backend
         run: go test -tags=bundled_ffprobe ./internal/pkg/mediaprobe -count=1
@@ -66,7 +47,7 @@ jobs:
             backend/internal/pkg/mediaprobe/ffprobe_${{ matrix.os }}_${{ matrix.arch }}.gz
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
-        if: matrix.os == 'linux' && matrix.arch == 'amd64'
+        if: matrix.arch == 'amd64'
         with:
           name: ffprobe-source
           path: dist/ffprobe-source/

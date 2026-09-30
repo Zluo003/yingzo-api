@@ -67,7 +67,7 @@
 | 后端 | Go + gin + ent + google/wire，单二进制内嵌前端产物 |
 | 前端 | Vue 3 + TypeScript + Vite + Tailwind + Pinia + vue-i18n |
 | 存储 | PostgreSQL（业务数据）+ Redis（缓存 / 调度 / 队列） |
-| 发布 | goreleaser（多平台归档 + checksums）、Docker 镜像 |
+| 发布 | goreleaser（Linux amd64/arm64 归档 + checksums）、Linux Docker 镜像 |
 
 ```
 backend/                 Go 服务端
@@ -118,7 +118,7 @@ curl -sSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/insta
 
 ### 方式三：手动运行二进制
 
-从 [Releases](https://github.com/Zluo003/yingzo-api/releases) 下载 `yingzo-api_<版本>_<系统>_<架构>.tar.gz`，解压后：
+从 [Releases](https://github.com/Zluo003/yingzo-api/releases) 下载 `yingzo-api_<版本>_linux_<架构>.tar.gz`（`amd64` 或 `arm64`），解压后：
 
 ```bash
 ./yingzo-api --migrate     # 应用数据库迁移后退出
@@ -209,6 +209,7 @@ docker compose -f docker-compose.dev.yml build && docker compose -f docker-compo
 
 | 文档 | 内容 |
 | --- | --- |
+| [Midjourney v8.2 客户端对接](docs/MIDJOURNEY_AGENT_INTEGRATION.md) | 账户与两项计费配置、Fast 能力、文生图、图生图、风格参考及放大选图 |
 | [backend/migrations/CONVENTIONS.md](backend/migrations/CONVENTIONS.md) | 数据库迁移命名、不可变原则、`_notx.sql` 语义、误改修复流程 |
 | [backend/pkg/pluginapi/PROTOCOL.md](backend/pkg/pluginapi/PROTOCOL.md) | 本地插件协议、包结构、兼容性与 UI 隔离 |
 | [backend/resources/model-pricing/SOURCE.md](backend/resources/model-pricing/SOURCE.md) | 内置模型价格数据来源、镜像与手动更新方式 |

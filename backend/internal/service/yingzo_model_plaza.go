@@ -68,12 +68,12 @@ func (s *ModelPlazaService) ListYingzoModels(ctx context.Context, catalog *Agent
 		if model.MediaType == AgentMediaTypeText {
 			entry.Prices = s.yingzoTextPrices(ctx, groupID, model, byModel[agentModelKey(model.Platform, model.ModelCode)], result.AsOf)
 		} else {
-			unit := AgentBillingUnitImage
-			if model.MediaType == AgentMediaTypeVideo {
-				unit = AgentBillingUnitSecond
-			}
+			unit := billingUnitForAgentModel(model.ModelCode, model.MediaType)
 			for _, price := range model.Prices {
 				if (price.Enabled != nil && !*price.Enabled) || price.BillingUnit != unit || !validYingzoPrice(price.UnitPrice) {
+					continue
+				}
+				if model.ModelCode == MidjourneyModel && !IsMidjourneyPriceTier(price.Resolution) {
 					continue
 				}
 				value := price.UnitPrice

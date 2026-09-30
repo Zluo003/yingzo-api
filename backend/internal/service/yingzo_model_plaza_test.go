@@ -105,3 +105,24 @@ func TestYingzoPlazaPerRequestTextPrice(t *testing.T) {
 	require.Equal(t, "request", result.Models[0].Prices[0].Unit)
 	require.InDelta(t, 0.6, *result.Models[0].Prices[0].UnitPrice, 1e-9)
 }
+
+func TestYingzoPlazaMidjourneyOperationPrices(t *testing.T) {
+	for _, generationEnabled := range []bool{true, false} {
+		s, catalog := yingzoTestPlaza([]AgentGroupModel{{ModelCode: MidjourneyModel, Platform: PlatformOpenAI, MediaType: AgentMediaTypeImage, Enabled: true, Prices: []AgentModelPrice{
+			{Resolution: "generation", BillingUnit: "request", UnitPrice: 0.7, Enabled: &generationEnabled},
+			{Resolution: "upscale", BillingUnit: "request", UnitPrice: 0},
+			{Resolution: "imagine_turbo", BillingUnit: "request", UnitPrice: 1.4},
+			{Resolution: "1K", BillingUnit: "image", UnitPrice: 0.3},
+		}}}, nil, nil)
+		result, err := s.ListYingzoModels(context.Background(), catalog, 10)
+		require.NoError(t, err)
+		require.Len(t, result.Models, 1)
+		model := result.Models[0]
+		require.Equal(t, "available", model.PricingStatus)
+		expected := []YingzoModelPrice{{Unit: "request", Resolution: "upscale", UnitPrice: yingzoTestFloat(0)}}
+		if generationEnabled {
+			expected = append([]YingzoModelPrice{{Unit: "request", Resolution: "generation", UnitPrice: yingzoTestFloat(0.7)}}, expected...)
+		}
+		require.Equal(t, expected, model.Prices)
+	}
+}

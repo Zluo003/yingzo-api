@@ -308,7 +308,7 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 	if !isValidAgentMediaType(mediaType) {
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", fmt.Sprintf("invalid media_type %q", input.MediaType))
 	}
-	prices, err := normalizeAgentModelPrices(mediaType, input.Prices)
+	prices, err := normalizeAgentModelPricesForModel(model.ModelCode, mediaType, input.Prices)
 	if err != nil {
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", err.Error())
 	}
@@ -459,7 +459,10 @@ func (s *AgentModelCatalogService) ResolveMediaUnitPrice(
 		return 0, "", ErrAgentModelCatalogUnavailable
 	}
 	platform = normalizeAgentPlatform(platform)
-	resolution, err := normalizeAgentPriceResolution(mediaType, resolution)
+	var err error
+	if mediaType != AgentMediaTypeImage || len(models) != 1 || models[0] != MidjourneyModel || !IsMidjourneyPriceTier(resolution) {
+		resolution, err = normalizeAgentPriceResolution(mediaType, resolution)
+	}
 	if err != nil {
 		return 0, "", err
 	}
@@ -480,7 +483,7 @@ func (s *AgentModelCatalogService) ResolveMediaUnitPrice(
 			continue
 		}
 		for _, price := range model.Prices {
-			if price.Resolution == resolution && price.BillingUnit == billingUnitForAgentMedia(mediaType) && price.UnitPrice >= 0 && agentModelPriceEnabled(price) {
+			if price.Resolution == resolution && price.BillingUnit == billingUnitForAgentModel(modelCode, mediaType) && price.UnitPrice >= 0 && agentModelPriceEnabled(price) {
 				return price.UnitPrice, model.ModelCode, nil
 			}
 		}
@@ -694,6 +697,10 @@ func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
 		platform := normalizeAgentPlatform(account.Platform)
 		defaults, supported := defaultAgentModels(platform)
 		if !supported {
+			continue
+		}
+		if account.IsMidjourney() {
+			addAgentDiscovery(discovered, platform, MidjourneyModel, AgentMediaTypeImage)
 			continue
 		}
 		mapping := account.GetModelMapping()
@@ -993,6 +1000,9 @@ func agentInterfacesForModel(platform, mediaType, modelCode string) []string {
 	switch platform {
 	case PlatformOpenAI:
 		if mediaType == AgentMediaTypeImage {
+			if modelCode == MidjourneyModel {
+				return []string{AgentInterfaceMidjourney}
+			}
 			return []string{AgentInterfaceOpenAIImages}
 		}
 		if strings.Contains(strings.ToLower(modelCode), "embedding") {
@@ -1072,6 +1082,7 @@ func orderedAgentInterfaces(values map[string]struct{}) []string {
 		AgentInterfaceOpenAIChatCompletions,
 		AgentInterfaceOpenAIEmbeddings,
 		AgentInterfaceOpenAIImages,
+		AgentInterfaceMidjourney,
 		AgentInterfaceAnthropicMessages,
 		AgentInterfaceGeminiGenerateContent,
 		AgentInterfaceSeedanceVideos,

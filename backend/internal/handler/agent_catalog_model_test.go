@@ -122,3 +122,15 @@ func capabilitiesOf(t *testing.T, model gin.H) gin.H {
 	require.True(t, ok, "model catalog entry must carry a capabilities object")
 	return capabilities
 }
+
+func TestAgentCatalogMidjourneyOnlyConfiguredOperations(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		model := agentCatalogModel(service.AgentModelCatalogEntry{ID: service.MidjourneyModel, MediaTypes: []string{service.AgentMediaTypeImage}, Platforms: []string{service.PlatformOpenAI}, Interfaces: []string{service.AgentInterfaceMidjourney}}, &service.AgentModelCatalogConfig{Models: []service.AgentGroupModel{{ModelCode: service.MidjourneyModel, MediaType: service.AgentMediaTypeImage, Enabled: true, Available: true, Prices: []service.AgentModelPrice{{Resolution: "generation", Enabled: &enabled}, {Resolution: "upscale"}, {Resolution: "imagine_turbo"}}}}})
+		expected := []string{}
+		if enabled {
+			expected = append(expected, "fast")
+		}
+		require.Equal(t, gin.H{"supported_speeds": expected}, capabilitiesOf(t, model))
+		require.Equal(t, []string{service.AgentInterfaceMidjourney}, model["interfaces"])
+	}
+}

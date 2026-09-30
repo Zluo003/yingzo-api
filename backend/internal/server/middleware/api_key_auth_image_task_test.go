@@ -25,3 +25,11 @@ func TestIsAsyncImageSubmissionRestrictsBillingExemption(t *testing.T) {
 		require.False(t, isAsyncImageSubmission(http.MethodPost, path, "respond-async"), path)
 	}
 }
+
+func TestMidjourneySubmissionRecognizedForIdempotentAuthReplay(t *testing.T) {
+	for _, path := range []string{"/v1/midjourney/generations", "/v1/midjourney/generations/imagine", "/v1/midjourney/generations/edits", "/v1/midjourney/generations/upscale"} {
+		require.True(t, isAsyncImageSubmission(http.MethodPost, path, ""))
+		require.False(t, isAsyncImageSubmission(http.MethodGet, path, ""))
+	}
+	require.False(t, isAsyncImageSubmission(http.MethodPost, "/v1/midjourney/generations/blend", ""))
+}

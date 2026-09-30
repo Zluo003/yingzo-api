@@ -1,5 +1,7 @@
 name: Release
 
+# Release archives, bundled media runtimes, and container images target Linux amd64/arm64 only.
+
 on:
   push:
     tags:
@@ -35,6 +37,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Update VERSION file
         run: |
@@ -59,6 +63,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v6

@@ -149,7 +149,7 @@ func (h *AgentHandler) Models(c *gin.Context) {
 	models := make([]gin.H, 0, len(entries))
 	for _, entry := range entries {
 		model := agentCatalogModel(entry, config)
-		if containsAgentMediaType(entry.MediaTypes, service.AgentMediaTypeImage) && h.fileStorage != nil {
+		if entry.ID != service.MidjourneyModel && containsAgentMediaType(entry.MediaTypes, service.AgentMediaTypeImage) && h.fileStorage != nil {
 			if capabilities, ok := model["capabilities"].(gin.H); ok {
 				capabilities["asynchronous"] = h.fileStorage.AsyncImagesEnabled(c.Request.Context())
 			}
@@ -235,6 +235,7 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 		capabilities["supports_audio_only_reference"] = service.SupportsAudioOnlyReference(entry.ID)
 		capabilities["cancellation"] = []string{"remoteJob"}
 	}
+
 	if containsAgentInterface(entry.Interfaces, service.AgentInterfaceOpenAIEmbeddings) {
 		operations = removeString(operations, "text.generate")
 		input = []string{"text"}
@@ -252,6 +253,16 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 	capabilities["operations"] = operations
 	capabilities["streaming"] = streaming
 	capabilities["asynchronous"] = asynchronous
+	if entry.ID == service.MidjourneyModel {
+		// The desktop only needs generation speed choices for Midjourney.
+		// Fixed version, routing and upscale rules belong to the API contract.
+		tiers := configuredAgentModelResolutions(entry, config, service.AgentMediaTypeImage)
+		speeds := []string{}
+		if containsAgentMediaType(tiers, "generation") {
+			speeds = append(speeds, "fast")
+		}
+		capabilities = gin.H{"supported_speeds": speeds}
+	}
 
 	return gin.H{
 		"id":                entry.ID,
@@ -519,6 +530,23 @@ func (h *AgentHandler) calculateGenerationQuote(ctx context.Context, apiKey *ser
 			return nil, infraerrors.BadRequest("estimate_model_mismatch", "Request model does not match estimate model")
 		}
 		tier := service.NormalizeImageBillingTierOrDefault(request.Size)
+		var midjourney *service.MidjourneyRequest
+		if input.Model == service.MidjourneyModel {
+			var target struct {
+				TaskID string `json:"task_id"`
+			}
+			_ = json.Unmarshal(input.Request, &target)
+			var err error
+			action := "imagine"
+			if target.TaskID != "" {
+				action = "upscale"
+			}
+			midjourney, err = service.ParseMidjourneyRequest(input.Request, action)
+			if err != nil {
+				return nil, infraerrors.BadRequest("invalid_image_request", err.Error())
+			}
+			tier = midjourney.PriceTier()
+		}
 		platform, unitPrice, err := h.resolveAgentImageQuotePrice(ctx, apiKey.Group.ID, input.Platform, input.Model, tier)
 		if err != nil {
 			return nil, infraerrors.ServiceUnavailable("generation_estimate_failed", "Unable to resolve current image pricing").WithCause(err)
@@ -534,6 +562,11 @@ func (h *AgentHandler) calculateGenerationQuote(ctx context.Context, apiKey *ser
 		quote.ActualPrice = cost.ActualCost
 		quote.Details = map[string]any{"platform": platform, "image_size": tier, "count": input.Count}
 		quote.RequestHash = hashJSON(map[string]any{"kind": input.Kind, "platform": platform, "model": input.Model, "image_size": tier, "count": input.Count})
+		if midjourney != nil {
+			quote.UnitKind = "request"
+			quote.Details = map[string]any{"platform": platform, "operation": tier, "speed": midjourney.Speed, "count": input.Count}
+			quote.RequestHash = hashJSON(map[string]any{"kind": input.Kind, "platform": platform, "request": midjourney, "count": input.Count})
+		}
 	case "video":
 		if h.videoService == nil {
 			return nil, infraerrors.ServiceUnavailable("generation_estimate_failed", "Video pricing service is unavailable")

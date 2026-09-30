@@ -122,6 +122,23 @@ describe('admin YingzoAgentView', () => {
     deleteAgentModel.mockResolvedValue({ deleted: true })
   })
 
+  it('keeps two Midjourney operation prices separate from image resolutions', async () => {
+    const tiers = ['generation', 'upscale']
+    getAgentModels.mockResolvedValue({ models: [...CATALOG.models, model({ id: 4, model_code: 'midjourney-v8.2', media_type: 'image', prices: tiers.map((resolution, i) => ({ resolution, unit_price: i / 10, billing_unit: 'request' })) })] })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="yingzo-agent-tab-image"]').trigger('click')
+    for (const tier of tiers) expect(wrapper.find(`[data-testid="yingzo-agent-price-4-${tier}"]`).exists()).toBe(true)
+    expect(wrapper.find('[data-testid="yingzo-agent-price-4-1K"]').exists()).toBe(false)
+    for (const tier of ['imagine_relax', 'imagine_fast', 'imagine_turbo', 'upscale_fast']) expect(wrapper.find(`[data-testid="yingzo-agent-price-4-${tier}"]`).exists()).toBe(false)
+    expect(wrapper.find('[data-testid="yingzo-agent-price-2-generation"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="yingzo-agent-price-4-generation"]').setValue('0.7')
+    await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
+    await flushPromises()
+    expect(updateAgentModel).toHaveBeenCalledWith(7, 4, { media_type: 'image', enabled: true, prices: [
+      { resolution: 'generation', unit_price: 0.7 }, { resolution: 'upscale', unit_price: 0.1 },
+    ] })
+  })
+
   it('locates the built-in agent group and loads its catalog', async () => {
     const wrapper = await mountView()
 

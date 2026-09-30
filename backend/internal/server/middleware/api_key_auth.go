@@ -341,6 +341,9 @@ func isAsyncImageSubmission(method, path, prefer string) bool {
 	if method != http.MethodPost {
 		return false
 	}
+	if path == "/v1/midjourney/generations" || path == "/v1/midjourney/generations/imagine" || path == "/v1/midjourney/generations/edits" || path == "/v1/midjourney/generations/upscale" {
+		return true
+	}
 	explicit := strings.HasSuffix(path, "/async")
 	base := strings.TrimSuffix(path, "/async")
 	nativeGemini := strings.HasPrefix(base, "/v1beta/models/") && strings.HasSuffix(base, ":generateContent") && !explicit

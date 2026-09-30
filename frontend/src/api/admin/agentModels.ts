@@ -10,7 +10,7 @@
 import { apiClient } from '../client'
 
 export type AgentMediaType = 'text' | 'image' | 'video'
-export type AgentBillingUnit = 'image' | 'second'
+export type AgentBillingUnit = 'image' | 'second' | 'request'
 
 /** 图片按 1K/2K/4K 每张计价；视频按分辨率每秒计价。 */
 export interface AgentModelPrice {

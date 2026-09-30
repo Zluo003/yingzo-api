@@ -81,6 +81,12 @@ func (s *DurableImageService) quote(ctx context.Context, key *APIKey, sub *UserS
 		model = s.gateway.compositeBillableModel(ctx, key, public, concrete)
 	}
 	q := ImageTaskQuote{QuotaPlatform: platform, Model: model, Size: NormalizeImageBillingTierOrDefault(size), Count: count, PricingAt: time.Now(), Multiplier: 1}
+	if model == MidjourneyModel {
+		if !IsMidjourneyPriceTier(size) || count != 1 {
+			return q, errors.New("invalid Midjourney billing operation")
+		}
+		q.Size = size
+	}
 	if count < 1 || count > 10 {
 		return q, errors.New("image count must be between 1 and 10")
 	}
@@ -109,7 +115,19 @@ func (s *DurableImageService) quote(ctx context.Context, key *APIKey, sub *UserS
 		tokenMultiplier, imageMultiplier := computePeakAwareMultipliers(key, multiplier, q.PricingAt)
 		q.Multiplier = tokenMultiplier
 		resolved := s.resolver.Resolve(ctx, PricingInput{Model: model, GroupID: key.GroupID, Group: key.Group})
-		if resolved != nil && resolved.Source == PricingSourceChannel && resolved.Mode == BillingModeToken {
+		if model == MidjourneyModel {
+			resolved = s.resolver.Resolve(ctx, PricingInput{Model: MidjourneyBillingModel(size), GroupID: key.GroupID, Group: key.Group})
+			if resolved == nil || (resolved.Source != PricingSourceChannel && resolved.Source != PricingSourceGroup) || resolved.Mode != BillingModePerRequest {
+				return q, ErrModelPricingUnavailable
+			}
+			q.Multiplier = imageMultiplier
+			var err error
+			q.PerImage, err = s.billing.CalculateCostUnified(CostInput{Ctx: ctx, Model: MidjourneyBillingModel(size), RequestCount: 1, Resolved: resolved, Resolver: s.resolver, RateMultiplier: imageMultiplier, PricingAt: q.PricingAt})
+			if err != nil {
+				return q, err
+			}
+			reserved = q.PerImage
+		} else if resolved != nil && resolved.Source == PricingSourceChannel && resolved.Mode == BillingModeToken {
 			q.TokenPricing = resolved
 			q.ChannelPricing = resolved.channelPricing
 			q.LongContext = resolved.longContextPricingEnabled
@@ -147,10 +165,20 @@ func (s *DurableImageService) quote(ctx context.Context, key *APIKey, sub *UserS
 	}
 	q.Usage = UsageLog{UserID: key.UserID, APIKeyID: key.ID, Model: model, RequestedModel: requestedModel, GroupID: key.GroupID, SubscriptionID: q.Charge.SubscriptionID, BillingType: q.Charge.BillingType, ActualCost: reserved.ActualCost, ImageSize: &q.Size, RateMultiplier: q.Multiplier, CreatedAt: q.PricingAt}
 	mode := string(BillingModeImage)
+	if model == MidjourneyModel {
+		mode = string(BillingModePerRequest)
+	}
 	if q.TokenPricing != nil {
 		mode = string(BillingModeToken)
 	}
 	q.Usage.BillingMode = &mode
+	if model == MidjourneyModel {
+		q.PerImage.BillingMode = mode
+		// The dimension is an operation, not a pixel resolution. Keep it in
+		// the frozen quote while usage reports the explicit billing model.
+		q.Usage.Model = MidjourneyBillingModel(size)
+		q.Usage.ImageSize = nil
+	}
 	return q, nil
 }
 func (s *DurableImageService) Accept(ctx context.Context, key *APIKey, sub *UserSubscription, platform, model, size string, count int, idempotency, fingerprint string, snapshot *ImageRequestSnapshot) (*ImageTask, error) {
@@ -169,6 +197,16 @@ func (s *DurableImageService) Accept(ctx context.Context, key *APIKey, sub *User
 		if !errors.Is(err, ErrImageTaskNotFound) {
 			return nil, err
 		}
+	}
+	if model == MidjourneyModel {
+		if snapshot.Midjourney == nil {
+			return nil, errors.New("missing Midjourney snapshot")
+		}
+		prepared, err := s.prepareMidjourney(ctx, key, &snapshot.Midjourney.Request, snapshot.Midjourney.Action)
+		if err != nil {
+			return nil, err
+		}
+		snapshot.Midjourney = prepared
 	}
 	q, err := s.quote(ctx, key, sub, platform, model, size, count)
 	if err != nil {
@@ -340,7 +378,14 @@ func (s *DurableImageService) run(parent context.Context, t *DurableImageTask, e
 	if t.EncryptedResult == "" {
 		capture := &AsyncImageExecution{TaskID: t.ID, Route: snapshot.Route, Platform: snapshot.Platform, Quote: &t.Quote}
 		execCtx := WithAsyncImageExecution(ctx, capture)
-		status, body, err := execute(execCtx, &snapshot, key, capture)
+		var status int
+		var body json.RawMessage
+		var err error
+		if snapshot.Midjourney != nil {
+			status, body, err = s.executeMidjourney(execCtx, snapshot.Midjourney, key, capture)
+		} else {
+			status, body, err = execute(execCtx, &snapshot, key, capture)
+		}
 		t.CapturedUsage = capture.Usage
 		if err != nil || status < 200 || status >= 300 || !json.Valid(body) {
 			t.TaskError = capture.TaskError
@@ -358,6 +403,20 @@ func (s *DurableImageService) run(parent context.Context, t *DurableImageTask, e
 		if err != nil {
 			s.fail(t, "could not protect generated response")
 			return
+		}
+		if snapshot.Midjourney != nil {
+			var saved struct {
+				Reference json.RawMessage `json:"_midjourney"`
+			}
+			if json.Unmarshal(body, &saved) != nil || len(saved.Reference) == 0 {
+				s.fail(t, "missing provider reference")
+				return
+			}
+			t.Quote.EncryptedProviderReference, err = s.encryptor.Encrypt(string(saved.Reference))
+			if err != nil {
+				s.fail(t, "could not protect provider reference")
+				return
+			}
 		}
 		if err = s.ledger.SaveResponse(ctx, t); err != nil {
 			return
@@ -418,6 +477,9 @@ func (s *DurableImageService) settlement(ctx context.Context, t *DurableImageTas
 		return nil, errors.New("missing upstream usage")
 	}
 	log := *t.CapturedUsage
+	if t.Quote.Model == MidjourneyModel {
+		count = 1
+	}
 	log.ImageCount = count
 	cost, err := calculateFrozenImageCost(ctx, s.billing, s.resolver, &t.Quote, UsageTokens{InputTokens: log.InputTokens, OutputTokens: log.OutputTokens, ImageInputTokens: log.ImageInputTokens, ImageOutputTokens: log.ImageOutputTokens, CacheCreationTokens: log.CacheCreationTokens, CacheReadTokens: log.CacheReadTokens}, count)
 	if err != nil {
@@ -433,6 +495,9 @@ func (s *DurableImageService) publishResult(ctx context.Context, t *DurableImage
 	if err := json.Unmarshal(result, &top); err != nil {
 		return nil, 0, err
 	}
+	// Provider references remain in the encrypted response for owned upscale
+	// requests and never enter the client-visible task record.
+	delete(top, "_midjourney")
 	var items []map[string]json.RawMessage
 	if data, ok := top["data"]; ok {
 		if err := json.Unmarshal(data, &items); err != nil {

@@ -184,6 +184,7 @@ func TestDurableImageLedger(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, task.ID, claimed.ID)
 		claimed.EncryptedResult = "protected response"
+		claimed.Quote.EncryptedProviderReference = "encrypted Midjourney account and task reference"
 		claimed.CapturedUsage = &service.UsageLog{ImageCount: 1, ActualCost: 2}
 		require.NoError(t, ledger.SaveResponse(ctx, claimed))
 		_, err = integrationDB.Exec(`UPDATE image_tasks SET lease_until=NOW()-INTERVAL '1 minute' WHERE id=$1`, task.ID)
@@ -193,6 +194,38 @@ func TestDurableImageLedger(t *testing.T) {
 		require.Equal(t, "saving", recovered.Phase)
 		require.Equal(t, "protected response", recovered.EncryptedResult)
 		require.NoError(t, ledger.Finalize(ctx, recovered, recovered.CapturedUsage, true))
+		stored, err := ledger.Find(ctx, service.ImageTaskOwner{UserID: user.ID, APIKeyID: key.ID}, task.ID, false)
+		require.NoError(t, err)
+		require.Empty(t, stored.EncryptedResult)
+		require.Empty(t, stored.EncryptedRequest)
+		require.Equal(t, claimed.Quote.EncryptedProviderReference, stored.Quote.EncryptedProviderReference)
+	})
+	t.Run("midjourney_settles_without_a_pixel_size", func(t *testing.T) {
+		for _, tier := range []string{"generation", "upscale", "imagine_relax", "imagine_fast", "imagine_turbo", "upscale_fast"} {
+			start := balance()
+			task := makeTask("midjourney-"+tier, 0.7)
+			task.Quote.Model, task.Quote.Size = service.MidjourneyModel, tier
+			task.Quote.Usage.Model = service.MidjourneyBillingModel(tier)
+			mode := "per_request"
+			task.Quote.Usage.BillingMode = &mode
+			accepted, _, err := ledger.Accept(ctx, task)
+			require.NoError(t, err)
+			claimed, err := ledger.Claim(ctx)
+			require.NoError(t, err)
+			require.Equal(t, accepted.ID, claimed.ID)
+			usage := task.Quote.Usage
+			usage.ImageCount = 1
+			require.NoError(t, ledger.Finalize(ctx, claimed, &usage, true))
+			require.NoError(t, ledger.Finalize(ctx, claimed, &usage, true))
+			require.InDelta(t, start-0.7, balance(), 1e-8)
+			var size sql.NullString
+			var count, rows int
+			require.NoError(t, integrationDB.QueryRow(`SELECT image_size,image_count FROM usage_logs WHERE image_task_id=$1`, accepted.ID).Scan(&size, &count))
+			require.False(t, size.Valid)
+			require.Equal(t, 1, count)
+			require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE image_task_id=$1`, accepted.ID).Scan(&rows))
+			require.Equal(t, 1, rows)
+		}
 	})
 	t.Run("failed_usage_insert_rolls_back_admission", func(t *testing.T) {
 		before := balance()

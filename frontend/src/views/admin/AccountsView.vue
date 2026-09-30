@@ -468,8 +468,10 @@
       :groups="groups"
       @close="showCreateImage = false"
       @created="handleImageAccountCreated"
+      @midjourney="showCreateImage = false; showCreateMidjourney = true"
     />
-    <EditAccountModal :show="showEdit" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
+    <MidjourneyAccountModal :show="showCreateMidjourney || (showEdit && isMidjourneyAccount(edAcc))" :account="showEdit ? edAcc : null" :proxies="proxies" :groups="groups" @close="showCreateMidjourney = false; showEdit = false" @created="handleImageAccountCreated" @updated="handleAccountUpdated" />
+    <EditAccountModal :show="showEdit && !isMidjourneyAccount(edAcc)" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
@@ -522,6 +524,8 @@ import DataTable from '@/components/common/DataTable.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import MidjourneyAccountModal from '@/components/account/MidjourneyAccountModal.vue'
+import { isMidjourneyAccount } from '@/components/account/midjourney'
 import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrsModal, TempUnschedStatusModal } from '@/components/account'
 import AccountTableActions from '@/components/admin/account/AccountTableActions.vue'
 import AccountTableFilters from '@/components/admin/account/AccountTableFilters.vue'
@@ -608,6 +612,7 @@ const selTypes = computed<AccountType[]>(() => {
 })
 const showCreate = ref(false)
 const showCreateImage = ref(false)
+const showCreateMidjourney = ref(false)
 // 「添加视频账号」专用入口：打开同一个弹窗但预置 platform=video。
 const showCreateVideo = ref(false)
 const showEdit = ref(false)
@@ -1379,6 +1384,8 @@ watch(accounts, (rows) => {
 const isAnyModalOpen = computed(() => {
   return (
     showCreate.value ||
+    showCreateImage.value ||
+    showCreateMidjourney.value ||
     showCreateVideo.value ||
     showEdit.value ||
     showSync.value ||

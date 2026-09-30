@@ -89,7 +89,7 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 		path := c.Request.URL.Path
 
 		// Skip API routes
-		if shouldBypassEmbeddedFrontend(path) {
+		if shouldBypassEmbeddedFrontend(path) && !isModelPlazaNavigation(c.Request) {
 			c.Next()
 			return
 		}
@@ -336,7 +336,7 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		path := c.Request.URL.Path
 
-		if shouldBypassEmbeddedFrontend(path) {
+		if shouldBypassEmbeddedFrontend(path) && !isModelPlazaNavigation(c.Request) {
 			c.Next()
 			return
 		}
@@ -375,6 +375,16 @@ func tryServeOverrideFile(c *gin.Context, overrideDir, cleanPath string) bool {
 	c.File(filePath)
 	c.Abort()
 	return true
+}
+
+// /models is shared by the user-facing plaza and the root model-list API.
+// Only unauthenticated HTML navigation gets the SPA shell; data requests still
+// pass through the gateway's normal authentication, including Codex discovery.
+func isModelPlazaNavigation(r *http.Request) bool {
+	return r.URL.Path == "/models" && (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
+		strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/html") &&
+		r.Header.Get("Authorization") == "" && r.Header.Get("x-api-key") == "" && r.Header.Get("x-goog-api-key") == "" &&
+		!r.URL.Query().Has("client_version") && !r.URL.Query().Has("key") && !r.URL.Query().Has("api_key")
 }
 
 // shouldBypassEmbeddedFrontend 报告 path 是否属于后端 API，而不是 SPA 的客户端路由。

@@ -155,7 +155,11 @@ func (r *durableImageLedger) SaveResponse(ctx context.Context, t *service.Durabl
 	if err != nil {
 		return err
 	}
-	result, err := r.db.ExecContext(ctx, `UPDATE image_tasks SET encrypted_result=$3,captured_usage=$4,phase='saving',updated_at=NOW() WHERE id=$1 AND lease_token=$2 AND status='processing' AND lease_until>NOW() AND deadline>NOW()`, t.ID, t.LeaseToken, t.EncryptedResult, usage)
+	quote, err := json.Marshal(t.Quote)
+	if err != nil {
+		return err
+	}
+	result, err := r.db.ExecContext(ctx, `UPDATE image_tasks SET encrypted_result=$3,captured_usage=$4,quote=$5,phase='saving',updated_at=NOW() WHERE id=$1 AND lease_token=$2 AND status='processing' AND lease_until>NOW() AND deadline>NOW()`, t.ID, t.LeaseToken, t.EncryptedResult, usage, quote)
 	if err != nil {
 		return err
 	}

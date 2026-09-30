@@ -1,3 +1,4 @@
+import midjourney from './midjourney'
 import landing from './landing'
 import common from './common'
 import dashboard from './dashboard'
@@ -18,6 +19,7 @@ export default deepMergeMessages(
     ...channelMonitorV2,
     ...batchImage,
     admin,
+    midjourney,
     ...misc,
   },
   fork

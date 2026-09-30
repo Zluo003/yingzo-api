@@ -792,6 +792,9 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 		}
 		account.LoadFactor = input.LoadFactor
 	}
+	if err := normalizeMidjourneyAccount(account); err != nil {
+		return nil, err
+	}
 	return account, nil
 }
 
@@ -1161,6 +1164,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 	}
 
+	if err := normalizeMidjourneyAccount(account); err != nil {
+		return nil, err
+	}
 	billingSettingsAppliedAtomically := false
 	updater := s.accountBillingRepo
 	if updater == nil {

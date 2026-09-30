@@ -323,6 +323,10 @@ func RegisterGatewayRoutes(
 			}
 			h.OpenAIGateway.Embeddings(c)
 		})
+		gateway.POST("/midjourney/generations", h.AsyncImage.Midjourney)
+		gateway.POST("/midjourney/generations/imagine", h.AsyncImage.Midjourney)
+		gateway.POST("/midjourney/generations/edits", h.AsyncImage.Midjourney)
+		gateway.POST("/midjourney/generations/upscale", h.AsyncImage.Midjourney)
 		gateway.POST("/images/generations", imagesHandler)
 		gateway.POST("/images/edits", imagesHandler)
 		gateway.POST("/images/generations/async", h.AsyncImage.Submit)

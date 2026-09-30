@@ -958,3 +958,48 @@ func BenchmarkFrontendServerServeIndexHTML(b *testing.B) {
 		server.serveIndexHTML(c)
 	}
 }
+
+func TestModelPlazaNavigationPreservesModelsAPI(t *testing.T) {
+	server, err := NewFrontendServer(&mockSettingsProvider{settings: map[string]string{}})
+	require.NoError(t, err)
+	for name, handler := range map[string]gin.HandlerFunc{"settings": server.Middleware(), "legacy": ServeEmbeddedFrontend()} {
+		t.Run(name, func(t *testing.T) {
+			for _, tc := range []struct {
+				path, method, accept, authHeader string
+				html                             bool
+			}{
+				{"/models", "GET", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "", true},
+				{"/models", "HEAD", "text/html", "", true},
+				{"/models", "GET", "application/json", "", false},
+				{"/models", "GET", "*/*", "", false},
+				{"/models", "GET", "text/html", "Authorization", false},
+				{"/models", "GET", "text/html", "x-api-key", false},
+				{"/models", "GET", "text/html", "x-goog-api-key", false},
+				{"/models?client_version=", "GET", "text/html", "", false},
+				{"/models?key=test-credential", "GET", "text/html", "", false},
+				{"/models?api_key=test-credential", "GET", "text/html", "", false},
+				{"/v1/models", "GET", "text/html", "", false},
+				{"/models", "POST", "text/html", "", false},
+			} {
+				router := gin.New()
+				router.Use(handler)
+				router.Any("/models", func(c *gin.Context) { c.JSON(401, gin.H{"error": "gateway authentication"}) })
+				router.Any("/v1/models", func(c *gin.Context) { c.JSON(401, gin.H{"error": "gateway authentication"}) })
+				req := httptest.NewRequest(tc.method, tc.path, nil)
+				req.Header.Set("Accept", tc.accept)
+				if tc.authHeader != "" {
+					req.Header.Set(tc.authHeader, "test-credential")
+				}
+				w := httptest.NewRecorder()
+				router.ServeHTTP(w, req)
+				if tc.html {
+					require.Equal(t, 200, w.Code)
+					require.Contains(t, w.Header().Get("Content-Type"), "text/html")
+				} else {
+					require.Equal(t, 401, w.Code)
+					require.Contains(t, w.Body.String(), "gateway authentication")
+				}
+			}
+		})
+	}
+}

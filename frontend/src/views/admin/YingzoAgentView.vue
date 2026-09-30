@@ -159,6 +159,7 @@
         {{ t(`admin.yingzoAgent.tabs.${activeTab}.hint`) }}
       </p>
 
+      <p v-if="activeTab === 'image' && modelsByTab.image.some(m => m.model_code === MIDJOURNEY_MODEL)" class="mt-2 text-xs text-primary-600">{{ t('midjourney.billingHint') }}</p>
       <div v-if="!modelsByTab[activeTab].length" class="py-10 text-center text-sm text-gray-400">
         {{ t('admin.yingzoAgent.empty') }}
       </div>
@@ -183,7 +184,7 @@
                 >
                   {{
                     activeTab === 'image'
-                      ? t('admin.yingzoAgent.columns.pricePerImage', { resolution })
+                      ? (MIDJOURNEY_PRICE_TIERS.includes(resolution) ? t(`midjourney.prices.${resolution}`) : t('admin.yingzoAgent.columns.pricePerImage', { resolution }))
                       : t('admin.yingzoAgent.columns.pricePerSecond', { resolution })
                   }}
                 </th>
@@ -207,6 +208,7 @@
                   v-model="drafts[model.id].mediaType"
                   class="input w-24"
                   :data-testid="`yingzo-agent-media-type-${model.id}`"
+                  :disabled="model.model_code === MIDJOURNEY_MODEL"
                 >
                   <option value="text">{{ t('admin.yingzoAgent.mediaType.text') }}</option>
                   <option value="image">{{ t('admin.yingzoAgent.mediaType.image') }}</option>
@@ -250,11 +252,11 @@
               </template>
               <template v-else>
                 <td
-                  v-for="resolution in resolutionColumnsForDraft(model)"
+                  v-for="resolution in (activeTab === 'text' ? resolutionColumnsForDraft(model) : resolutionColumns)"
                   :key="resolution"
                   class="py-2 pr-3"
                 >
-                  <div class="flex items-center gap-2">
+                  <div v-if="resolutionColumnsForDraft(model).includes(resolution)" class="flex items-center gap-2">
                     <input
                       v-model="drafts[model.id].resolutionEnabled[resolution]"
                       type="checkbox"
@@ -271,6 +273,7 @@
                       :data-testid="`yingzo-agent-price-${model.id}-${resolution}`"
                     />
                   </div>
+                  <span v-else class="text-gray-400">—</span>
                 </td>
               </template>
               <td class="py-2 pr-3 text-right">
@@ -304,6 +307,7 @@ import {
   type AgentMediaType,
   type AgentModelPrice,
 } from '@/api/admin/agentModels'
+import { MIDJOURNEY_MODEL, MIDJOURNEY_PRICE_TIERS } from '@/components/account/midjourney'
 import { VIDEO_MODEL_RESOLUTIONS } from '@/views/admin/videoModelResolutions'
 import type { AdminGroup } from '@/types'
 
@@ -358,14 +362,11 @@ const enabledCount = computed(
 
 /** 图片固定 1K/2K/4K；视频按该模型官方支持的档位，避免让管理员配出永远用不上的价。 */
 const resolutionColumns = computed(() => {
-  if (activeTab.value === 'image') {
-    return IMAGE_RESOLUTIONS
-  }
-  const union = new Set<string>()
-  for (const model of modelsByTab.value.video) {
-    for (const resolution of resolutionColumnsForType('video', model.model_code)) {
-      union.add(resolution)
-    }
+  const union = new Set<string>(activeTab.value === 'image' ? IMAGE_RESOLUTIONS : [])
+  for (const model of modelsByTab.value[activeTab.value]) {
+    const mediaType = drafts[model.id]?.mediaType ?? model.media_type
+    if (mediaType === 'text') continue
+    for (const resolution of resolutionColumnsForType(mediaType, model.model_code)) union.add(resolution)
   }
   return [...union]
 })
@@ -376,6 +377,7 @@ function resolutionColumnsForDraft(model: AgentGroupModel): string[] {
 
 function resolutionColumnsForType(mediaType: AgentMediaType, modelCode: string): string[] {
   if (mediaType === 'image') {
+    if (modelCode === MIDJOURNEY_MODEL) return MIDJOURNEY_PRICE_TIERS
     return IMAGE_RESOLUTIONS
   }
   const spec = VIDEO_MODEL_RESOLUTIONS.find((entry) => entry.model === modelCode)
