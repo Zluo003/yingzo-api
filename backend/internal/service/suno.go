@@ -198,7 +198,7 @@ func normalizeSunoPrices(mediaType string, prices []AgentModelPrice) ([]AgentMod
 	seen := map[string]bool{}
 	for _, p := range prices {
 		if !IsSunoPriceTier(p.Resolution) || seen[p.Resolution] || p.UnitPrice < 0 || math.IsNaN(p.UnitPrice) || math.IsInf(p.UnitPrice, 0) {
-			return nil, errors.New("Suno requires unique instrumental/song prices with finite non-negative amounts")
+			return nil, errors.New("suno requires unique instrumental/song prices with finite non-negative amounts")
 		}
 		seen[p.Resolution] = true
 		p.BillingUnit = "request"
@@ -231,7 +231,7 @@ func sunoHTTP(ctx context.Context, gateway *OpenAIGatewayService, a *Account, me
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, &sunoHTTPError{resp.StatusCode}
 	}
@@ -240,7 +240,7 @@ func sunoHTTP(ctx context.Context, gateway *OpenAIGatewayService, a *Account, me
 		return nil, err
 	}
 	if len(data) > 2*1024*1024 {
-		return nil, errors.New("Suno response too large")
+		return nil, errors.New("suno response too large")
 	}
 	return data, nil
 }

@@ -273,7 +273,7 @@ func (p *TemporaryAssetPublisher) PublishGeneratedMusicCover(ctx context.Context
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != 200 {
 		return "", errors.New("cover download failed")
 	}

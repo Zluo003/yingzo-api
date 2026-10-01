@@ -29,7 +29,7 @@ func (r *usageLogRepository) hydrateMusicUsage(ctx context.Context, logs []servi
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var id int64
 		var task, status, mode string

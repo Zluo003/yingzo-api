@@ -145,7 +145,7 @@ func (r *durableMusicLedger) Pin(ctx context.Context, t *service.DurableMusicTas
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var id int64
 	if err = tx.QueryRowContext(ctx, `SELECT id FROM accounts WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, accountID).Scan(&id); err != nil {
 		return false, err

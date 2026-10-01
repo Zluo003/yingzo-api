@@ -635,7 +635,7 @@ func TestAgentMediaModelRejectsTextMultiplierAndRequiresResolutionPrices(t *test
 	_, err = catalogService.UpdateModel(context.Background(), 9, modelID, AgentModelConfigInput{
 		MediaType: AgentMediaTypeImage, Enabled: true,
 	})
-	require.ErrorContains(t, err, "requires at least one resolution price")
+	require.ErrorContains(t, err, "requires at least one configured and enabled price")
 
 	_, err = catalogService.UpdateModel(context.Background(), 9, modelID, AgentModelConfigInput{
 		MediaType: AgentMediaTypeImage, Enabled: true,

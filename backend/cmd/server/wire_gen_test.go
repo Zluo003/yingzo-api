@@ -52,6 +52,7 @@ func TestProvideCleanup_WithMinimalDependencies_NoPanic(t *testing.T) {
 
 	cleanup := provideCleanup(
 		nil, // durable image workers
+		nil, // durable music workers
 		nil, // entClient
 		nil, // redis
 		&service.OpsMetricsCollector{},
