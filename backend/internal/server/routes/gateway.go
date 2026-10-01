@@ -243,6 +243,15 @@ func RegisterGatewayRoutes(
 	}
 
 	// API网关（Claude API兼容）
+	// Music admission enforces its fixed model and pricing after idempotent recovery.
+	// Generic model-routing/allowlist middleware must not block accepted-task replay.
+	if h.Music != nil {
+		music := r.Group("/v1/music")
+		music.Use(bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupOpenAI)
+		music.POST("/generations", h.Music.Submit)
+		music.GET("/tasks/:task_id", h.Music.Get)
+		music.GET("/tasks/by-idempotency/:idempotency_key", h.Music.GetByIdempotency)
+	}
 	gateway := r.Group("/v1")
 	gateway.Use(bodyLimit)
 	gateway.Use(clientRequestID)

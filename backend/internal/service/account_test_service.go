@@ -179,6 +179,9 @@ func (s *AccountTestService) SetOpenAIGatewayService(gateway *OpenAIGatewayServi
 
 // FetchOpenAIAccountModels uses the shared cached discovery path for the test picker.
 func (s *AccountTestService) FetchOpenAIAccountModels(ctx context.Context, account *Account) ([]openai.Model, error) {
+	if account.IsSuno() {
+		return []openai.Model{{ID: SunoModel, Object: "model", Type: "model", OwnedBy: "yingzo-agent", DisplayName: "Suno v6"}}, nil
+	}
 	if s == nil || s.openaiGatewayService == nil {
 		return nil, errors.New("OpenAI model discovery service is unavailable")
 	}
@@ -352,6 +355,9 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	// Route to platform-specific test method
+	if account.IsSuno() {
+		return s.testSunoAccount(c, account)
+	}
 	if account.IsMidjourney() {
 		return s.testMidjourneyAccount(c, account)
 	}

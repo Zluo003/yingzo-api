@@ -135,8 +135,9 @@
               class="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium"
               :class="getRefundBadgeClass()"
             >
-              {{ row.funds_event === 'failure_refund' ? t('usage.imageFailureRefund') : t('usage.refund') }}
+              {{ row.funds_event === 'failure_refund' ? t(row.music_task_id ? 'suno.failureRefund' : 'usage.imageFailureRefund') : t('usage.refund') }}
             </span>
+            <span v-if="row.music_task_id" class="text-xs text-gray-500" :title="row.music_task_id">{{ row.music_mode ? t(`suno.modes.${row.music_mode}`) : '' }} · {{ row.funds_event ? t(`usage.imageFunds.${row.funds_event}`) : '' }} · {{ row.music_task_status ? t(`usage.imageStates.${row.music_task_status}`) : '' }}</span>
             <span v-if="row.image_task_id" class="text-xs text-gray-500" :title="row.image_task_id">
               {{ row.funds_event ? t(`usage.imageFunds.${row.funds_event}`) : '' }} · {{ row.image_task_status ? t(`usage.imageStates.${row.image_task_status}`) : '' }}
             </span>
@@ -710,6 +711,7 @@ const tokenTooltipPosition = ref({ x: 0, y: 0 })
 const tokenTooltipData = ref<AdminUsageLog | null>(null)
 
 const getRequestTypeLabel = (row: AdminUsageLog): string => {
+  if (row.music_task_id) return t('suno.asyncMusic')
   if (row.image_task_id) return t('usage.asyncImage')
   const requestType = resolveUsageRequestType(row)
   if (requestType === 'cyber') return t('usage.cyber')

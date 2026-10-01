@@ -198,6 +198,7 @@ func ProvideHandlers(
 	availableChannelHandler *AvailableChannelHandler,
 	modelPlazaHandler *ModelPlazaHandler,
 	asyncImageHandler *AsyncImageHandler,
+	musicTaskHandler *MusicTaskHandler,
 	batchImageHandler *BatchImageHandler,
 	videoHandler *VideoHandler,
 	agentHandler *AgentHandler,
@@ -228,6 +229,7 @@ func ProvideHandlers(
 		AvailableChannel: availableChannelHandler,
 		ModelPlaza:       modelPlazaHandler,
 		AsyncImage:       asyncImageHandler,
+		Music:            musicTaskHandler,
 		BatchImage:       batchImageHandler,
 	}
 }
@@ -256,6 +258,7 @@ var ProviderSet = wire.NewSet(
 	ProvideVideoHandler,
 	NewModelPlazaHandler,
 	ProvideAsyncImageHandler,
+	NewMusicTaskHandler,
 	ProvideBatchImageHandler,
 
 	// Admin handlers

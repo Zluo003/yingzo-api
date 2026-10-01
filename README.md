@@ -43,7 +43,8 @@
 
 - **唯一且不可删除**：数据库中最多一条存活 agent 分组（唯一索引兜底），管理端不能新建、复制或删除。
 - **覆盖全部平台**：入口按请求模型解析所属平台（协议默认平台只作兜底），因此同一个 key 既能调 `deepseek-v4-pro`，也能调 `seedance-2.5`。
-- **逐模型计价**：文本 = 源分组渠道价 × 该模型倍率；图片 = 每张单价（1K/2K/4K）；视频 = 每秒单价（按分辨率）。
+- **逐模型计价**：文本 = 源分组渠道价 × 该模型倍率；图片 = 每张单价（1K/2K/4K）；视频 = 每秒单价（按分辨率）；Suno 音乐 = 按纯音乐 / 歌曲分别设置每次价格。
+- **音乐生成接口**：`POST /v1/music/generations` 受理 Suno v6 纯音乐或歌词歌曲，`GET /v1/music/tasks/{task_id}` 查询，支持按幂等键恢复、生成文件转存及失败退款，见 [Suno 对接指南](docs/SUNO_AGENT_INTEGRATION.md)。
 - **缺价不放行**：源渠道价或倍率缺失时在转发上游之前失败，避免收不到钱还付成本。
 
 ### 视频与素材
@@ -210,6 +211,7 @@ docker compose -f docker-compose.dev.yml build && docker compose -f docker-compo
 | 文档 | 内容 |
 | --- | --- |
 | [Midjourney v8.2 客户端对接](docs/MIDJOURNEY_AGENT_INTEGRATION.md) | 账户与两项计费配置、Fast 能力、文生图、图生图、风格参考及放大选图 |
+| [Suno v6 音乐对接](docs/SUNO_AGENT_INTEGRATION.md) | 专用账号、两种模式计费、异步生成、幂等恢复、结果下载与退款 |
 | [backend/migrations/CONVENTIONS.md](backend/migrations/CONVENTIONS.md) | 数据库迁移命名、不可变原则、`_notx.sql` 语义、误改修复流程 |
 | [backend/pkg/pluginapi/PROTOCOL.md](backend/pkg/pluginapi/PROTOCOL.md) | 本地插件协议、包结构、兼容性与 UI 隔离 |
 | [backend/resources/model-pricing/SOURCE.md](backend/resources/model-pricing/SOURCE.md) | 内置模型价格数据来源、镜像与手动更新方式 |

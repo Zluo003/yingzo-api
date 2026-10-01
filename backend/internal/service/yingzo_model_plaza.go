@@ -73,6 +73,9 @@ func (s *ModelPlazaService) ListYingzoModels(ctx context.Context, catalog *Agent
 				if (price.Enabled != nil && !*price.Enabled) || price.BillingUnit != unit || !validYingzoPrice(price.UnitPrice) {
 					continue
 				}
+				if model.ModelCode == SunoModel && !IsSunoPriceTier(price.Resolution) {
+					continue
+				}
 				if model.ModelCode == MidjourneyModel && !IsMidjourneyPriceTier(price.Resolution) {
 					continue
 				}

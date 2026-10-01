@@ -1747,6 +1747,9 @@ export interface UsageLog {
   first_token_ms: number | null
 
   // 图片生成字段
+  music_task_id?: string | null
+  music_task_status?: string | null
+  music_mode?: string | null
   image_task_id?: string | null
   funds_event?: 'precharge' | 'settlement' | 'settlement_refund' | 'failure_refund' | null
   image_task_status?: string | null

@@ -283,6 +283,7 @@ type RateLimitCacheInvalidator interface {
 }
 
 type APIKeyService struct {
+	musicTaskLookup           func(context.Context, int64, string) bool
 	imageTaskLookup           func(context.Context, int64, string) bool
 	apiKeyRepo                APIKeyRepository
 	userRepo                  UserRepository
@@ -1193,4 +1194,8 @@ func (s *APIKeyService) UpdateRateLimitUsage(ctx context.Context, apiKeyID int64
 
 func (s *APIKeyService) HasAcceptedImageTask(ctx context.Context, keyID int64, key string) bool {
 	return key != "" && s.imageTaskLookup != nil && s.imageTaskLookup(ctx, keyID, key)
+}
+
+func (s *APIKeyService) HasAcceptedMusicTask(ctx context.Context, keyID int64, key string) bool {
+	return key != "" && s.musicTaskLookup != nil && s.musicTaskLookup(ctx, keyID, key)
 }

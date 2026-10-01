@@ -253,6 +253,9 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 	capabilities["operations"] = operations
 	capabilities["streaming"] = streaming
 	capabilities["asynchronous"] = asynchronous
+	if entry.ID == service.SunoModel {
+		capabilities = gin.H{"input_modalities": []string{"text"}, "output_modalities": []string{"audio"}, "streaming": false, "asynchronous": true, "supported_modes": configuredAgentModelResolutions(entry, config, service.AgentMediaTypeAudio)}
+	}
 	if entry.ID == service.MidjourneyModel {
 		// The desktop only needs generation speed choices for Midjourney.
 		// Fixed version, routing and upscale rules belong to the API contract.

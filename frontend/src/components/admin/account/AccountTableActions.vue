@@ -25,6 +25,7 @@
       <Icon name="sparkles" size="sm" class="mr-1.5" />
       {{ t('admin.accounts.createImageAccount') }}
     </button>
+    <button type="button" class="btn btn-secondary" data-testid="create-music-account" @click="$emit('create-music')">{{ t('suno.addMusic') }}</button>
     <slot name="afterCreate"></slot>
   </div>
 </template>
@@ -34,7 +35,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 
 defineProps(['loading'])
-defineEmits(['refresh', 'create', 'create-video', 'create-image'])
+defineEmits(['refresh', 'create', 'create-video', 'create-image', 'create-music'])
 
 const { t } = useI18n()
 </script>

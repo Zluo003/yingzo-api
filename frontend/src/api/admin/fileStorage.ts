@@ -28,6 +28,7 @@ export interface FileStorageS3Config {
 
 export interface GeneratedStorageConfig {
   async_images_enabled: boolean
+  async_music_enabled?: boolean
   backend: FileStorageBackend
   local_dir: string
   s3: FileStorageS3Config

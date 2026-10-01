@@ -14,6 +14,29 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMidjourneyPromptCharacterLimit(t *testing.T) {
+	for _, action := range []string{"imagine", "edits"} {
+		for _, character := range []string{"a", "猫", "😀"} {
+			for _, length := range []int{1023, 1024, 3502} {
+				prompt := strings.Repeat(character, length)
+				raw, err := json.Marshal(map[string]any{
+					"prompt": "  " + prompt + "\n", "image_urls": []string{"https://image.example/source.png"},
+				})
+				require.NoError(t, err)
+				request, err := ParseMidjourneyRequest(raw, action)
+				if length == 1023 {
+					require.NoError(t, err)
+					require.Equal(t, prompt, request.Prompt)
+				} else {
+					require.ErrorContains(t, err, "最多 1023 个字符")
+					require.ErrorContains(t, err, "请至少删减")
+					require.Nil(t, request)
+				}
+			}
+		}
+	}
+}
+
 func TestMidjourneyRequestScope(t *testing.T) {
 	for _, action := range []string{"imagine", "edits"} {
 		for _, speed := range []string{"", "fast"} {

@@ -14,11 +14,15 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 )
 
 const MidjourneyModel = "midjourney-v8.2"
+
+// The current upstream accepts fewer than 1024 Unicode characters.
+const MidjourneyPromptMaxCharacters = 1023
 const MidjourneyProvider = "apimart_midjourney"
 const AgentInterfaceMidjourney = "midjourney.generations"
 
@@ -84,8 +88,11 @@ func ParseMidjourneyRequest(body []byte, action string) (*MidjourneyRequest, err
 		return &r, nil
 	}
 	r.Prompt = strings.TrimSpace(r.Prompt)
-	if r.Prompt == "" || len(r.Prompt) > 16000 {
-		return nil, errors.New("prompt must contain 1 to 16000 bytes")
+	if r.Prompt == "" {
+		return nil, errors.New("prompt must not be empty")
+	}
+	if length := utf8.RuneCountInString(r.Prompt); length > MidjourneyPromptMaxCharacters {
+		return nil, fmt.Errorf("Midjourney 提示词最多 %d 个字符，当前 %d 个字符，请至少删减 %d 个字符后重试", MidjourneyPromptMaxCharacters, length, length-MidjourneyPromptMaxCharacters)
 	}
 	// Native prompt flags can change version, action, speed or number of jobs.
 	// Keep all controllable parameters in validated structured fields.
@@ -477,12 +484,18 @@ func (s *DurableImageService) midjourneyHTTP(ctx context.Context, a *Account, me
 }
 
 func billingUnitForAgentModel(model, mediaType string) string {
+	if model == SunoModel {
+		return "request"
+	}
 	if model == MidjourneyModel {
 		return "request"
 	}
 	return billingUnitForAgentMedia(mediaType)
 }
 func normalizeAgentModelPricesForModel(model, mediaType string, prices []AgentModelPrice) ([]AgentModelPrice, error) {
+	if model == SunoModel {
+		return normalizeSunoPrices(mediaType, prices)
+	}
 	if model != MidjourneyModel {
 		return normalizeAgentModelPrices(mediaType, prices)
 	}

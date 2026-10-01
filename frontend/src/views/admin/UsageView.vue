@@ -563,6 +563,7 @@ const handleIpGeoBatchFailed = () => {
 const cancelExport = () => exportAbortController?.abort()
 const openCleanupDialog = () => { cleanupDialogVisible.value = true }
 const getRequestTypeLabel = (log: AdminUsageLog): string => {
+	if (log.music_task_id) return t('suno.asyncMusic')
   const requestType = resolveUsageRequestType(log)
   if (requestType === 'cyber') return t('usage.cyber')
   if (requestType === 'live') return t('usage.live')
@@ -590,7 +591,7 @@ const exportToExcel = async () => {
       t('admin.usage.cacheReadCost'), t('admin.usage.cacheCreationCost'),
       t('usage.rate'), t('usage.accountMultiplier'), t('usage.original'), t('usage.userBilled'), t('usage.accountBilled'),
       t('usage.firstToken'), t('usage.duration'),
-      t('admin.usage.requestId'), t('admin.usage.upstreamRequestId'), t('usage.userAgent'), t('admin.usage.ipAddress'), 'Image Task ID', 'Funds Event', 'Task Status'
+      t('admin.usage.requestId'), t('admin.usage.upstreamRequestId'), t('usage.userAgent'), t('admin.usage.ipAddress'), 'Generation Task ID', 'Funds Event', 'Task Status', 'Music Mode'
     ]
     const ws = XLSX.utils.aoa_to_sheet([headers])
     while (true) {
@@ -609,7 +610,7 @@ const exportToExcel = async () => {
         log.rate_multiplier?.toPrecision(4) || '1.00', (log.account_rate_multiplier ?? 1).toPrecision(4),
         log.total_cost?.toFixed(6) || '0.000000', log.actual_cost?.toFixed(6) || '0.000000',
         ((log.account_stats_cost ?? log.total_cost) * (log.account_rate_multiplier ?? 1)).toFixed(6), log.first_token_ms ?? '', log.duration_ms,
-        log.request_id || '', log.upstream_request_id || '', log.user_agent || '', log.ip_address || '', log.image_task_id || '', log.funds_event || '', log.image_task_status || ''
+        log.request_id || '', log.upstream_request_id || '', log.user_agent || '', log.ip_address || '', log.music_task_id || log.image_task_id || '', log.funds_event || '', log.music_task_status || log.image_task_status || '', log.music_mode || ''
       ])
       if (rows.length) {
         XLSX.utils.sheet_add_aoa(ws, rows, { origin: -1 })

@@ -823,3 +823,17 @@ it('shows the retained precharge and a distinct negative failure refund', () => 
   expect(wrapper.text()).toContain('usage.imageFailureRefund')
   expect(wrapper.text()).toContain('-0.4')
 })
+
+it('shows music mode, task identity and a distinct music refund', () => {
+  const wrapper = mount(UsageTable, {
+    props: {
+      data: [{ ...baseImageRow, model: 'suno-v6', billing_mode: 'per_request', image_count: 0, music_task_id: 'musictask_song', music_mode: 'song', music_task_status: 'failed', funds_event: 'failure_refund', actual_cost: -2, total_cost: 0 }],
+      loading: false, columns: [{ key: 'cost', label: 'Cost' }],
+    },
+    global: { stubs: { DataTable: DataTableStub, EmptyState: true, Teleport: true } },
+  })
+  expect(wrapper.text()).toContain('suno.asyncMusic')
+  expect(wrapper.text()).toContain('suno.modes.song')
+  expect(wrapper.text()).toContain('suno.failureRefund')
+  expect(wrapper.find('[title="musictask_song"]').exists()).toBe(true)
+})

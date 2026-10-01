@@ -156,7 +156,7 @@
       </div>
 
       <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-        {{ t(`admin.yingzoAgent.tabs.${activeTab}.hint`) }}
+        {{ activeTab === 'audio' ? t('suno.billingHint') : t(`admin.yingzoAgent.tabs.${activeTab}.hint`) }}
       </p>
 
       <p v-if="activeTab === 'image' && modelsByTab.image.some(m => m.model_code === MIDJOURNEY_MODEL)" class="mt-2 text-xs text-primary-600">{{ t('midjourney.billingHint') }}</p>
@@ -183,7 +183,7 @@
                   class="py-2 pr-3"
                 >
                   {{
-                    activeTab === 'image'
+                    activeTab === 'audio' ? t(`suno.prices.${resolution}`) : activeTab === 'image'
                       ? (MIDJOURNEY_PRICE_TIERS.includes(resolution) ? t(`midjourney.prices.${resolution}`) : t('admin.yingzoAgent.columns.pricePerImage', { resolution }))
                       : t('admin.yingzoAgent.columns.pricePerSecond', { resolution })
                   }}
@@ -208,10 +208,11 @@
                   v-model="drafts[model.id].mediaType"
                   class="input w-24"
                   :data-testid="`yingzo-agent-media-type-${model.id}`"
-                  :disabled="model.model_code === MIDJOURNEY_MODEL"
+                  :disabled="model.model_code === MIDJOURNEY_MODEL || model.model_code === 'suno-v6'"
                 >
                   <option value="text">{{ t('admin.yingzoAgent.mediaType.text') }}</option>
                   <option value="image">{{ t('admin.yingzoAgent.mediaType.image') }}</option>
+                  <option value="audio">{{ t('suno.audio') }}</option>
                   <option value="video">{{ t('admin.yingzoAgent.mediaType.video') }}</option>
                 </select>
               </td>
@@ -313,6 +314,7 @@ import type { AdminGroup } from '@/types'
 
 const { t } = useI18n()
 
+const SUNO_PRICE_TIERS = ['instrumental', 'song']
 const IMAGE_RESOLUTIONS = ['1K', '2K', '4K']
 
 interface ModelDraft {
@@ -339,6 +341,7 @@ const tabs: { key: AgentMediaType; labelKey: string }[] = [
   { key: 'text', labelKey: 'admin.yingzoAgent.tabs.text.title' },
   { key: 'image', labelKey: 'admin.yingzoAgent.tabs.image.title' },
   { key: 'video', labelKey: 'admin.yingzoAgent.tabs.video.title' },
+  { key: 'audio', labelKey: 'suno.billingTitle' },
 ]
 
 /** 系统内置聚合分组：由后端 kind/system_code 标识，管理员不能删除。 */
@@ -349,7 +352,7 @@ const group = agentGroup
 const agentGroupId = computed(() => agentGroup.value?.id ?? 0)
 
 const modelsByTab = computed<Record<AgentMediaType, AgentGroupModel[]>>(() => {
-  const result: Record<AgentMediaType, AgentGroupModel[]> = { text: [], image: [], video: [] }
+  const result: Record<AgentMediaType, AgentGroupModel[]> = { text: [], image: [], video: [], audio: [] }
   for (const model of models.value) {
     result[model.media_type]?.push(model)
   }
@@ -376,6 +379,7 @@ function resolutionColumnsForDraft(model: AgentGroupModel): string[] {
 }
 
 function resolutionColumnsForType(mediaType: AgentMediaType, modelCode: string): string[] {
+  if (mediaType === 'audio') return SUNO_PRICE_TIERS
   if (mediaType === 'image') {
     if (modelCode === MIDJOURNEY_MODEL) return MIDJOURNEY_PRICE_TIERS
     return IMAGE_RESOLUTIONS

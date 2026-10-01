@@ -720,7 +720,7 @@ const EMPTY_USAGE: FileStorageUsage = {
 
 function emptyConfig(): FileStorageConfig {
   return {
-    generated: { async_images_enabled: false, backend: 'local', local_dir: '', presign_expiry_hours: 24, s3: { endpoint: '', region: 'auto', bucket: '', prefix: 'generated/', access_key_id: '', secret_access_key: '', custom_domain: '', force_path_style: false } },
+    generated: { async_images_enabled: false, async_music_enabled: false, backend: 'local', local_dir: '', presign_expiry_hours: 24, s3: { endpoint: '', region: 'auto', bucket: '', prefix: 'generated/', access_key_id: '', secret_access_key: '', custom_domain: '', force_path_style: false } },
     schema_version: 1,
     backend: 'local',
     // 空值 = 使用默认目录（<data_dir>/agent-assets），与后端的默认行为一致

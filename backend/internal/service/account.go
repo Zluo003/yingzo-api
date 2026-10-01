@@ -1788,7 +1788,7 @@ func (a *Account) GetOpenAISessionID() string {
 }
 
 func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapability) bool {
-	if a.IsMidjourney() {
+	if a.IsMidjourney() || a.IsSuno() {
 		return false
 	}
 	if a == nil {
@@ -1974,7 +1974,7 @@ func (a *Account) openAIEndpointCapabilitySet() (map[string]bool, bool) {
 }
 
 func (a *Account) SupportsOpenAIImageCapability(capability OpenAIImagesCapability) bool {
-	if a.IsMidjourney() {
+	if a.IsMidjourney() || a.IsSuno() {
 		return false
 	}
 	if capability == "" {

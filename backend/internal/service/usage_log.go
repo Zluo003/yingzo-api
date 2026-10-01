@@ -107,6 +107,9 @@ func ApplyLegacyRequestFields(requestType RequestType, fallbackStream bool, fall
 }
 
 type UsageLog struct {
+	MusicTaskID     *string
+	MusicTaskStatus *string
+	MusicMode       *string
 	TaskError       *UsageTaskError // Hydrated from the owned async task on refund rows.
 	ImageTaskID     *string
 	FundsEvent      *string

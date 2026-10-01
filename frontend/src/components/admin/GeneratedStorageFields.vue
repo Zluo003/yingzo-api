@@ -5,6 +5,8 @@
       {{ t('admin.backup.imageStorage.enabled') }}
     </label>
     <p class="text-sm text-gray-500 dark:text-gray-400">{{ t('admin.assetStorage.generated.asyncHint') }}</p>
+    <label class="flex items-center gap-2 text-sm"><input v-model="config.async_music_enabled" type="checkbox" data-testid="async-music-enabled" />{{ t('suno.enabled') }}</label>
+    <p class="text-sm text-gray-500">{{ t('suno.asyncHint') }}</p>
     <p v-if="migrationPending" class="rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">{{ t('admin.assetStorage.generated.migrationHint') }}</p>
     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
       <label class="space-y-1 text-sm text-gray-600 dark:text-gray-400">

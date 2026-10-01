@@ -317,7 +317,7 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", err.Error())
 	}
 	if input.Enabled && mediaType != AgentMediaTypeText && !hasEnabledAgentModelPrice(prices) {
-		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "an enabled image or video model requires at least one resolution price, and at least one resolution must be enabled")
+		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "an enabled media model requires at least one configured and enabled price")
 	}
 	if err := s.modelRepo.UpdateModelConfig(ctx, groupID, model.ID, mediaType, input.Enabled, rate, prices); err != nil {
 		return nil, fmt.Errorf("update Agent model: %w", err)
@@ -635,13 +635,19 @@ func normalizeAgentModelRate(mediaType string, enabled bool, rate *float64) (*fl
 		return rate, nil
 	}
 	if rate != nil {
-		return nil, errors.New("image and video models are priced per resolution and cannot set rate_multiplier")
+		return nil, errors.New("media models use unit prices and cannot set rate_multiplier")
 	}
 	return nil, nil
 }
 
 func normalizeAgentPriceResolution(mediaType, resolution string) (string, error) {
 	resolution = strings.TrimSpace(resolution)
+	if mediaType == AgentMediaTypeAudio {
+		if !IsSunoPriceTier(resolution) {
+			return "", errors.New("audio mode must be instrumental or song")
+		}
+		return resolution, nil
+	}
 	if mediaType == AgentMediaTypeImage {
 		if tier, ok := ClassifyImageBillingTier(resolution); ok && (tier == ImageBillingSize1K || tier == ImageBillingSize2K || tier == ImageBillingSize4K) {
 			return tier, nil
@@ -661,6 +667,9 @@ func normalizeAgentPriceResolution(mediaType, resolution string) (string, error)
 }
 
 func billingUnitForAgentMedia(mediaType string) string {
+	if mediaType == AgentMediaTypeAudio {
+		return "request"
+	}
 	if mediaType == AgentMediaTypeImage {
 		return AgentBillingUnitImage
 	}
@@ -671,7 +680,7 @@ func billingUnitForAgentMedia(mediaType string) string {
 }
 
 func isValidAgentMediaType(mediaType string) bool {
-	return mediaType == AgentMediaTypeText || mediaType == AgentMediaTypeImage || mediaType == AgentMediaTypeVideo
+	return mediaType == AgentMediaTypeAudio || mediaType == AgentMediaTypeText || mediaType == AgentMediaTypeImage || mediaType == AgentMediaTypeVideo
 }
 
 func normalizeAgentPlatform(platform string) string {
@@ -697,6 +706,10 @@ func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
 		platform := normalizeAgentPlatform(account.Platform)
 		defaults, supported := defaultAgentModels(platform)
 		if !supported {
+			continue
+		}
+		if account.IsSuno() {
+			addAgentDiscovery(discovered, platform, SunoModel, AgentMediaTypeAudio)
 			continue
 		}
 		if account.IsMidjourney() {
@@ -764,6 +777,8 @@ func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
 // （seedance）有计费链路，图片端点只对 openai / grok / gemini 开放。
 func agentMediaTypeServable(platform, mediaType string) bool {
 	switch mediaType {
+	case AgentMediaTypeAudio:
+		return platform == PlatformOpenAI
 	case AgentMediaTypeVideo:
 		return platform == PlatformVideo
 	case AgentMediaTypeImage:
@@ -997,6 +1012,9 @@ func addConfiguredAgentCatalogEntry(entries map[string]*agentModelCatalogAccumul
 }
 
 func agentInterfacesForModel(platform, mediaType, modelCode string) []string {
+	if modelCode == SunoModel && mediaType == AgentMediaTypeAudio {
+		return []string{AgentInterfaceMusic}
+	}
 	switch platform {
 	case PlatformOpenAI:
 		if mediaType == AgentMediaTypeImage {
@@ -1067,7 +1085,7 @@ func flattenAgentCatalog(entries map[string]*agentModelCatalogAccumulator) []Age
 
 func orderedAgentMediaTypes(values map[string]struct{}) []string {
 	result := make([]string, 0, len(values))
-	for _, value := range []string{AgentMediaTypeText, AgentMediaTypeImage, AgentMediaTypeVideo} {
+	for _, value := range []string{AgentMediaTypeText, AgentMediaTypeImage, AgentMediaTypeVideo, AgentMediaTypeAudio} {
 		if _, ok := values[value]; ok {
 			result = append(result, value)
 		}
@@ -1083,6 +1101,7 @@ func orderedAgentInterfaces(values map[string]struct{}) []string {
 		AgentInterfaceOpenAIEmbeddings,
 		AgentInterfaceOpenAIImages,
 		AgentInterfaceMidjourney,
+		AgentInterfaceMusic,
 		AgentInterfaceAnthropicMessages,
 		AgentInterfaceGeminiGenerateContent,
 		AgentInterfaceSeedanceVideos,

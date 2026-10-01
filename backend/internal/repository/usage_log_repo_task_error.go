@@ -12,11 +12,17 @@ import (
 // Load diagnostics in one query per page, only for failure refunds. The owner
 // and API-key joins prevent a malformed task reference crossing account bounds.
 func (r *usageLogRepository) hydrateUsageTaskErrors(ctx context.Context, logs []service.UsageLog) (err error) {
+	if err := r.hydrateMusicUsage(ctx, logs); err != nil {
+		return err
+	}
 	var args []any
 	var placeholders []string
 	byID := make(map[int64]*service.UsageLog)
 	for i := range logs {
 		log := &logs[i]
+		if strings.HasPrefix(log.RequestID, "music:") {
+			continue
+		}
 		event := ""
 		if log.FundsEvent != nil {
 			event = *log.FundsEvent

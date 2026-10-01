@@ -26,6 +26,9 @@ func TestEveryGatewayPOSTRouteIsClassifiedForPromptAuditCoverage(t *testing.T) {
 	for _, match := range matches {
 		actual[match[1]] = struct{}{}
 	}
+	for _, match := range regexp.MustCompile(`music\.POST\("([^"]+)"`).FindAllStringSubmatch(string(routeSource), -1) {
+		actual["/music"+match[1]] = struct{}{}
+	}
 
 	audited := map[string][]string{
 		"/messages":                       {"gateway_handler.go", "openai_gateway_handler.go"},
@@ -33,6 +36,7 @@ func TestEveryGatewayPOSTRouteIsClassifiedForPromptAuditCoverage(t *testing.T) {
 		"/responses/*subpath":             {"gateway_handler_responses.go", "openai_gateway_handler.go"},
 		"/chat/completions":               {"gateway_handler_chat_completions.go", "openai_chat_completions.go"},
 		"/embeddings":                     {"openai_embeddings.go"},
+		"/music/generations":              {"music_task_handler.go"},
 		"/alpha/search":                   {"openai_alpha_search.go"},
 		"/live":                           {"openai_live.go"},
 		"/realtime/calls":                 {"openai_live.go"},

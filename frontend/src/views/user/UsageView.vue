@@ -606,6 +606,7 @@ const handleIpGeoBatchFailed = () => {
 }
 
 const getRequestTypeExportText = (log: UsageLog): string => {
+	if (log.music_task_id) return 'Async music'
   const requestType = resolveUsageRequestType(log)
   if (requestType === 'cyber') return 'Cyber'
   if (requestType === 'live') return 'Live'
@@ -665,7 +666,7 @@ const exportToCSV = async () => {
       'Billed Cost',
       'Original Cost',
       'First Token (ms)',
-      'Duration (ms)', 'Image Task ID', 'Funds Event', 'Task Status',
+      'Duration (ms)', 'Generation Task ID', 'Funds Event', 'Task Status', 'Music Mode',
     ]
     const rows = allLogs.map((log) => [
       log.created_at,
@@ -684,7 +685,7 @@ const exportToCSV = async () => {
       log.actual_cost.toFixed(8),
       log.total_cost.toFixed(8),
       log.first_token_ms ?? '',
-      log.duration_ms ?? '', log.image_task_id ?? '', log.funds_event ?? '', log.image_task_status ?? '',
+      log.duration_ms ?? '', log.music_task_id ?? log.image_task_id ?? '', log.funds_event ?? '', log.music_task_status ?? log.image_task_status ?? '', log.music_mode ?? '',
     ].map(escapeCSVValue))
     const csvContent = [
       headers.map(escapeCSVValue).join(','),

@@ -6,6 +6,7 @@ import channelMonitorV2 from './channelMonitorV2'
 import batchImage from './batchImage'
 import admin from './admin'
 import misc from './misc'
+import suno from './suno'
 import fork from './fork'
 import { deepMergeMessages } from '../deepMergeMessages'
 
@@ -20,6 +21,7 @@ export default deepMergeMessages(
     ...batchImage,
     admin,
     midjourney,
+    suno,
     ...misc,
   },
   fork

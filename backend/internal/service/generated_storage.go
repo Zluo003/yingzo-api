@@ -16,6 +16,7 @@ import (
 // A nil Generated configuration preserves the two legacy storage locations until
 // the administrator explicitly saves the new generated-output settings.
 type GeneratedStorageConfig struct {
+	AsyncMusicEnabled         bool           `json:"async_music_enabled"`
 	AsyncImagesEnabled        bool           `json:"async_images_enabled"`
 	Backend                   string         `json:"backend"`
 	LocalDir                  string         `json:"local_dir"`

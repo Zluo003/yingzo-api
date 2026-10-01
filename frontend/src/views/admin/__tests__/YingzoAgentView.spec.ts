@@ -139,6 +139,17 @@ describe('admin YingzoAgentView', () => {
     ] })
   })
 
+  it('configures independent instrumental and song prices', async () => {
+    getAgentModels.mockResolvedValue({ models: [model({ id: 9, model_code: 'suno-v6', media_type: 'audio', prices: [{ resolution: 'instrumental', unit_price: 0, billing_unit: 'request' }, { resolution: 'song', unit_price: 2, billing_unit: 'request' }] })] })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="yingzo-agent-tab-audio"]').trigger('click')
+    expect(wrapper.find('[data-testid="yingzo-agent-price-9-1K"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="yingzo-agent-price-9-song"]').setValue('3')
+    await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
+    await flushPromises()
+    expect(updateAgentModel).toHaveBeenCalledWith(7, 9, { media_type: 'audio', enabled: true, prices: [{ resolution: 'instrumental', unit_price: 0 }, { resolution: 'song', unit_price: 3 }] })
+  })
+
   it('locates the built-in agent group and loads its catalog', async () => {
     const wrapper = await mountView()
 

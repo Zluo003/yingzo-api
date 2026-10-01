@@ -792,6 +792,9 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 		}
 		account.LoadFactor = input.LoadFactor
 	}
+	if err := normalizeSunoAccount(account); err != nil {
+		return nil, err
+	}
 	if err := normalizeMidjourneyAccount(account); err != nil {
 		return nil, err
 	}
@@ -854,6 +857,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 		return nil, err
 	}
 	if err := s.ValidateAccountGroupBindings(ctx, groupIDs); err != nil {
+		return nil, err
+	}
+	if err := s.validateSunoGroups(ctx, account, groupIDs); err != nil {
 		return nil, err
 	}
 	if err := s.accountRepo.Create(ctx, account); err != nil {
@@ -1164,7 +1170,17 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 	}
 
+	if err := normalizeSunoAccount(account); err != nil {
+		return nil, err
+	}
 	if err := normalizeMidjourneyAccount(account); err != nil {
+		return nil, err
+	}
+	sunoGroups := account.GroupIDs
+	if input.GroupIDs != nil {
+		sunoGroups = *input.GroupIDs
+	}
+	if err := s.validateSunoGroups(ctx, account, sunoGroups); err != nil {
 		return nil, err
 	}
 	billingSettingsAppliedAtomically := false
@@ -1232,6 +1248,20 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 // UpdateAccountExtra 仅对 Extra JSONB 做 key 级合并，避免覆盖其它运行态键
 // （如 model_rate_limits / passive_usage_* 等）。
 func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, updates map[string]any) error {
+	if _, changesProvider := updates["music_provider"]; changesProvider {
+		return infraerrors.BadRequest("INVALID_SUNO_ACCOUNT", "Use the dedicated Suno panel to configure a music provider")
+	}
+	_, changesImageProvider := updates["image_provider"]
+	imageEnabled, _ := updates["image_account"].(bool)
+	if changesImageProvider || imageEnabled {
+		account, err := s.accountRepo.GetByID(ctx, id)
+		if err != nil {
+			return err
+		}
+		if account.IsSuno() {
+			return infraerrors.BadRequest("INVALID_SUNO_ACCOUNT", "Suno must use a dedicated music account")
+		}
+	}
 	updates = sanitizedCodexFingerprintExtraUpdates(updates)
 	updates = stripOpenAIAutoResetCreditManagedExtra(updates, true)
 	delete(updates, UpstreamBillingProbeEnabledExtraKey)
@@ -1302,7 +1332,7 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 
 	// 预取所有目标账号，供凭据守卫/代理守卫/混合渠道检查共用，避免多次 DB 查询。
 	var cachedTargets []*Account
-	if len(input.Credentials) > 0 || input.ProxyID != nil || needMixedChannelCheck || openAISettings.any() || input.ProbeEnabled != nil || input.RateMultiplier != nil {
+	if len(input.Credentials) > 0 || len(input.Extra) > 0 || input.GroupIDs != nil || input.ProxyID != nil || needMixedChannelCheck || openAISettings.any() || input.ProbeEnabled != nil || input.RateMultiplier != nil {
 		loaded, err := s.accountRepo.GetByIDs(ctx, input.AccountIDs)
 		if err != nil {
 			return nil, err
@@ -1313,6 +1343,28 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	for _, account := range cachedTargets {
 		if account != nil {
 			targetsByID[account.ID] = account
+		}
+	}
+	if _, changesProvider := input.Extra["music_provider"]; changesProvider {
+		return nil, infraerrors.BadRequest("INVALID_SUNO_ACCOUNT", "Use the dedicated Suno panel to configure a music provider")
+	}
+	for _, account := range cachedTargets {
+		if !account.IsSuno() {
+			continue
+		}
+		if len(input.Credentials) > 0 {
+			return nil, infraerrors.BadRequest("INVALID_SUNO_ACCOUNT", "Edit Suno credentials in the dedicated Suno panel")
+		}
+		if _, ok := input.Extra["image_provider"]; ok {
+			return nil, infraerrors.BadRequest("INVALID_SUNO_ACCOUNT", "Suno must use a dedicated music account")
+		}
+		if enabled, _ := input.Extra["image_account"].(bool); enabled {
+			return nil, infraerrors.BadRequest("INVALID_SUNO_ACCOUNT", "Suno must use a dedicated music account")
+		}
+		if input.GroupIDs != nil {
+			if err := s.validateSunoGroups(ctx, account, *input.GroupIDs); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if openAISettings.any() {

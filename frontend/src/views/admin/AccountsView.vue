@@ -17,6 +17,7 @@
             @create="showCreate = true"
             @create-video="showCreateVideo = true"
             @create-image="showCreateImage = true"
+            @create-music="showCreateSuno = true"
           >
             <template #after>
               <!-- Auto Refresh Dropdown -->
@@ -470,8 +471,9 @@
       @created="handleImageAccountCreated"
       @midjourney="showCreateImage = false; showCreateMidjourney = true"
     />
+    <SunoAccountModal :show="showCreateSuno || (showEdit && isSunoAccount(edAcc))" :account="showEdit ? edAcc : null" :proxies="proxies" :groups="groups" @close="showCreateSuno = false; showEdit = false" @created="reload" @updated="handleAccountUpdated" />
     <MidjourneyAccountModal :show="showCreateMidjourney || (showEdit && isMidjourneyAccount(edAcc))" :account="showEdit ? edAcc : null" :proxies="proxies" :groups="groups" @close="showCreateMidjourney = false; showEdit = false" @created="handleImageAccountCreated" @updated="handleAccountUpdated" />
-    <EditAccountModal :show="showEdit && !isMidjourneyAccount(edAcc)" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
+    <EditAccountModal :show="showEdit && !isMidjourneyAccount(edAcc) && !isSunoAccount(edAcc)" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
@@ -524,6 +526,8 @@ import DataTable from '@/components/common/DataTable.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import SunoAccountModal from '@/components/account/SunoAccountModal.vue'
+import { isSunoAccount } from '@/components/account/suno'
 import MidjourneyAccountModal from '@/components/account/MidjourneyAccountModal.vue'
 import { isMidjourneyAccount } from '@/components/account/midjourney'
 import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrsModal, TempUnschedStatusModal } from '@/components/account'
@@ -613,6 +617,7 @@ const selTypes = computed<AccountType[]>(() => {
 const showCreate = ref(false)
 const showCreateImage = ref(false)
 const showCreateMidjourney = ref(false)
+const showCreateSuno = ref(false)
 // 「添加视频账号」专用入口：打开同一个弹窗但预置 platform=video。
 const showCreateVideo = ref(false)
 const showEdit = ref(false)
@@ -1386,6 +1391,7 @@ const isAnyModalOpen = computed(() => {
     showCreate.value ||
     showCreateImage.value ||
     showCreateMidjourney.value ||
+    showCreateSuno.value ||
     showCreateVideo.value ||
     showEdit.value ||
     showSync.value ||

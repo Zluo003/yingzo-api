@@ -88,6 +88,9 @@ func ProvideRouter(
 	})
 
 	router := SetupRouter(r, handlers, jwtAuth, optionalJWTAuth, adminAuth, apiKeyAuth, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, compositeResolver, cfg, redisClient)
+	if handlers.Music != nil {
+		handlers.Music.Start()
+	}
 	if handlers.AsyncImage != nil {
 		handlers.AsyncImage.Start(router)
 	}
