@@ -52,7 +52,9 @@ const (
 	videoDefaultPollTimeout    = 15 * time.Minute
 	videoDefaultRequestTimeout = 60 * time.Second
 	videoDefaultConnectTimeout = 15 * time.Second
-	videoNewtokenPollInterval  = 5 * time.Second
+	// A completed upstream task gets a fresh budget for downloading and storage.
+	videoResultPublishTimeout = 15 * time.Minute
+	videoNewtokenPollInterval = 5 * time.Second
 	// mikuapi 的视频创建立即返回任务 id，成片要自己轮询；按 5 秒一轮，
 	// 与 newtoken 一样不去打秒级轮询。
 	videoMikuapiPollInterval     = 5 * time.Second
@@ -841,10 +843,20 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 					Status: &result.Status,
 				})
 			case VideoTaskStatusCompleted:
-				publishedURL, publishErr := s.publishVideoResult(ctx, input, result.VideoURL)
+				// Generation has finished. Its polling deadline must not cancel the
+				// transfer, and publication retries must not poll or regenerate it.
+				cancel()
+				publishedURL, publishErr := s.publishCompletedVideoResult(input, result.VideoURL)
 				if publishErr != nil {
 					slog.Warn("video result publication failed", "task_id", input.PublicID, "error", publishErr)
-					continue
+					clientErr := videoClientError("video_result_publication_failed", "视频产物保存失败，请稍后重试")
+					task, _ := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
+						Status:    stringPtr(VideoTaskStatusFailed),
+						ErrorJSON: videoFailureErrorJSON(clientErr, publishErr),
+					})
+					_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
+					s.releaseTaskReferenceAssets(input)
+					return nil
 				}
 				now := time.Now().UTC()
 				task, updateErr := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
@@ -876,6 +888,30 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 			}
 		}
 	}
+}
+
+func (s *VideoService) publishCompletedVideoResult(input VideoTaskLifecycleInput, upstreamURL string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), videoResultPublishTimeout)
+	defer cancel()
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		if err := waitGeneratedVideoRetry(ctx, time.Duration(attempt-1)*time.Second); err != nil {
+			return "", err
+		}
+		started := time.Now()
+		publishedURL, err := s.publishVideoResult(ctx, input, upstreamURL)
+		if err == nil {
+			slog.Info("video result published", "task_id", input.PublicID, "attempt", attempt, "duration_ms", time.Since(started).Milliseconds())
+			return publishedURL, nil
+		}
+		lastErr = err
+		slog.Warn("video result publication attempt failed", "task_id", input.PublicID, "attempt", attempt, "duration_ms", time.Since(started).Milliseconds(), "error", err)
+		var downloadErr *generatedVideoDownloadError
+		if errors.As(err, &downloadErr) {
+			return "", err
+		}
+	}
+	return "", lastErr
 }
 
 // releaseTaskReferenceAssets 在任务终态后删除该任务引用的参考素材。S3 后端下参考

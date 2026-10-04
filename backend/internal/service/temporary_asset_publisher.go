@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/servertiming"
 	"github.com/google/uuid"
 	_ "golang.org/x/image/webp"
 )
@@ -96,7 +97,10 @@ func (p *TemporaryAssetPublisher) ResolvePublicBaseURL(ctx context.Context, fall
 }
 
 func newGeneratedVideoHTTPClient() *http.Client {
-	client := newSSRFSafeHTTPClient(generatedVideoDownloadTimeout)
+	client := &http.Client{
+		Timeout:   generatedVideoDownloadTimeout,
+		Transport: servertiming.WrapRoundTripper(newGeneratedVideoTransport()),
+	}
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return errors.New("generated video download exceeded the redirect limit")
@@ -314,32 +318,10 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 	if client == nil {
 		client = newGeneratedVideoHTTPClient()
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSpace(upstreamURL), nil)
-	if err != nil {
-		return "", errors.New("generated video URL is invalid")
-	}
-	req.Header.Set("Accept", "video/mp4,video/quicktime,application/octet-stream;q=0.8")
-	req.Header.Set("User-Agent", "Sub2API-Video-Result-Publisher/1.0")
-	if strings.TrimSpace(authorization) != "" {
-		req.Header.Set("Authorization", authorization)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", errors.New("download generated video failed")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return "", fmt.Errorf("download generated video returned HTTP %d", resp.StatusCode)
-	}
-
 	maxBytes := p.maxGeneratedVideoBytes
 	if maxBytes <= 0 {
 		maxBytes = maxPublishedGeneratedVideoBytes
 	}
-	if resp.ContentLength > maxBytes {
-		return "", errors.New("generated video exceeds the temporary asset size limit")
-	}
-
 	id := uuid.New()
 	localRoot, err := p.fileStorage.GeneratedLocalPath(ctx, runtime.Config.Generated)
 	if err != nil {
@@ -358,30 +340,27 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 
 	localPath := filepath.Join(assetDir, "object")
 	temporaryPath := localPath + ".tmp"
-	temporary, err := os.OpenFile(temporaryPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600) //nolint:gosec // G703: fixed object.tmp filename inside the generated UUID's staging directory; O_EXCL rejects an existing file.
+	temporary, err := os.OpenFile(temporaryPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600) //nolint:gosec // G703: fixed object.tmp filename inside the generated UUID's staging directory; O_EXCL rejects an existing file.
 	if err != nil {
 		return "", fmt.Errorf("create temporary asset file: %w", err)
 	}
-	hasher := sha256.New()
-	sizeBytes, copyErr := io.Copy(io.MultiWriter(temporary, hasher), io.LimitReader(resp.Body, maxBytes+1))
-	if copyErr == nil {
-		copyErr = temporary.Sync()
+	download := generatedVideoDownloader{
+		client: client, idleTimeout: 30 * time.Second, retryDelay: time.Second, maxAttempts: 4,
+		logger: slog.With("asset_id", id.String()), parallelism: 4,
+	}
+	result, downloadErr := download.download(ctx, temporary, upstreamURL, authorization, maxBytes)
+	if downloadErr == nil {
+		downloadErr = temporary.Sync()
 	}
 	closeErr := temporary.Close()
-	if copyErr != nil {
-		return "", errors.New("download generated video failed")
+	if downloadErr != nil {
+		return "", &generatedVideoDownloadError{err: downloadErr}
 	}
 	if closeErr != nil {
 		return "", fmt.Errorf("close temporary asset file: %w", closeErr)
 	}
-	if sizeBytes == 0 {
-		return "", errors.New("generated video payload is empty")
-	}
-	if sizeBytes > maxBytes {
-		return "", errors.New("generated video exceeds the temporary asset size limit")
-	}
-
-	mimeType, extension, err := inspectGeneratedVideoFile(temporaryPath, resp.Header.Get("Content-Type"))
+	sizeBytes := result.size
+	mimeType, extension, err := inspectGeneratedVideoFile(temporaryPath, result.contentType)
 	if err != nil {
 		return "", err
 	}
@@ -398,11 +377,13 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 	}
 
 	// Keep a stable media identity; the media endpoint resolves its storage version.
+	storeStarted := time.Now()
 	backend, storageKey, err := p.fileStorage.storeGeneratedFile(ctx, runtime.Config.Generated, id.String(), localPath, mimeType)
 	if err != nil {
 		_ = os.RemoveAll(assetDir) //nolint:gosec // G703: configured storage root plus a generated UUID, never a caller-supplied path.
 		return "", fmt.Errorf("store generated output: %w", err)
 	}
+	slog.Info("generated video stored", "asset_id", id.String(), "backend", backend, "bytes", sizeBytes, "duration_ms", time.Since(storeStarted).Milliseconds())
 	stored := false
 	defer func() {
 		if backend == "s3" {
@@ -443,7 +424,7 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 		) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
 	`, id, owner.UserID, owner.APIKeyID, owner.GroupID, generatedAssetHashToken(token),
 		backend, storageKey, "generated-video"+extension, "video", mimeType, sizeBytes,
-		hex.EncodeToString(hasher.Sum(nil)), metadata, expiresAt, TemporaryAssetPurposeGenerated)
+		result.checksum, metadata, expiresAt, TemporaryAssetPurposeGenerated)
 	if err != nil {
 		return "", fmt.Errorf("record temporary asset: %w", err)
 	}
