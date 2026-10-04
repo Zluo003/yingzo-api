@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,58 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
+
+type nativeVideoContentTaskRepo struct {
+	service.VideoTaskRepository
+	task *service.VideoTask
+}
+
+func (r *nativeVideoContentTaskRepo) GetByPublicID(_ context.Context, id string) (*service.VideoTask, error) {
+	if id != r.task.PublicID {
+		return nil, service.ErrVideoTaskNotFound
+	}
+	return r.task, nil
+}
+
+func TestGatewayNativeVideoContentUsesOwnedTask(t *testing.T) {
+	for _, group := range []*service.Group{
+		{ID: 1, Platform: service.PlatformVideo},
+		{ID: 1, Platform: service.PlatformComposite, Kind: "agent", SystemCode: "yingzo"},
+	} {
+		t.Run(group.Platform, func(t *testing.T) {
+			url := "https://cdn.example.com/video.mp4?signature=keep%2Fthis"
+			task := &service.VideoTask{PublicID: "video_native", UserID: 100, APIKeyID: 10, Status: service.VideoTaskStatusCompleted, ResultVideoURL: &url}
+			repo := &nativeVideoContentTaskRepo{task: task}
+			svc := service.NewVideoService(nil, repo, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			key := &service.APIKey{ID: 10, UserID: 100, GroupID: &group.ID, Group: group}
+			router := gin.New()
+			RegisterGatewayRoutes(router, &handler.Handlers{
+				Gateway: &handler.GatewayHandler{}, OpenAIGateway: &handler.OpenAIGatewayHandler{},
+				AsyncImage: handler.NewAsyncImageHandler(nil, nil), Video: handler.NewVideoHandler(svc),
+			}, servermiddleware.APIKeyAuthMiddleware(func(c *gin.Context) {
+				c.Set(string(servermiddleware.ContextKeyAPIKey), key)
+				c.Next()
+			}), nil, nil, nil, nil, nil, &config.Config{Gateway: config.GatewayConfig{MaxBodySize: 1024, TextMaxBodySize: 1024}})
+			for _, path := range []string{"/v1/videos/video_native/content", "/videos/video_native/content"} {
+				call := func() *httptest.ResponseRecorder {
+					w := httptest.NewRecorder()
+					router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+					return w
+				}
+				w := call()
+				require.Equal(t, http.StatusTemporaryRedirect, w.Code, w.Body.String())
+				require.Equal(t, url, w.Header().Get("Location"))
+				require.Equal(t, "no-store", w.Header().Get("Cache-Control"))
+				key.ID = 11
+				require.Equal(t, http.StatusNotFound, call().Code, "不能下载其他凭据的任务")
+				key.ID = 10
+				task.Status = service.VideoTaskStatusProcessing
+				require.Equal(t, http.StatusConflict, call().Code, "未完成任务不能重定向")
+				task.Status = service.VideoTaskStatusCompleted
+			}
+		})
+	}
+}
 
 func newGatewayRoutesTestRouter(platform ...string) *gin.Engine {
 	return newGatewayRoutesTestRouterWithConfig(&config.Config{

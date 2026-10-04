@@ -141,6 +141,16 @@ func (s *customDomainRecordingStore) PresignURL(context.Context, string, time.Du
 	return "", nil
 }
 func (s *customDomainRecordingStore) HeadBucket(context.Context) error { return nil }
+func (s *customDomainRecordingStore) UploadSized(_ context.Context, key string, r io.ReadSeeker, _ string, _ int64) (int64, error) {
+	s.uploads = append(s.uploads, key)
+	return io.Copy(io.Discard, r)
+}
+func (s *customDomainRecordingStore) Stat(context.Context, string) (int64, error) {
+	return 0, errors.New("not implemented")
+}
+func (s *customDomainRecordingStore) DownloadRange(context.Context, string, int64, int64) (io.ReadCloser, error) {
+	return nil, errors.New("not implemented")
+}
 
 // S3 后端配置了自定义域名时，上传返回的 URL 直接指向对象存储（域名 + 前缀 + 素材 ID），
 // 对象确实被上传、本地中转副本被清理。
@@ -567,7 +577,7 @@ func (d *stubReferenceMaterialDownloader) Fetch(_ context.Context, _ string, dst
 	}, nil
 }
 
-// 同一个素材被多条内容项引用时只下载与入库一次，避免重复占用容量与每日配额。
+// 同一个内联素材被多条内容项引用时只入库一次。
 func TestResolveVideoReferenceMaterialsReusesIdenticalMaterial(t *testing.T) {
 	db := referenceMaterialPostgres(t)
 	handler := NewVideoHandler(service.NewVideoService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil))
@@ -576,19 +586,17 @@ func TestResolveVideoReferenceMaterialsReusesIdenticalMaterial(t *testing.T) {
 
 	var encoded bytes.Buffer
 	require.NoError(t, png.Encode(&encoded, image.NewRGBA(image.Rect(0, 0, 2, 2))))
-	downloader := &stubReferenceMaterialDownloader{payload: encoded.Bytes()}
-	handler.referenceMaterialFetcher = downloader
+	dataURL := "data:image/png;base64," + base64.StdEncoding.EncodeToString(encoded.Bytes())
 
 	raw := map[string]any{
 		"content": []any{
-			map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://cdn.example.com/same.png"}},
-			map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://cdn.example.com/same.png"}},
+			map[string]any{"type": "image_url", "image_url": map[string]any{"url": dataURL}},
+			map[string]any{"type": "image_url", "image_url": map[string]any{"url": dataURL}},
 		},
 	}
 	_, changed, err := handler.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), apiKey, raw)
 	require.NoError(t, err)
 	require.True(t, changed)
-	require.Equal(t, 1, downloader.calls, "同一地址不应重复下载")
 
 	content, ok := raw["content"].([]any)
 	require.True(t, ok)
@@ -606,48 +614,6 @@ func TestResolveVideoReferenceMaterialsReusesIdenticalMaterial(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, first, second)
 	require.True(t, strings.HasPrefix(first, "http://localhost:8080/media/"), first)
-
-	var count int
-	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM temporary_assets WHERE api_key_id=$1`, apiKey.ID).Scan(&count))
-	require.Equal(t, 1, count)
-}
-
-// 外部公网 URL 的参考素材同样要下载、探测并转存成平台公网 URL。
-func TestResolveVideoReferenceMaterialsRehostsExternalURL(t *testing.T) {
-	db := referenceMaterialPostgres(t)
-	handler := NewVideoHandler(service.NewVideoService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil))
-	handler.agentHandler = &AgentHandler{db: db, dataDir: t.TempDir()}
-	apiKey := referenceMaterialTestAPIKey()
-
-	var encoded bytes.Buffer
-	require.NoError(t, png.Encode(&encoded, image.NewRGBA(image.Rect(0, 0, 4, 4))))
-	handler.referenceMaterialFetcher = &stubReferenceMaterialDownloader{payload: encoded.Bytes()}
-
-	raw := map[string]any{
-		"model": "seedance-2.0",
-		"content": []any{
-			map[string]any{
-				"type":         "image_url",
-				"role":         "reference_image",
-				"image_url":    map[string]any{"url": "https://cdn.example.com/ref.png"},
-				"subject_type": "person",
-			},
-		},
-	}
-	_, changed, err := handler.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), apiKey, raw)
-	require.NoError(t, err)
-	require.True(t, changed)
-
-	content, ok := raw["content"].([]any)
-	require.True(t, ok)
-	item, ok := content[0].(map[string]any)
-	require.True(t, ok)
-	imageURL, ok := item["image_url"].(map[string]any)
-	require.True(t, ok)
-	stored, ok := imageURL["url"].(string)
-	require.True(t, ok)
-	require.True(t, strings.HasPrefix(stored, "http://localhost:8080/media/"), stored)
-	require.Equal(t, "person", item["subject_type"], "改写 URL 不应碰其它字段")
 
 	var count int
 	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM temporary_assets WHERE api_key_id=$1`, apiKey.ID).Scan(&count))

@@ -258,7 +258,7 @@ export default {
         newtokenAdapter: 'Routes the upstream model by resolution: 2.0 / 1080p, 2.0 Fast, 2.5',
         mikuapiAdapter: 'Routes by the resolution field: Seedance 2.0 (incl. 4K) / 2.0 Fast (480p/720p, 5s or 10s only) / 2.5 (no 4K), plus grok-imagine-video-1.5 and Kling kling-v3-omni (Kling uses /v1/videos and returns direct CDN links)',
         jingyuAdapter: 'Jingyu /v1/video/generations: 2.0 (incl. 4K) / 2.5 (480p/720p)',
-        xingguangAdapter: 'xingapi.top /v1/videos async API: reference-to-video only; Seedance 2.0 upstream model seedance2.0-933 (switch to seedance2.0-933-2 via model_mapping), 2.5 upstream model seedance2.5; 480p/720p, 16:9/9:16, results fetched from the authenticated /content endpoint. Reference videos are not hard-coded: keep max reference videos at 0 while the upstream has them disabled, raise it once supported',
+        xingguangAdapter: 'xingapi.top /v1/videos async API: text-to-video and reference-to-video requests (subject to upstream model support); Seedance 2.0 upstream model seedance2.0-933 (switch to seedance2.0-933-2 via model_mapping), 2.5 upstream model seedance2.5; 480p/720p; forwards 16:9/9:16/21:9/1:1/4:3/3:4 ratios; results fetched from the authenticated /content endpoint. Reference videos are not hard-coded: keep max reference videos at 0 while the upstream has them disabled, raise it once supported',
         models: 'Video models',
         upstreamModels: 'Upstream model names',
         upstreamModelsHint: 'Set an upstream name for each selected video model. Leave blank to use the adapter default; a custom name overrides the default mapping.',

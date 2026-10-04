@@ -1,21 +1,21 @@
 # Video Reference Materials
 
-Video generation requests may carry reference media (image / video / audio) that the upstream provider needs to fetch. Downstream clients submit those materials in three shapes, and the gateway normalises all of them into **platform-hosted public URLs** before the request reaches an upstream channel:
+Video generation requests may carry reference media (image / video / audio) that the upstream provider needs to fetch. **Existing public URLs pass through unchanged**, including signed query parameters. Only inline data and uploaded files need platform hosting:
 
 | Client submits | Gateway does |
 | --- | --- |
-| `https://…` public URL | Downloads it, probes it, stores it, and hands the upstream its own URL |
+| `http(s)://…` public URL | Validates the public address and passes it through unchanged. Reference videos are temporarily downloaded only to measure duration, then deleted without creating an asset record |
 | `data:<mime>;base64,…` inline payload | Decodes it, probes it, stores it, and hands the upstream its own URL |
 | `multipart/form-data` file part (JSON part uses `attachment://N`) | Already uploaded by the multipart reader — the upstream gets the platform URL directly |
 
-The upstream therefore never depends on a third-party URL that may expire, require credentials, or be unreachable from the provider's network.
+Public image and audio URLs are not downloaded or stored by the gateway. The caller must keep public reference URLs accessible to the upstream provider for the duration of the task. A valid CDN URL is never replaced with a local development `/media/` URL.
 
 ## Reference video duration is measured by the platform
 
 `duration_seconds` on a reference video is **not** a client input:
 
 - Any `duration_seconds` the client sends is discarded during material resolution; it is never forwarded upstream and never used for billing.
-- The duration comes from the gateway's own trusted probe (`ffprobe`, or `image.DecodeConfig` for images) of the stored file, and is recorded in the asset's metadata row.
+- The duration comes from the gateway's trusted probe (`ffprobe`). External reference videos are probed in a temporary file without rehosting. Uploaded videos have their probe result recorded in the asset's metadata row.
 - When a request references an asset that is already in the platform store, the duration is read from that stored probe record instead of re-downloading the file.
 
 The measured seconds are added to the generated seconds for billing:
@@ -55,20 +55,20 @@ curl -X POST https://api-key.cc/v1/videos \
 - Reference video, per clip: 2–15s (`seedance-2.5`: 2–30s); total reference video duration: ≤15s (`seedance-2.5`: ≤30s). These are now evaluated against the **measured** durations.
 - Reference counts: `seedance-2.0` and `seedance-2.0-fast` accept 9 images + 3 videos + 3 audios; `seedance-2.5` accepts 30 images + 10 videos + 10 audios, ≤50 materials in total.
 - Reference audio must be accompanied by at least one image or video. An audio-only reference set is rejected for **every** model (`seedance-2.0`, `seedance-2.0-fast`, `seedance-2.5`) with `invalid_video_content`. The model catalog declares this per model as `capabilities.supports_audio_only_reference` (`false` for all current models).
-- Single material size: image 30 MiB, video 200 MiB, audio 15 MiB. The media type is decided by content sniffing, not by what the client declares, and must be one of the whitelisted types (`jpeg/png/webp/gif/bmp/tiff/heic/heif`, `mp4/quicktime`, `wav/mp3`).
+- Uploaded material size: image 30 MiB, video 200 MiB, audio 15 MiB. External reference videos also have a 200 MiB probe limit; public image/audio files are fetched and validated by the upstream provider. Uploaded media types are decided by content sniffing and must be one of the whitelisted types (`jpeg/png/webp/gif/bmp/tiff/heic/heif`, `mp4/quicktime`, `wav/mp3`).
 - Only `http` / `https` URLs are fetched. Loopback, private-range and link-local addresses (including cloud metadata endpoints) are refused, redirects are re-validated hop by hop, and the download is capped by the size limit above with a 5-minute timeout.
-- Identical materials referenced more than once in the same request are downloaded and stored once; each content item still counts its own measured duration.
-- Resolution happens synchronously while the task is submitted: submission latency includes downloading and probing every material.
+- Repeated external video URLs are probed once per request; each content item still counts its own measured duration. Repeated inline data is uploaded once.
+- Reference video probes and inline uploads happen synchronously during submission. Public image/audio references require no download or upload.
 
 ## Storage, capacity and cleanup
 
-Files live in the platform temporary-asset store and are served from `/media/{asset_id}/asset.{ext}` (or `/temporary-assets/{token}`). Configuration lives in **Admin → Settings → Asset storage** (`/api/v1/admin/file-service/settings`).
+Inline and uploaded files live in the platform temporary-asset store and are served from `/media/{asset_id}/asset.{ext}` (or `/temporary-assets/{token}`). Configuration lives in **Admin → Settings → Asset storage** (`/api/v1/admin/file-service/settings`).
 
 The store holds two categories, each with **its own retention and capacity budget** (`purpose` column, migration 241):
 
 | Category | Written by | Retention | Capacity |
 | --- | --- | --- | --- |
-| `reference` | Downstream uploads: inline base64, multipart parts, fetched public URLs, and the agent `/assets` endpoint | `retention_hours` (1–720) | `max_total_bytes` (0 = unlimited) |
+| `reference` | Downstream uploads: inline base64, multipart parts, and the agent `/assets` endpoint | `retention_hours` (1–720) | `max_total_bytes` (0 = unlimited) |
 | `generated` | Results rehosted from upstream (`/media/...` deliverables) | `result_retention_hours` (1–8760) | `result_max_total_bytes` (0 = unlimited) |
 
 The split exists so that a flood of client uploads cannot evict files that were already delivered downstream. Eviction is always scoped to one category.

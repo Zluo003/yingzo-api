@@ -169,6 +169,12 @@ func RegisterGatewayRoutes(
 		})
 	}
 	videoContentHandler := func(c *gin.Context) {
+		platform := getGroupPlatform(c)
+		if platform != service.PlatformGrok && (platform == service.PlatformVideo || isAgentGroup(c)) {
+			setAgentRequestPlatform(c, service.PlatformVideo)
+			h.Video.Content(c)
+			return
+		}
 		// Video content requests do not carry a model, so composite groups cannot
 		// be resolved by compositeTargetPlatformMiddleware. Route them through
 		// the Grok handler just like video status lookups.

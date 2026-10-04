@@ -258,7 +258,7 @@ export default {
         newtokenAdapter: '按分辨率路由上游模型：2.0 / 1080p、2.0 Fast、2.5',
         mikuapiAdapter: '按请求体里的 resolution 字段路由：Seedance 2.0（含 4K）/ 2.0 Fast（480p/720p，仅 5/10 秒）/ 2.5（无 4K），另支持 grok-imagine-video-1.5 与可灵 kling-v3-omni（可灵走 /v1/videos，成片为直链）',
         jingyuAdapter: 'Jingyu /v1/video/generations：2.0（含 4K）/ 2.5（480p/720p）',
-        xingguangAdapter: 'xingapi.top /v1/videos 异步接口：仅参考生视频，Seedance 2.0 上游模型 seedance2.0-933（可经 model_mapping 改为 seedance2.0-933-2）、2.5 上游模型 seedance2.5；480p/720p、16:9/9:16，成片从带鉴权的 /content 回捞。参考视频不写死：上游未开放期间请把参考视频上限配为 0，开放后调大即可',
+        xingguangAdapter: 'xingapi.top /v1/videos 异步接口：可提交文生与参考生视频（实际能力以上游模型为准），Seedance 2.0 上游模型 seedance2.0-933（可经 model_mapping 改为 seedance2.0-933-2）、2.5 上游模型 seedance2.5；480p/720p；画幅透传 16:9/9:16/21:9/1:1/4:3/3:4，成片从带鉴权的 /content 回捞。参考视频不写死：上游未开放期间请把参考视频上限配为 0，开放后调大即可',
         models: '视频模型',
         upstreamModels: '上游模型名',
         upstreamModelsHint: '为已选视频模型指定上游模型名；留空使用适配器默认名称，填写后将覆盖默认映射。',

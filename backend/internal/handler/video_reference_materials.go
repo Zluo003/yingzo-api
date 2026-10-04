@@ -17,6 +17,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Wei-Shaw/sub2api/internal/pkg/mediaprobe"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -61,12 +62,12 @@ type platformReferenceMaterialRef struct {
 	byToken string
 }
 
-// resolveVideoReferenceMaterials 把请求体里的参考素材统一收敛成平台自己的公网
-// URL，并用平台探测出的时长覆盖下游传入的 duration_seconds。
+// resolveVideoReferenceMaterials 保留已有公网 URL，仅将内联素材上传到平台，
+// 并用平台探测出的时长覆盖下游传入的 duration_seconds。
 //
 // 三类入参：
 //   - base64 data URI：解码落盘后转存，换成平台公网 URL；
-//   - 外部公网 URL：下载到本机、由可信探测拿到时长后转存，换成平台公网 URL；
+//   - 外部公网 URL：原样透传；视频临时下载探测时长，随后删除，不转存；
 //   - 平台素材 URL（multipart 已上传，或直接引用素材库）：URL 保持不变，时长直接
 //     读素材行里保存的探测结果，不重复下载。
 //
@@ -84,9 +85,11 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 	if h.agentHandler != nil && h.agentHandler.fileStorage != nil {
 		customAccess = h.agentHandler.fileStorage.EffectiveS3CustomAccess(c.Request.Context())
 	}
-	// 同一个素材被多条内容项引用时只下载与入库一次：map 的 key 复用请求体里已有的
-	// 字符串，不额外复制内存。时长仍按内容条数分别计费。
+	// 请求内复用内联上传、公网地址校验与视频探测结果，避免重复处理同一素材。
+	// 参考视频时长仍按内容条数分别计费。
 	stored := make(map[string]*temporaryAssetUploadResult, len(content))
+	validated := make(map[string]bool, len(content))
+	videoDurations := make(map[string]float64, len(content))
 	changed := false
 	for _, value := range content {
 		item, ok := value.(map[string]any)
@@ -131,6 +134,30 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 		if urlField == "" || urlObject == nil || rawURL == "" {
 			continue
 		}
+		if !strings.HasPrefix(strings.ToLower(rawURL), "data:") {
+			if urlField == "video_url" {
+				duration, cached := videoDurations[rawURL]
+				if !cached {
+					var err error
+					duration, err = h.probeExternalReferenceVideo(c.Request.Context(), rawURL)
+					if err != nil {
+						return nil, false, err
+					}
+					videoDurations[rawURL] = duration
+				}
+				if setContentItemDurationSeconds(item, duration) {
+					changed = true
+				}
+			} else if !validated[rawURL] {
+				if err := service.ValidateReferenceMaterialURL(c.Request.Context(), rawURL); err != nil {
+					return nil, false, videoReferenceMaterialFailure(http.StatusBadRequest,
+						"invalid_reference_material", err.Error())
+				}
+				validated[rawURL] = true
+			}
+			// 保留原字符串，包括签名查询参数和转义路径；不下载图片/音频，也不入库。
+			continue
+		}
 		result, cached := stored[rawURL]
 		if !cached {
 			uploaded, uploadErr := h.storeVideoReferenceMaterial(c, apiKey, rawURL, urlField)
@@ -159,6 +186,43 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 			"invalid_video_request", "Failed to encode rewritten video request")
 	}
 	return resolved, true, nil
+}
+
+// probeExternalReferenceVideo 仅为可信计费探测视频。临时文件不进入素材库，
+// 不依赖素材存储配置或公网回源地址；成功和失败路径都会删除临时文件。
+func (h *VideoHandler) probeExternalReferenceVideo(ctx context.Context, rawURL string) (float64, error) {
+	spool, err := os.CreateTemp("", "yingzo-reference-video-*")
+	if err != nil {
+		return 0, videoReferenceMaterialFailure(http.StatusServiceUnavailable,
+			"reference_material_probe_failed", "Reference video temporary storage is unavailable")
+	}
+	defer func() {
+		_ = spool.Close()
+		_ = os.Remove(spool.Name())
+	}()
+	if _, err := h.referenceMaterialFetcher.Fetch(ctx, rawURL, spool, videoReferenceMaterialLimits["video_url"]); err != nil {
+		return 0, videoReferenceMaterialFailure(http.StatusBadRequest,
+			"reference_material_download_failed", err.Error())
+	}
+	contentType, err := sniffReferenceMaterialType(spool.Name())
+	policy, ok := mediaPolicies[contentType]
+	if err != nil || !ok || policy.kind != "video" {
+		return 0, videoReferenceMaterialFailure(http.StatusBadRequest,
+			"unsupported_reference_material", "Reference video URL must contain a supported video")
+	}
+	metadata, err := probeTrustedMedia(ctx, spool.Name(), policy, contentType)
+	if err != nil {
+		if errors.Is(err, mediaprobe.ErrUnavailable) {
+			return 0, videoReferenceMaterialFailure(http.StatusServiceUnavailable,
+				"media_probe_unavailable", "Trusted media probe is unavailable")
+		}
+		return 0, videoReferenceMaterialFailure(http.StatusUnprocessableEntity, "media_probe_failed", err.Error())
+	}
+	if metadata.DurationSeconds <= 0 {
+		return 0, videoReferenceMaterialFailure(http.StatusBadRequest,
+			"reference_video_duration_unavailable", "Reference video duration is unavailable")
+	}
+	return metadata.DurationSeconds, nil
 }
 
 // videoReferenceMaterialURLField 返回内容项承载素材地址的字段名，非素材项返回空。
@@ -298,9 +362,8 @@ func (h *VideoHandler) platformReferenceMaterialDuration(ctx context.Context, ap
 	return record.DurationSeconds, record.DurationSeconds > 0, nil
 }
 
-// storeVideoReferenceMaterial 把一份参考素材落到平台素材库，返回它的公网 URL
-// 与可信探测结果（含时长）。base64 data URI 直接解码落盘，外部 URL 走 SSRF 安全
-// 下载；两者都复用素材上传路径完成校验、探测、配额与入库。
+// storeVideoReferenceMaterial 把内联参考素材落到平台素材库，返回它的公网 URL
+// 与可信探测结果（含时长），复用素材上传路径完成校验、探测、配额与入库。
 func (h *VideoHandler) storeVideoReferenceMaterial(c *gin.Context, apiKey *service.APIKey, rawURL string, itemType string) (*temporaryAssetUploadResult, error) {
 	limit, ok := videoReferenceMaterialLimits[itemType]
 	if !ok {
@@ -323,29 +386,16 @@ func (h *VideoHandler) storeVideoReferenceMaterial(c *gin.Context, apiKey *servi
 		_ = os.Remove(spoolPath)
 	}()
 
-	var (
-		size   int64
-		digest string
-	)
-	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(rawURL)), "data:") {
-		decoded, err := decodeInlineReferenceMaterial(rawURL, limit)
-		if err != nil {
-			return nil, videoReferenceMaterialFailure(http.StatusBadRequest, "invalid_reference_material", err.Error())
-		}
-		if _, err := spool.Write(decoded); err != nil {
-			return nil, videoReferenceMaterialFailure(http.StatusServiceUnavailable,
-				"media_upload_unavailable", "Reference material storage is unavailable")
-		}
-		sum := sha256.Sum256(decoded)
-		size, digest = int64(len(decoded)), hex.EncodeToString(sum[:])
-	} else {
-		fetched, err := h.referenceMaterialFetcher.Fetch(c.Request.Context(), rawURL, spool, limit)
-		if err != nil {
-			return nil, videoReferenceMaterialFailure(http.StatusBadRequest,
-				"reference_material_download_failed", err.Error())
-		}
-		size, digest = fetched.Size, fetched.SHA256
+	decoded, err := decodeInlineReferenceMaterial(rawURL, limit)
+	if err != nil {
+		return nil, videoReferenceMaterialFailure(http.StatusBadRequest, "invalid_reference_material", err.Error())
 	}
+	if _, err := spool.Write(decoded); err != nil {
+		return nil, videoReferenceMaterialFailure(http.StatusServiceUnavailable,
+			"media_upload_unavailable", "Reference material storage is unavailable")
+	}
+	sum := sha256.Sum256(decoded)
+	size, digest := int64(len(decoded)), hex.EncodeToString(sum[:])
 
 	contentType, err := sniffReferenceMaterialType(spoolPath)
 	if err != nil {

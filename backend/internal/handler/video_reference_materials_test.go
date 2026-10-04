@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -288,6 +290,101 @@ func TestResolveVideoReferenceMaterialsWithoutAgentHandlerLeavesBodyAlone(t *tes
 	require.NoError(t, err)
 	require.False(t, changed)
 	require.Nil(t, resolved)
+}
+
+func TestResolveVideoReferenceMaterialsPreservesPublicImagesAndAudio(t *testing.T) {
+	handler := referenceMaterialTestHandler(t)
+	downloader := &stubReferenceMaterialDownloader{err: errors.New("public images and audio must not be downloaded")}
+	handler.referenceMaterialFetcher = downloader
+	// 使用公网 IP 避免单测依赖 DNS；保留带签名、转义路径与查询参数的原始 URL。
+	imageURL := "https://8.8.8.8/ref%2Fimage.png?signature=a%2Bb%2Fc&x=1&x=2"
+	audioURL := "http://1.1.1.1/reference.mp3?signature=keep%2Fthis"
+	image := map[string]any{"type": "image_url", "role": "reference_image", "subject_type": "person", "image_url": map[string]any{"url": imageURL}}
+	audio := map[string]any{"type": "audio_url", "role": "reference_audio", "audio_url": map[string]any{"url": audioURL}}
+	raw := map[string]any{"content": []any{image, audio}}
+	resolved, changed, err := handler.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), referenceMaterialTestAPIKey(), raw)
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Nil(t, resolved)
+	require.Equal(t, imageURL, image["image_url"].(map[string]any)["url"])
+	require.Equal(t, audioURL, audio["audio_url"].(map[string]any)["url"])
+	require.Equal(t, "person", image["subject_type"])
+	require.Zero(t, downloader.calls)
+	files, err := os.ReadDir(handler.agentHandler.dataDir)
+	require.NoError(t, err)
+	require.Empty(t, files, "公网素材不应下载或转存，数据库也不可连接")
+
+	image["duration_seconds"] = float64(10)
+	audio["duration_seconds"] = float64(20)
+	_, changed, err = handler.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), referenceMaterialTestAPIKey(), raw)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.NotContains(t, image, "duration_seconds")
+	require.NotContains(t, audio, "duration_seconds")
+	require.Equal(t, imageURL, image["image_url"].(map[string]any)["url"])
+	require.Zero(t, downloader.calls)
+}
+
+func TestResolveVideoReferenceMaterialsRejectsUnsafeExternalURLs(t *testing.T) {
+	for _, rawURL := range []string{
+		"http://127.0.0.1/ref.png", "http://10.0.0.1/ref.png", "http://169.254.169.254/ref.png",
+		"http://[::1]/ref.png", "file:///tmp/ref.png", "https://user:pass@8.8.8.8/ref.png",
+		"https://8.8.8.8/ref.png#fragment",
+	} {
+		t.Run(rawURL, func(t *testing.T) {
+			handler := referenceMaterialTestHandler(t)
+			raw := map[string]any{"content": []any{map[string]any{"type": "image_url", "image_url": map[string]any{"url": rawURL}}}}
+			_, _, err := handler.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), referenceMaterialTestAPIKey(), raw)
+			var materialErr *videoReferenceMaterialError
+			require.ErrorAs(t, err, &materialErr)
+			require.Equal(t, "invalid_reference_material", materialErr.code)
+		})
+	}
+}
+
+func TestResolveVideoReferenceMaterialsProbesPublicVideoWithoutRehosting(t *testing.T) {
+	handler := referenceMaterialTestHandler(t)
+	video, err := os.ReadFile("../pkg/mediaprobe/testdata/reference.mp4")
+	require.NoError(t, err)
+	downloader := &stubReferenceMaterialDownloader{payload: video}
+	handler.referenceMaterialFetcher = downloader
+	tempDir := t.TempDir()
+	t.Setenv("TMPDIR", tempDir)
+	rawURL := "https://cdn.example.com/reference.mp4?signature=unchanged%2Fvalue"
+	first := map[string]any{"type": "video_url", "video_url": map[string]any{"url": rawURL}, "duration_seconds": float64(99)}
+	second := map[string]any{"type": "video_url", "video_url": map[string]any{"url": rawURL}, "duration_seconds": float64(1)}
+	raw := map[string]any{"content": []any{first, second}}
+	_, changed, err := handler.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), referenceMaterialTestAPIKey(), raw)
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, 1, downloader.calls, "同一视频只探测一次")
+	metadata, err := probeTrustedMedia(context.Background(), "../pkg/mediaprobe/testdata/reference.mp4", mediaPolicies["video/mp4"], "video/mp4")
+	require.NoError(t, err)
+	for _, item := range []map[string]any{first, second} {
+		require.Equal(t, rawURL, item["video_url"].(map[string]any)["url"])
+		require.Equal(t, metadata.DurationSeconds, item["duration_seconds"])
+	}
+	files, err := filepath.Glob(filepath.Join(tempDir, "yingzo-reference-video-*"))
+	require.NoError(t, err)
+	require.Empty(t, files, "探测临时文件必须删除")
+	assets, err := os.ReadDir(handler.agentHandler.dataDir)
+	require.NoError(t, err)
+	require.Empty(t, assets, "视频不进入素材库")
+}
+
+func TestResolveVideoReferenceMaterialsCleansUpFailedVideoProbe(t *testing.T) {
+	for _, payload := range [][]byte{[]byte("not a video"), []byte("\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom")} {
+		handler := referenceMaterialTestHandler(t)
+		handler.referenceMaterialFetcher = &stubReferenceMaterialDownloader{payload: payload}
+		tempDir := t.TempDir()
+		t.Setenv("TMPDIR", tempDir)
+		raw := map[string]any{"content": []any{map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://cdn.example.com/ref.mp4"}, "duration_seconds": float64(10)}}}
+		_, _, err := handler.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), referenceMaterialTestAPIKey(), raw)
+		require.Error(t, err)
+		files, err := filepath.Glob(filepath.Join(tempDir, "yingzo-reference-video-*"))
+		require.NoError(t, err)
+		require.Empty(t, files)
+	}
 }
 
 func TestSniffReferenceMaterialTypeUsesTrustedProbe(t *testing.T) {

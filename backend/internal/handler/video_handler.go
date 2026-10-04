@@ -24,8 +24,7 @@ type VideoHandler struct {
 	agentHandler             *AgentHandler
 	securityAuditCoordinator *securityaudit.Coordinator
 	contentModerationService *service.ContentModerationService
-	// referenceMaterialFetcher 把下游提交的外部参考素材 URL 拉到本机，平台随后
-	// 自己探测时长并把素材转存到素材库。
+	// referenceMaterialFetcher 临时下载外部参考视频供平台探测时长，URL 不改写。
 	referenceMaterialFetcher referenceMaterialDownloader
 }
 
@@ -87,7 +86,7 @@ func (h *VideoHandler) Create(c *gin.Context) {
 		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", "invalid_video_request", "Request body is empty")
 		return
 	}
-	// 幂等与计费指纹按下游原始请求体计算：参考素材转存会改写 URL，而改写结果每次
+	// 幂等与计费指纹按下游原始请求体计算：内联素材转存会改写 URL，而改写结果每次
 	// 都是新素材，不能参与指纹，否则同一个请求无法命中幂等重放。
 	inboundPayloadHash := service.HashUsageRequestPayload(body)
 
@@ -113,7 +112,7 @@ func (h *VideoHandler) Create(c *gin.Context) {
 	inboundEndpoint := GetInboundEndpoint(c)
 	upstreamEndpoint := GetUpstreamEndpoint(c, service.PlatformVideo)
 
-	// 参考素材统一转存到平台自己的公网 URL，并用平台探测出的时长覆盖下游声明。
+	// 公网素材 URL 保持不变；内联素材转存，并用平台探测出的时长覆盖下游声明。
 	// 必须发生在 CreateTask 之前：参考视频时长直接参与计费估算。
 	if resolved, changed, resolveErr := h.resolveVideoReferenceMaterials(c, apiKey, raw); resolveErr != nil {
 		if h.writeVideoRequestError(c, resolveErr) {
@@ -403,10 +402,31 @@ func videoPublicIDParam(c *gin.Context) string {
 }
 
 func (h *VideoHandler) Get(c *gin.Context) {
+	if resp := h.getOwnedTask(c); resp != nil {
+		c.JSON(http.StatusOK, resp)
+	}
+}
+
+// Content shares the status endpoint's ownership check and refreshes expiring
+// storage URLs before redirecting to the published video (including Range reads).
+func (h *VideoHandler) Content(c *gin.Context) {
+	resp := h.getOwnedTask(c)
+	if resp == nil {
+		return
+	}
+	if resp.Status != service.VideoTaskStatusCompleted || resp.VideoURL == nil || strings.TrimSpace(*resp.VideoURL) == "" {
+		h.errorResponse(c, http.StatusConflict, "invalid_request_error", "video_content_not_ready", "Video content is not available")
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Redirect(http.StatusTemporaryRedirect, *resp.VideoURL)
+}
+
+func (h *VideoHandler) getOwnedTask(c *gin.Context) *service.VideoResponse {
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
 	if !ok {
 		h.errorResponse(c, http.StatusUnauthorized, "authentication_error", "invalid_api_key", "Invalid API key")
-		return
+		return nil
 	}
 	setOpsRequestContext(c, "", false)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeVideo))
@@ -414,9 +434,9 @@ func (h *VideoHandler) Get(c *gin.Context) {
 	resp, err := h.videoService.GetTask(c.Request.Context(), videoPublicIDParam(c), apiKey)
 	if err != nil {
 		h.errorFrom(c, err)
-		return
+		return nil
 	}
-	c.JSON(http.StatusOK, resp)
+	return resp
 }
 
 func (h *VideoHandler) errorFrom(c *gin.Context, err error) {

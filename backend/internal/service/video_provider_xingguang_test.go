@@ -48,9 +48,8 @@ func TestXingguangAccountModelMappingWins(t *testing.T) {
 		a.UpstreamModel(account, &normalizedVideoRequest{Model: VideoModelSeedance25, Resolution: VideoResolution720P}))
 }
 
-// 分辨率与画幅按文档只有 480p/720p 与 16:9/9:16：共享规格表里的 1080p/4K
-// xingguang 出不了片，必须在渠道闸门拒绝，让请求落到别的上游。
-func TestXingguangResolutionAndRatioMatchDocumentation(t *testing.T) {
+// 分辨率暂接 480p/720p，画幅使用 Seedance 固定比例枚举。
+func TestXingguangResolutionAndAspectRatioValidation(t *testing.T) {
 	a := videoProviderAdapterByName(videoProviderXingguang)
 
 	require.True(t, a.Compatible(VideoModelSeedance20, VideoResolution480P))
@@ -73,17 +72,18 @@ func TestXingguangResolutionAndRatioMatchDocumentation(t *testing.T) {
 	}
 	require.True(t, a.CompatibleRequest(request(VideoModelSeedance20, "16:9", true)))
 	require.True(t, a.CompatibleRequest(request(VideoModelSeedance25, "9:16", true)))
-	require.False(t, a.CompatibleRequest(request(VideoModelSeedance25, "21:9", true)),
-		"画幅 21:9 会被上游 400，必须交给别的上游")
+	require.True(t, a.CompatibleRequest(request(VideoModelSeedance25, "21:9", true)))
+	require.False(t, a.CompatibleRequest(request(VideoModelSeedance25, "16:10", true)))
+	require.False(t, a.CompatibleRequest(request(VideoModelSeedance25, "auto", true)))
 	// 未提供画幅时不校验（上游按默认 16:9 处理）。
 	require.True(t, a.CompatibleRequest(request(VideoModelSeedance20, "", false)))
 }
 
-// xingguang 当前只开放参考生视频：文生 / 图生（首帧）/ 首尾帧一律不接；参考
+// xingguang 接入文生与参考生视频；图生（首帧）/ 首尾帧仍不接；参考
 // 素材是图片（图至多 10 张）、音频（至多 3 条）与视频。参考视频不在适配器写死：
 // 由账号级 max_reference_videos 在调度阶段收敛（上游未开放期间配 0），适配器
 // 只负责透传；音频必须伴随参考图或参考视频。
-func TestXingguangServesReferenceToVideoOnly(t *testing.T) {
+func TestXingguangReferenceConstraintsAndUnsupportedFrameModes(t *testing.T) {
 	a := videoProviderAdapterByName(videoProviderXingguang)
 	normalized := func(ability string, content []VideoContent) *normalizedVideoRequest {
 		return &normalizedVideoRequest{
@@ -105,8 +105,7 @@ func TestXingguangServesReferenceToVideoOnly(t *testing.T) {
 	require.True(t, a.CompatibleRequest(normalized(videoAbilityReferenceToVideo, []VideoContent{referenceVideo, referenceAudio})),
 		"音频伴随参考视频（无参考图）同样通过渠道闸门")
 
-	// 其余能力交给别的上游。
-	require.False(t, a.CompatibleRequest(normalized(videoAbilityTextToVideo, nil)), "文生视频不支持")
+	// 首帧和首尾帧能力交给别的上游。
 	require.False(t, a.CompatibleRequest(normalized(videoAbilityImageToVideo, []VideoContent{firstFrame})), "图生视频（首帧）不支持")
 	require.False(t, a.CompatibleRequest(normalized(videoAbilityStartEndToVideo, []VideoContent{
 		firstFrame,
@@ -148,6 +147,91 @@ func TestXingguangServesReferenceToVideoOnly(t *testing.T) {
 	require.True(t, a.CompatibleRequest(duration(VideoModelSeedance25, 30)))
 	require.False(t, a.CompatibleRequest(duration(VideoModelSeedance25, 31)))
 	require.False(t, a.CompatibleRequest(duration(VideoModelSeedance25, 3)))
+}
+
+// YingZo uses the same public schema for text and reference generation, including
+// the model's common aspect ratios. The documentation's examples are not a
+// provider allow-list: rejecting these before dispatch caused a generic 503.
+func TestXingguangCommonSeedanceRatiosReachUpstream(t *testing.T) {
+	a := videoProviderAdapterByName(videoProviderXingguang)
+	for _, model := range []string{VideoModelSeedance20, VideoModelSeedance25} {
+		for _, ability := range []string{videoAbilityTextToVideo, videoAbilityReferenceToVideo} {
+			for _, ratio := range []string{"16:9", "9:16", "21:9", "1:1", "4:3", "3:4"} {
+				t.Run(model+"/"+ability+"/"+ratio, func(t *testing.T) {
+					content := []VideoContent{{Type: "text", Text: "海边日出"}}
+					if ability == videoAbilityReferenceToVideo {
+						for range 6 {
+							content = append(content, VideoContent{
+								Type: "image_url", Role: "reference_image",
+								ImageURL: &VideoContentURL{URL: "https://cdn.example.com/reference.png"},
+							})
+						}
+					}
+					req, err := normalizeVideoCreateRequest(&VideoCreateRequest{
+						Model: model, Prompt: "海边日出", AbilityCode: ability, Content: content,
+						Duration: 5, Resolution: VideoResolution720P, AspectRatio: ratio,
+					})
+					require.NoError(t, err)
+					account := &Account{Platform: PlatformVideo, Type: AccountTypeAPIKey,
+						Credentials: map[string]any{"api_key": "test-key", "model_mapping": map[string]any{model: "configured-upstream"}},
+						Extra:       map[string]any{VideoProviderExtraKey: videoProviderXingguang}}
+					require.True(t, isVideoAccountCompatibleForRequest(account, req), "common ratios must reach the adapter instead of exhausting all eligible accounts")
+					body := a.BuildCreateBody(req, a.UpstreamModel(account, req))
+					require.Equal(t, ratio, body["ratio"], "preserve the requested composition")
+					require.NotContains(t, body, "aspect_ratio")
+					if ability == videoAbilityReferenceToVideo {
+						require.Len(t, body["images"], 6)
+					} else {
+						require.NotContains(t, body, "images")
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestXingguangTextToVideoForSeedance20And25(t *testing.T) {
+	a := videoProviderAdapterByName(videoProviderXingguang)
+	for _, model := range []string{VideoModelSeedance20, VideoModelSeedance25} {
+		t.Run(model, func(t *testing.T) {
+			req, err := normalizeVideoCreateRequest(&VideoCreateRequest{
+				Model: model, Prompt: "海边日出，镜头缓慢推进", AbilityCode: videoAbilityTextToVideo,
+				Duration: 5, Resolution: VideoResolution720P, AspectRatio: "16:9",
+			})
+			require.NoError(t, err)
+			require.True(t, a.CompatibleRequest(req))
+			account := &Account{Platform: PlatformVideo, Type: AccountTypeAPIKey,
+				Credentials: map[string]any{"api_key": "test-key", "model_mapping": map[string]any{model: "configured-upstream"}},
+				Extra:       map[string]any{VideoProviderExtraKey: videoProviderXingguang}}
+			require.True(t, isVideoAccountCompatibleForRequest(account, req))
+			body := a.BuildCreateBody(req, a.UpstreamModel(account, req))
+			require.Equal(t, map[string]any{
+				"model": "configured-upstream", "prompt": req.Prompt, "duration": 5,
+				"resolution": "720p", "ratio": "16:9",
+			}, body, "纯文生请求不能携带参考素材或额外的能力字段")
+
+			req.Prompt = " "
+			require.False(t, a.CompatibleRequest(req))
+			req.Prompt = "海边日出"
+			for _, media := range []VideoContent{
+				{Type: "image_url", ImageURL: &VideoContentURL{URL: "https://cdn/ref.png"}},
+				{Type: "video_url", VideoURL: &VideoContentURL{URL: "https://cdn/ref.mp4"}},
+				{Type: "audio_url", AudioURL: &VideoContentURL{URL: "https://cdn/ref.mp3"}},
+			} {
+				req.Content = []VideoContent{media}
+				require.False(t, a.CompatibleRequest(req), "文生视频不能混入素材")
+			}
+			req.Content = nil
+			req.Resolution = VideoResolution1080P
+			require.False(t, a.CompatibleRequest(req))
+			req.Resolution = VideoResolution720P
+			req.GeneratedSeconds = 31
+			require.False(t, a.CompatibleRequest(req))
+			req.GeneratedSeconds = 5
+			req.Ratio = "16:10"
+			require.False(t, a.CompatibleRequest(req))
+		})
+	}
 }
 
 // 请求体字段名按 xingguang 文档：duration / ratio / resolution，参考素材是

@@ -18,12 +18,12 @@ import (
 //
 // seedance-2.0-fast 上游没有对应模型，不接（Compatible 返回 false）。
 //
-// 上游当前只开放参考生视频：参考素材是公网图片（至多 10 张，数组顺序对应
+// 接入文生与参考生视频，具体上游模型能力由账号映射决定。参考素材是公网图片（至多 10 张，数组顺序对应
 // @Image1、@Image2）、参考音频（至多 3 条，且必须伴随参考图或参考视频）与
 // 参考视频。参考视频不在适配器里写死：上游当前未开放，由账号级
 // video_model_capabilities 的 max_reference_videos 收敛（配 0 即关闭）；上游
-// 开放后把该项调大即可，无需改代码。分辨率文档只给出 480p/720p；画幅只有
-// 16:9/9:16。
+// 开放后把该项调大即可，无需改代码。分辨率暂接 480p/720p；画幅按 Seedance
+// 通用枚举透传，文档中的“常用 16:9、9:16”不是完整白名单。
 const (
 	videoProviderXingguang = "xingguang"
 
@@ -77,10 +77,10 @@ func (x xingguangVideoProviderAdapter) Compatible(model, resolution string) bool
 }
 
 // CompatibleRequest 是 xingguang 的渠道闸门：
-//   - 仅参考生视频：文生 / 图生（首帧）/ 首尾帧能力一律不接，交给别的上游；
+//   - 文生与参考生视频；图生（首帧）/ 首尾帧能力仍交给别的上游；
 //   - 时长按模型区分：2.0 系列 4-15 秒、2.5 为 4-30 秒（与共享规格表一致，上游
 //     对超范围时长是夹取而不是报错，静默夹取会按 A 时长计费交付 B 时长）；
-//   - 画幅是渠道能力：文档只开放 16:9 与 9:16（2.5 的 auto 哨兵同样不在其中）；
+//   - 画幅按 Seedance 通用的六种固定比例透传（不包含 2.5 的 auto 哨兵）；
 //   - 参考素材是图片、音频与视频；音频必须伴随参考图或参考视频。参考视频数量
 //     不在适配器写死：上游当前未开放，由账号级 max_reference_videos 收敛
 //     （调度阶段按账号配置过滤），上游开放后调大配置即可。
@@ -98,10 +98,13 @@ func (x xingguangVideoProviderAdapter) CompatibleRequest(normalized *normalizedV
 	if normalized.RatioProvided && !isXingguangAspectRatio(normalized.Ratio) {
 		return false
 	}
+	stats := inspectVideoContent(normalized.Content)
+	if normalized.AbilityCode == videoAbilityTextToVideo {
+		return strings.TrimSpace(normalized.Prompt) != "" && stats.ImageCount+stats.VideoCount+stats.AudioCount == 0
+	}
 	if normalized.AbilityCode != videoAbilityReferenceToVideo {
 		return false
 	}
-	stats := inspectVideoContent(normalized.Content)
 	if stats.ImageCount > xingguangMaxReferenceImages || stats.AudioCount > xingguangMaxReferenceAudios {
 		return false
 	}
@@ -253,13 +256,9 @@ func (x xingguangVideoProviderAdapter) PollMaxConsecutiveFailures() int {
 	return videoXingguangPollMaxConsecutiveFailures
 }
 
-// isXingguangAspectRatio 报告 ratio 是否在 xingguang 的两档画幅白名单内
-// （文档只开放 16:9 与 9:16；21:9 等其余取值上游会 400）。
+// isXingguangAspectRatio validates the common fixed Seedance ratios. Xingguang's
+// documentation lists examples, not an exhaustive allow-list; a live 2.0 request
+// with 21:9 completed successfully. Keep the caller's ratio intact for upstream.
 func isXingguangAspectRatio(ratio string) bool {
-	switch strings.TrimSpace(ratio) {
-	case "16:9", "9:16":
-		return true
-	default:
-		return false
-	}
+	return isSeedanceAspectRatio(ratio)
 }

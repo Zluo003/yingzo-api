@@ -27,13 +27,21 @@ type ReferenceMaterialFetchResult struct {
 	UpstreamType string
 }
 
-// ReferenceMaterialFetcher 把下游提交的参考素材 URL 拉到本机，交给素材上传路径
-// 探测并把素材转存到平台自己的公网 URL。
+// ReferenceMaterialFetcher 将公网参考视频临时下载到本机以探测真实时长。
+// 外部素材 URL 原样交给上游，不转存到平台素材库。
 //
 // 与生成产物回捞共用同一套 SSRF 防护：只接受 HTTP(S)、拒绝私网/回环地址与 URL
 // fragment、逐跳重新校验重定向，并使用 safeDialContext 阻断 DNS rebinding。
 type ReferenceMaterialFetcher struct {
 	client *http.Client
+}
+
+// ValidateReferenceMaterialURL 校验公网素材地址，不请求或改写素材本身。
+func ValidateReferenceMaterialURL(ctx context.Context, rawURL string) error {
+	if err := validateGeneratedVideoURL(ctx, rawURL, false); err != nil {
+		return errors.New(strings.ReplaceAll(err.Error(), "generated video", "reference material"))
+	}
+	return nil
 }
 
 // NewReferenceMaterialFetcher 构造参考素材下载器。
@@ -50,9 +58,7 @@ func NewReferenceMaterialFetcher() *ReferenceMaterialFetcher {
 
 // Fetch 把 rawURL 的内容写入 dst，最多 maxBytes 字节。
 //
-// dst 由调用方创建并负责关闭：调用方需要让下载落盘位置与素材目录处于同一文件
-// 系统，后续才能用 rename 接管而不是再拷贝一份。返回的 SHA256 可以直接作为素材
-// 摘要传入上传路径，跳过二次计算。
+// dst 由调用方创建、关闭和清理。下载内容只用于可信探测，不进入平台素材库。
 func (f *ReferenceMaterialFetcher) Fetch(ctx context.Context, rawURL string, dst *os.File, maxBytes int64) (*ReferenceMaterialFetchResult, error) {
 	if f == nil || f.client == nil {
 		return nil, errors.New("reference material fetcher is unavailable")
@@ -63,7 +69,7 @@ func (f *ReferenceMaterialFetcher) Fetch(ctx context.Context, rawURL string, dst
 	if maxBytes <= 0 {
 		return nil, errors.New("reference material size limit is invalid")
 	}
-	if err := validateGeneratedVideoURL(ctx, rawURL, false); err != nil {
+	if err := ValidateReferenceMaterialURL(ctx, rawURL); err != nil {
 		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSpace(rawURL), nil)
