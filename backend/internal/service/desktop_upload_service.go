@@ -520,7 +520,7 @@ func (q *DesktopUploadQueue) processNext() bool {
 		ctx, cancel := context.WithTimeout(q.ctx, 30*time.Minute)
 		item, processErr = q.process(ctx, next.releaseInput(), filepath.Join(dir, "package"), installerPath, next.ActorID)
 		cancel()
-		if processErr == nil || q.ctx.Err() != nil {
+		if processErr == nil || errors.Is(processErr, ErrDesktopReleaseExists) || q.ctx.Err() != nil {
 			break
 		}
 		next.RetryCount++
@@ -554,9 +554,12 @@ func (q *DesktopUploadQueue) processNext() bool {
 	return true
 }
 
-func (s *DesktopUpdateService) CreateUpload(_ context.Context, input DesktopUploadInput, actorID int64) (*DesktopUpload, error) {
+func (s *DesktopUpdateService) CreateUpload(ctx context.Context, input DesktopUploadInput, actorID int64) (*DesktopUpload, error) {
 	if s.uploadQueue == nil {
 		return nil, errors.New("desktop upload queue is unavailable")
+	}
+	if err := s.ensureReleaseAvailable(ctx, input.releaseInput()); err != nil {
+		return nil, err
 	}
 	return s.uploadQueue.Create(input, actorID)
 }

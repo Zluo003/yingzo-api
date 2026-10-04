@@ -32,6 +32,8 @@ const (
 	desktopUpdateDefaultPrefix     = "desktop-updates"
 )
 
+var ErrDesktopReleaseExists = infraerrors.Conflict("DESKTOP_UPDATE_VERSION_EXISTS", "该平台和架构的版本号已存在，请使用新版本号")
+
 type DesktopUpdateStorageConfig struct {
 	Backend       string                `json:"backend"`
 	LocalDir      string                `json:"local_dir"`
@@ -263,6 +265,9 @@ func (s *DesktopUpdateService) CreateFromFiles(ctx context.Context, input Deskto
 	if installerPath != "" && input.Platform == "darwin" && !strings.HasSuffix(strings.ToLower(input.InstallerFilename), ".dmg") {
 		return nil, infraerrors.BadRequest("DESKTOP_UPDATE_INSTALLER_INVALID", "macOS 首次安装包必须是 .dmg")
 	}
+	if err := s.ensureReleaseAvailable(ctx, input); err != nil {
+		return nil, err
+	}
 	sha256Hex, sha512Base64, err := hashFile(filePath)
 	if err != nil {
 		return nil, err
@@ -273,10 +278,14 @@ func (s *DesktopUpdateService) CreateFromFiles(ctx context.Context, input Deskto
 	}
 	id := uuid.New()
 	filename := filepath.Base(strings.ReplaceAll(input.Filename, "\\", "/"))
-	storageKey := path.Join(strings.Trim(cfg.R2.Prefix, "/"), input.Version, input.Platform, input.Arch, filename)
-	if cfg.Backend == "local" {
-		storageKey = path.Join(input.Version, input.Platform, input.Arch, filename)
+	// Each attempt owns its objects. Concurrent uploads or retries can still
+	// lose the database uniqueness race after the availability check; their
+	// cleanup must never overwrite or delete a previously successful release.
+	releaseKey := path.Join(input.Version, input.Platform, input.Arch, id.String())
+	if cfg.Backend == "r2" {
+		releaseKey = path.Join(strings.Trim(cfg.R2.Prefix, "/"), releaseKey)
 	}
+	storageKey := path.Join(releaseKey, filename)
 	metadataKey := storageKey + ".yml"
 	if err := s.storePackage(ctx, cfg, storageKey, filePath); err != nil {
 		return nil, err
@@ -298,10 +307,7 @@ func (s *DesktopUpdateService) CreateFromFiles(ctx context.Context, input Deskto
 			_ = s.deleteObject(ctx, cfg, storageKey)
 			return nil, err
 		}
-		installerStorageKey = path.Join(strings.Trim(cfg.R2.Prefix, "/"), input.Version, input.Platform, input.Arch, "installer", installerFilename)
-		if cfg.Backend == "local" {
-			installerStorageKey = path.Join(input.Version, input.Platform, input.Arch, "installer", installerFilename)
-		}
+		installerStorageKey = path.Join(releaseKey, "installer", installerFilename)
 		if err := s.storePackage(ctx, cfg, installerStorageKey, installerPath); err != nil {
 			_ = s.deleteObject(ctx, cfg, storageKey)
 			return nil, err
@@ -330,6 +336,10 @@ func (s *DesktopUpdateService) CreateFromFiles(ctx context.Context, input Deskto
 		if installerStorageKey != storageKey {
 			_ = s.deleteObject(ctx, cfg, installerStorageKey)
 		}
+		var sqlError interface{ SQLState() string }
+		if errors.As(err, &sqlError) && sqlError.SQLState() == "23505" {
+			return nil, ErrDesktopReleaseExists
+		}
 		return nil, err
 	}
 	item, err := s.getByID(ctx, id.String())
@@ -346,6 +356,19 @@ func (s *DesktopUpdateService) CreateFromFiles(ctx context.Context, input Deskto
 		return nil, err
 	}
 	return item, nil
+}
+
+func (s *DesktopUpdateService) ensureReleaseAvailable(ctx context.Context, input DesktopReleaseInput) error {
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM yingzo_desktop_releases WHERE version=$1 AND platform=$2 AND arch=$3)`,
+		strings.TrimPrefix(strings.TrimSpace(input.Version), "v"), strings.TrimSpace(input.Platform), strings.TrimSpace(input.Arch)).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return ErrDesktopReleaseExists
+	}
+	return nil
 }
 
 func (s *DesktopUpdateService) Publish(ctx context.Context, id string, actorID int64) (*DesktopRelease, error) {
