@@ -361,7 +361,7 @@ func TestResolveVideoReferenceMaterialsProbesPublicVideoWithoutRehosting(t *test
 	metadata, err := probeTrustedMedia(context.Background(), "../pkg/mediaprobe/testdata/reference.mp4", mediaPolicies["video/mp4"], "video/mp4")
 	require.NoError(t, err)
 	for _, item := range []map[string]any{first, second} {
-		require.Equal(t, rawURL, item["video_url"].(map[string]any)["url"])
+		require.Equal(t, map[string]any{"url": rawURL}, item["video_url"])
 		require.Equal(t, metadata.DurationSeconds, item["duration_seconds"])
 	}
 	files, err := filepath.Glob(filepath.Join(tempDir, "yingzo-reference-video-*"))
