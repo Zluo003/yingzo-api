@@ -406,7 +406,7 @@ func (s *VideoService) estimateGenerationCost(
 	return normalized, rule, estimate, nil
 }
 
-func (s *VideoService) GetTask(ctx context.Context, publicID string, apiKey *APIKey) (*VideoResponse, error) {
+func (s *VideoService) GetTask(ctx context.Context, publicID string, apiKey *APIKey, refreshURL ...bool) (*VideoResponse, error) {
 	publicID = strings.TrimSpace(publicID)
 	if publicID == "" || apiKey == nil {
 		return nil, ErrVideoTaskNotFound
@@ -419,6 +419,20 @@ func (s *VideoService) GetTask(ctx context.Context, publicID string, apiKey *API
 		return nil, ErrVideoTaskNotFound
 	}
 	response := videoResponseFromTask(task)
+	if task.Status == VideoTaskStatusCompleted && stringFromMap(task.UpstreamResponseJSON, videoResultDeliveryMetadataKey) == "direct" {
+		if len(refreshURL) > 0 && refreshURL[0] && task.UpstreamTaskID != nil && s.accountRepo != nil {
+			account, accountErr := s.accountRepo.GetByID(ctx, task.AccountID)
+			if accountErr == nil && account != nil {
+				// Query the same result only. Refresh failures preserve the known URL
+				// and completed state; they cannot regenerate or refund the video.
+				if result, pollErr := s.pollUpstreamTask(ctx, account, *task.UpstreamTaskID); pollErr == nil && result.DirectURL != "" {
+					response.VideoURL = &result.DirectURL
+					_, _ = s.taskRepo.UpdateByPublicID(ctx, publicID, VideoTaskUpdate{ResultVideoURL: &result.DirectURL})
+				}
+			}
+		}
+		return response, nil
+	}
 	if response.VideoURL != nil {
 		if refresher, ok := s.videoResultPublisher.(interface {
 			RefreshGeneratedURL(context.Context, TemporaryAssetOwner, string) (string, error)
@@ -611,6 +625,11 @@ func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, u
 		// endpoint（.../v1/videos），任务 id 由适配器自己拼，避免拼成
 		// /v1/videos/{id}/{id}/content。
 		result.VideoURL = videoAbsoluteResultURL(baseEndpoint, videoResultURLForAccount(account, baseEndpoint, upstreamTaskID, payload))
+		result.DirectURL = videoDirectResultURL(baseEndpoint, upstreamTaskID, payload)
+		result.Payload = payload
+		if result.VideoURL == "" {
+			result.VideoURL = result.DirectURL
+		}
 		if result.VideoURL == "" {
 			return nil, &videoUpstreamError{StatusCode: resp.StatusCode, Body: respBody, Err: errors.New("missing video result URL")}
 		}
@@ -846,7 +865,17 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 				// Generation has finished. Its polling deadline must not cancel the
 				// transfer, and publication retries must not poll or regenerate it.
 				cancel()
-				publishedURL, publishErr := s.publishCompletedVideoResult(input, result.VideoURL)
+				publishedURL := result.DirectURL
+				delivery := videoResultDelivery(input.Account)
+				var publishErr error
+				if delivery != "direct" || publishedURL == "" {
+					if delivery == "direct" {
+						slog.Warn("video direct URL unavailable; using configured storage", "task_id", input.PublicID)
+						delivery = "default"
+					}
+					publishedURL, publishErr = s.publishCompletedVideoResult(input, result.VideoURL)
+				}
+				result.Payload[videoResultDeliveryMetadataKey] = delivery
 				if publishErr != nil {
 					slog.Warn("video result publication failed", "task_id", input.PublicID, "error", publishErr)
 					clientErr := videoClientError("video_result_publication_failed", "视频产物保存失败，请稍后重试")
@@ -860,9 +889,10 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 				}
 				now := time.Now().UTC()
 				task, updateErr := s.taskRepo.UpdateByPublicID(context.Background(), input.PublicID, VideoTaskUpdate{
-					Status:         &result.Status,
-					ResultVideoURL: &publishedURL,
-					CompletedAt:    &now,
+					Status:               &result.Status,
+					ResultVideoURL:       &publishedURL,
+					UpstreamResponseJSON: result.Payload,
+					CompletedAt:          &now,
 				})
 				if updateErr == nil {
 					_ = s.recordCompletedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
@@ -953,7 +983,15 @@ func (s *VideoService) publishVideoResult(ctx context.Context, input VideoTaskLi
 	upstreamModel := stringFromMap(input.UpstreamBody, "model")
 	var publishedURL string
 	var err error
-	if authorization := videoProviderAdapterForAccount(input.Account).ResultAuthorization(input.Account, upstreamModel); authorization != "" {
+	authorization := videoProviderAdapterForAccount(input.Account).ResultAuthorization(input.Account, upstreamModel)
+	mode := videoResultDelivery(input.Account)
+	if mode == "local" || mode == "s3" {
+		publisher, ok := s.videoResultPublisher.(videoBackendPublisher)
+		if !ok {
+			return "", errors.New("video result publisher does not support backend selection")
+		}
+		publishedURL, err = publisher.PublishGeneratedVideoToBackend(ctx, owner, input.ResultPublicBaseURL, upstreamURL, authorization, mode)
+	} else if authorization != "" {
 		authenticated, ok := s.videoResultPublisher.(AuthenticatedVideoResultPublisher)
 		if !ok {
 			return "", errors.New("video result publisher does not support authenticated downloads")
@@ -1705,9 +1743,11 @@ type videoUpstreamCreateResult struct {
 }
 
 type videoPollResult struct {
-	Status   string
-	VideoURL string
-	Failure  *videoUpstreamError
+	Status    string
+	VideoURL  string
+	DirectURL string
+	Payload   map[string]any
+	Failure   *videoUpstreamError
 }
 
 type videoUpstreamError struct {

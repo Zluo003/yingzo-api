@@ -413,6 +413,9 @@ func NormalizeVideoProviderExtra(platform string, extra map[string]any) (map[str
 	if normalized == nil {
 		normalized = make(map[string]any, 2)
 	}
+	if err := normalizeVideoResultDelivery(normalized); err != nil {
+		return nil, err
+	}
 	if err := normalizeVideoModelResolutionsExtra(normalized); err != nil {
 		return nil, err
 	}
@@ -1248,6 +1251,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 // UpdateAccountExtra 仅对 Extra JSONB 做 key 级合并，避免覆盖其它运行态键
 // （如 model_rate_limits / passive_usage_* 等）。
 func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, updates map[string]any) error {
+	if err := normalizeVideoResultDelivery(updates); err != nil {
+		return err
+	}
 	if _, changesProvider := updates["music_provider"]; changesProvider {
 		return infraerrors.BadRequest("INVALID_SUNO_ACCOUNT", "Use the dedicated Suno panel to configure a music provider")
 	}

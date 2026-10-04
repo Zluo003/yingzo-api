@@ -1564,6 +1564,15 @@
           />
           <p class="input-hint">{{ t('admin.accounts.video.apiPathHint') }}</p>
         </div>
+        <div v-if="form.platform === 'video'">
+          <label class="input-label">{{ t('admin.accounts.video.resultDelivery') }}</label>
+          <select v-model="videoResultDelivery" class="input" data-testid="video-result-delivery">
+            <option v-for="mode in ['default', 'direct', 'local', 's3']" :key="mode" :value="mode">
+              {{ t(`admin.accounts.video.resultDeliveryOptions.${mode}`) }}
+            </option>
+          </select>
+          <p class="input-hint">{{ t('admin.accounts.video.resultDeliveryHint') }}</p>
+        </div>
         <div v-if="form.platform === 'video'" class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <label class="input-label">{{ t('admin.accounts.video.pollIntervalMs') }}</label>
@@ -4495,6 +4504,7 @@ type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang'
 const videoProvider = ref<VideoProvider>('aigod')
 const videoAPIPath = ref('/v1/videos')
 const videoPollIntervalMs = ref(2000)
+const videoResultDelivery = ref('default')
 const videoPollTimeoutMs = ref(300000)
 const videoRequestTimeoutMs = ref(60000)
 const videoConnectTimeoutMs = ref(15000)
@@ -5784,6 +5794,7 @@ const resetForm = () => {
   videoProvider.value = 'aigod'
   videoAPIPath.value = videoProviderDefaultsMap.aigod.apiPath
   videoPollIntervalMs.value = videoProviderDefaultsMap.aigod.pollIntervalMs
+  videoResultDelivery.value = 'default'
   videoPollTimeoutMs.value = videoProviderDefaultsMap.aigod.pollTimeoutMs
   videoRequestTimeoutMs.value = videoProviderDefaultsMap.aigod.requestTimeoutMs
   videoConnectTimeoutMs.value = videoProviderDefaultsMap.aigod.connectTimeoutMs
@@ -6360,6 +6371,7 @@ const handleSubmit = async () => {
   const extra = form.platform === 'video'
     ? {
         video_provider: videoProvider.value,
+        video_result_delivery: videoResultDelivery.value,
         base_url: apiKeyBaseUrl.value.trim() || defaultBaseUrl,
         api_path: resolvedVideoAPIPath.value,
         poll_interval_ms: Number(videoPollIntervalMs.value) || videoProviderDefaults.value.pollIntervalMs,

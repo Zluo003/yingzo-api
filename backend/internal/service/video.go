@@ -406,13 +406,14 @@ type VideoTaskCreateInput struct {
 }
 
 type VideoTaskUpdate struct {
-	Status         *string
-	UpstreamTaskID *string
-	ErrorJSON      map[string]any
-	ResultVideoURL *string
-	CompletedAt    *time.Time
-	BilledAt       *time.Time
-	RefundedAt     *time.Time
+	UpstreamResponseJSON map[string]any
+	Status               *string
+	UpstreamTaskID       *string
+	ErrorJSON            map[string]any
+	ResultVideoURL       *string
+	CompletedAt          *time.Time
+	BilledAt             *time.Time
+	RefundedAt           *time.Time
 	// 媒体故障转移切换上游时修正任务归属。
 	AccountID     *int64
 	UpstreamModel *string

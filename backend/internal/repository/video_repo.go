@@ -112,6 +112,9 @@ func (r *videoTaskRepository) MarkProcessingByPublicID(ctx context.Context, publ
 }
 
 func applyVideoTaskUpdate(builder *dbent.VideoTaskUpdate, update service.VideoTaskUpdate) {
+	if update.UpstreamResponseJSON != nil {
+		builder.SetUpstreamResponseJSON(normalizeJSONMap(update.UpstreamResponseJSON))
+	}
 	if update.Status != nil {
 		builder.SetStatus(*update.Status)
 	}

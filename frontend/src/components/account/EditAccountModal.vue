@@ -170,6 +170,15 @@
           />
           <p class="input-hint">{{ t('admin.accounts.video.apiPathHint') }}</p>
         </div>
+        <div v-if="account.platform === 'video'">
+          <label class="input-label">{{ t('admin.accounts.video.resultDelivery') }}</label>
+          <select v-model="editVideoResultDelivery" class="input" data-testid="video-result-delivery">
+            <option v-for="mode in ['default', 'direct', 'local', 's3']" :key="mode" :value="mode">
+              {{ t(`admin.accounts.video.resultDeliveryOptions.${mode}`) }}
+            </option>
+          </select>
+          <p class="input-hint">{{ t('admin.accounts.video.resultDeliveryHint') }}</p>
+        </div>
         <div v-if="account.platform === 'video'" class="grid grid-cols-1 gap-3 md:grid-cols-2">
           <div>
             <label class="input-label">{{ t('admin.accounts.video.pollIntervalMs') }}</label>
@@ -3272,6 +3281,7 @@ const editVideoProvider = ref<VideoProvider>('aigod')
 const editVideoUpstreamModels = ref<Record<string, string>>({})
 const editVideoAPIPath = ref('/v1/videos')
 const editVideoPollIntervalMs = ref(2000)
+const editVideoResultDelivery = ref('default')
 const editVideoPollTimeoutMs = ref(300000)
 const editVideoRequestTimeoutMs = ref(60000)
 const editVideoConnectTimeoutMs = ref(15000)
@@ -4435,6 +4445,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     if (newAccount.platform === 'video') {
       editVideoAPIPath.value = (extra?.api_path as string) || editVideoProviderDefaults.value.apiPath
       editVideoPollIntervalMs.value = Number(extra?.poll_interval_ms ?? editVideoProviderDefaults.value.pollIntervalMs)
+      editVideoResultDelivery.value = String(extra?.video_result_delivery ?? 'default')
       editVideoPollTimeoutMs.value = Number(extra?.poll_timeout_ms ?? editVideoProviderDefaults.value.pollTimeoutMs)
       editVideoRequestTimeoutMs.value = Number(extra?.request_timeout_ms ?? editVideoProviderDefaults.value.requestTimeoutMs)
       editVideoConnectTimeoutMs.value = Number(extra?.connect_timeout_ms ?? editVideoProviderDefaults.value.connectTimeoutMs)
@@ -5307,6 +5318,7 @@ const handleSubmit = async () => {
         const nextExtra: Record<string, unknown> = {
           ...currentExtra,
           video_provider: editVideoProvider.value,
+          video_result_delivery: editVideoResultDelivery.value,
           base_url: newBaseUrl || editVideoProviderDefaults.value.baseUrl,
           api_path: resolvedEditVideoAPIPath.value,
           poll_interval_ms: Number(editVideoPollIntervalMs.value) || editVideoProviderDefaults.value.pollIntervalMs,

@@ -323,3 +323,12 @@ describe('CreateAccountModal video mode', () => {
     expect((wrapper.get('[data-testid="video-upstream-model-seedance-2.0"]').element as HTMLInputElement).value).toBe('')
   })
 })
+
+it.each(['default', 'direct', 'local', 's3'])('saves video delivery mode %s', async (mode) => {
+  const wrapper = await mountVideoModal()
+  expect(wrapper.get('[data-testid="video-result-delivery"]').element).toHaveProperty('value', 'default')
+  await wrapper.get('[data-testid="video-result-delivery"]').setValue(mode)
+  const payload = await submitVideoAccount(wrapper)
+  expect(payload.extra.video_result_delivery).toBe(mode)
+  wrapper.unmount()
+})

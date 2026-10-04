@@ -342,3 +342,14 @@ describe('EditAccountModal video resolutions', () => {
     expect(durationChip(wrapper, 'seedance-2.0-fast', 8).attributes('disabled')).toBeUndefined()
   })
 })
+
+it('loads and updates delivery without losing other account settings', async () => {
+  const wrapper = mountModal(buildVideoAccount({ video_result_delivery: 'direct', custom_setting: 'keep' }))
+  await flushPromises()
+  expect(wrapper.get('[data-testid="video-result-delivery"]').element).toHaveProperty('value', 'direct')
+  await wrapper.get('[data-testid="video-result-delivery"]').setValue('s3')
+  const payload = await submitEdit(wrapper)
+  expect(payload.extra.video_result_delivery).toBe('s3')
+  expect(payload.extra.custom_setting).toBe('keep')
+  wrapper.unmount()
+})

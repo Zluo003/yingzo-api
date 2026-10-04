@@ -431,7 +431,7 @@ func (h *VideoHandler) getOwnedTask(c *gin.Context) *service.VideoResponse {
 	setOpsRequestContext(c, "", false)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeVideo))
 
-	resp, err := h.videoService.GetTask(c.Request.Context(), videoPublicIDParam(c), apiKey)
+	resp, err := h.videoService.GetTask(c.Request.Context(), videoPublicIDParam(c), apiKey, c.Query("refresh_url") == "true")
 	if err != nil {
 		h.errorFrom(c, err)
 		return nil
