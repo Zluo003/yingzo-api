@@ -306,8 +306,8 @@ func TestResolveVideoReferenceMaterialsPreservesPublicImagesAndAudio(t *testing.
 	require.NoError(t, err)
 	require.False(t, changed)
 	require.Nil(t, resolved)
-	require.Equal(t, imageURL, image["image_url"].(map[string]any)["url"])
-	require.Equal(t, audioURL, audio["audio_url"].(map[string]any)["url"])
+	require.Equal(t, map[string]any{"url": imageURL}, image["image_url"])
+	require.Equal(t, map[string]any{"url": audioURL}, audio["audio_url"])
 	require.Equal(t, "person", image["subject_type"])
 	require.Zero(t, downloader.calls)
 	files, err := os.ReadDir(handler.agentHandler.dataDir)
@@ -321,7 +321,7 @@ func TestResolveVideoReferenceMaterialsPreservesPublicImagesAndAudio(t *testing.
 	require.True(t, changed)
 	require.NotContains(t, image, "duration_seconds")
 	require.NotContains(t, audio, "duration_seconds")
-	require.Equal(t, imageURL, image["image_url"].(map[string]any)["url"])
+	require.Equal(t, map[string]any{"url": imageURL}, image["image_url"])
 	require.Zero(t, downloader.calls)
 }
 
