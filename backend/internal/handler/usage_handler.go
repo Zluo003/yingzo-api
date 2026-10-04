@@ -153,6 +153,14 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 		return nil, false
 	}
 
+	usageType := strings.TrimSpace(c.Query("usage_type"))
+	switch usageType {
+	case "", "text", "image", "video":
+	default:
+		response.BadRequest(c, "Invalid usage_type, use text, image or video")
+		return nil, false
+	}
+
 	userTZ := c.Query("timezone")
 	now := timezone.NowInUserLocation(userTZ)
 	var startTime, endTime time.Time
@@ -218,6 +226,11 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 		}
 	}
 
+	if startPtr != nil && endPtr != nil && !startTime.Before(endTime) {
+		response.BadRequest(c, "start_date must not be later than end_date")
+		return nil, false
+	}
+
 	return &userUsageFilters{
 		Filters: usagestats.UsageLogFilters{
 			UserID:             subject.UserID,
@@ -230,6 +243,7 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 			NativeCompactionV2: nativeCompactionV2,
 			BillingType:        billingType,
 			BillingMode:        billingMode,
+			UsageType:          usageType,
 			StartTime:          startPtr,
 			EndTime:            endPtr,
 		},

@@ -13,7 +13,7 @@ function duration(value) {
   return seconds < 1 ? `${Math.round(Number(value))} ms` : seconds < 60 ? `${seconds.toFixed(1)} 秒` : `${Math.floor(seconds / 60)} 分 ${Math.round(seconds % 60)} 秒`
 }
 
-export default function UsageRecords({ rows }) {
+export default function UsageRecords({ rows, emptyMessage = '暂无使用记录' }) {
   const [selected, setSelected] = useState(null)
   const dialog = useRef(null)
   useEffect(() => {
@@ -35,7 +35,7 @@ export default function UsageRecords({ rows }) {
             <span>{`¥${Number(row.actual_cost ?? row.total_cost ?? row.cost ?? 0).toFixed(5)}`}</span>
             <span className="usage-error-cell">{error && <button className="usage-error-code" aria-label={`查看${error.code || ''}错误详情`} onClick={() => setSelected({ row, error })}>{error.code || '详情'}</button>}</span>
           </div>
-        }) : <div className="empty">暂无使用记录</div>}
+        }) : <div className="empty">{emptyMessage}</div>}
       </div>
     </div>
     <dialog ref={dialog} className="modal-card usage-error-dialog" aria-labelledby="usage-error-title" onClose={() => setSelected(null)} onClick={event => { if (event.target === event.currentTarget) dialog.current.close() }}>

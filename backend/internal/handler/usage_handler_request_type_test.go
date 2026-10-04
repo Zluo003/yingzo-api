@@ -21,6 +21,7 @@ type userUsageRepoCapture struct {
 	listFilters     usagestats.UsageLogFilters
 	statsFilters    usagestats.UsageLogFilters
 	trendFilters    usagestats.UsageLogFilters
+	modelFilters    usagestats.UsageLogFilters
 	groupFilters    usagestats.UsageLogFilters
 	listRows        []service.UsageLog
 	stats           *usagestats.UsageStats
@@ -68,6 +69,17 @@ func (s *userUsageRepoCapture) GetModelStatsWithFilters(ctx context.Context, sta
 	return s.modelStats, nil
 }
 
+func (s *userUsageRepoCapture) GetUsageTrendWithUsageFilters(ctx context.Context, startTime, endTime time.Time, granularity string, filters usagestats.UsageLogFilters) ([]usagestats.TrendDataPoint, error) {
+	s.trendFilters = filters
+	return []usagestats.TrendDataPoint{}, nil
+}
+
+func (s *userUsageRepoCapture) GetModelStatsWithUsageFiltersBySource(ctx context.Context, startTime, endTime time.Time, filters usagestats.UsageLogFilters, source string) ([]usagestats.ModelStat, error) {
+	s.modelStatsStart, s.modelStatsEnd = startTime, endTime
+	s.modelFilters = filters
+	return s.modelStats, nil
+}
+
 // modelStatsWindow 返回模型统计查询捕获的时间窗口（未传时间时为零值）。
 func (s *userUsageRepoCapture) modelStatsWindow() (time.Time, time.Time) {
 	return s.modelStatsStart, s.modelStatsEnd
@@ -103,6 +115,7 @@ func newUserUsageRequestTypeTestRouter(repo *userUsageRepoCapture) *gin.Engine {
 	router.GET("/usage", handler.List)
 	router.GET("/usage/stats", handler.Stats)
 	router.GET("/usage/dashboard/models", handler.DashboardModels)
+	router.GET("/usage/dashboard/trend", handler.DashboardTrend)
 	router.GET("/usage/dashboard/snapshot-v2", handler.DashboardSnapshotV2)
 	return router
 }

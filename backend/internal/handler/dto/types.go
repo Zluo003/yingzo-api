@@ -663,6 +663,7 @@ type UsageLog struct {
 	ImageSizeSource    *string        `json:"image_size_source"`
 	ImageSizeBreakdown map[string]int `json:"image_size_breakdown"`
 	MediaType          *string        `json:"media_type"`
+	VideoCount         int            `json:"video_count"`
 
 	// User-Agent
 	UserAgent *string `json:"user_agent"`

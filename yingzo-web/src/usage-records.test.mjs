@@ -1,6 +1,30 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { usageType, isRefund, refundError } from './usage-records.js'
+import { usageType, isRefund, refundError, EMPTY_USAGE_FILTERS, defaultUsageFilters, usageFilterQuery, usageRecordsQuery, trendBarPercent } from './usage-records.js'
+
+test('charts and history share the same filters and default to the current month', () => {
+  const filters = defaultUsageFilters(new Date(2026, 9, 4, 12))
+  assert.deepEqual(filters, { startDate: '2026-10-01', endDate: '2026-10-04', model: '', type: '' })
+  const history = new URLSearchParams(usageRecordsQuery({ page: 2, pageSize: 20, filters }, 'Asia/Shanghai'))
+  history.delete('page')
+  history.delete('page_size')
+  assert.equal(history.toString(), usageFilterQuery(filters, 'Asia/Shanghai'))
+})
+
+test('usage filters preserve date boundaries, media type, model names and pagination', () => {
+  const query = new URLSearchParams(usageRecordsQuery({ page: 3, pageSize: 50, filters: { startDate: '2026-10-01', endDate: '2026-10-03', model: '  vendor/model + preview  ', type: 'image' } }, 'Asia/Shanghai'))
+  assert.deepEqual(Object.fromEntries(query), { page: '3', page_size: '50', start_date: '2026-10-01', end_date: '2026-10-03', model: 'vendor/model + preview', usage_type: 'image', timezone: 'Asia/Shanghai' })
+  assert.deepEqual(Object.fromEntries(new URLSearchParams(usageRecordsQuery({ page: 1, pageSize: 20, filters: EMPTY_USAGE_FILTERS }, 'Asia/Shanghai'))), { page: '1', page_size: '20', timezone: 'Asia/Shanghai' })
+})
+
+test('trend heights retain the ratio between costs, including small and zero values', () => {
+  assert.equal(trendBarPercent(17.1, 17.1), 100)
+  assert.equal(trendBarPercent(8.55, 17.1), 50)
+  assert.ok(Math.abs(trendBarPercent(0.6043, 17.1) - 3.5339181286549706) < 0.000001)
+  assert.equal(trendBarPercent(0.001, 10), 0.01)
+  for (const value of [0, -1, NaN, Infinity, 'invalid']) assert.equal(trendBarPercent(value, 10), 0)
+  assert.equal(trendBarPercent(0, 0), 0)
+})
 
 test('image media overrides sync/stream transport, including zero-output refunds', () => {
   for (const row of [

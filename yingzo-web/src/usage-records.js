@@ -1,3 +1,29 @@
+export const EMPTY_USAGE_FILTERS = { startDate: '', endDate: '', model: '', type: '' }
+
+export function defaultUsageFilters(now = new Date()) {
+  const yearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  return { ...EMPTY_USAGE_FILTERS, startDate: `${yearMonth}-01`, endDate: `${yearMonth}-${String(now.getDate()).padStart(2, '0')}` }
+}
+
+export function usageFilterQuery(filters, timezone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+  const query = new URLSearchParams()
+  for (const [key, value] of Object.entries({ start_date: filters.startDate, end_date: filters.endDate, model: filters.model.trim(), usage_type: filters.type, timezone })) {
+    if (value) query.set(key, value)
+  }
+  return query.toString()
+}
+
+export function usageRecordsQuery({ page, pageSize, filters }, timezone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
+  const query = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+  for (const [key, value] of new URLSearchParams(usageFilterQuery(filters, timezone))) query.set(key, value)
+  return query.toString()
+}
+
+export function trendBarPercent(value, maximum) {
+  const cost = Number(value)
+  return Number.isFinite(cost) && Number.isFinite(maximum) && maximum > 0 ? Math.max(0, Math.min(100, cost / maximum * 100)) : 0
+}
+
 // request_type describes transport (sync/stream), not the generated media.
 export function usageType(row) {
   if (row.video_task_id || row.billing_mode === 'video_duration' || row.media_type === 'video' || row.request_type === 'video' || Number(row.video_count) > 0 || row.request_id?.startsWith('video:')) return '视频'
