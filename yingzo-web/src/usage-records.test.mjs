@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { usageType, isRefund, refundError, EMPTY_USAGE_FILTERS, defaultUsageFilters, usageFilterQuery, usageRecordsQuery, trendBarPercent } from './usage-records.js'
+import { availableTaskOutputs, usageType, isRefund, refundError, EMPTY_USAGE_FILTERS, defaultUsageFilters, usageFilterQuery, usageRecordsQuery, trendBarPercent } from './usage-records.js'
 
 test('charts and history share the same filters and default to the current month', () => {
   const filters = defaultUsageFilters(new Date(2026, 9, 4, 12))
@@ -40,6 +40,27 @@ test('image media overrides sync/stream transport, including zero-output refunds
 test('video billing and historical refund IDs override transport', () => {
   assert.equal(usageType({ request_type: 'sync', billing_mode: 'video_duration' }), '视频')
   assert.equal(usageType({ request_id: 'video:video_1:refund' }), '视频')
+})
+
+test('async music records are audio, including refunds and records without outputs', () => {
+  assert.equal(usageType({ music_task_id: 'music_1' }), '音频')
+  assert.equal(usageType({ request_id: 'music:music_1:failure_refund' }), '音频')
+})
+
+test('output visibility follows per-file expiry, refunds and safe preview links', () => {
+  const now = Date.parse('2026-10-05T12:00:00Z')
+  const output = { url: 'https://example.test/media/image/asset.png', media_type: 'image', expires_at: '2026-10-05T12:00:01Z' }
+  const audio = { ...output, url: 'https://example.test/media/audio/asset.mp3', media_type: 'audio', expires_at: '2026-10-05T12:00:02Z' }
+  const row = { task_outputs: [output, audio] }
+  assert.deepEqual(availableTaskOutputs(row, now), [output, audio])
+  assert.deepEqual(availableTaskOutputs(row, now + 1000), [audio])
+  assert.deepEqual(availableTaskOutputs(row, now + 2000), [])
+  for (const funds_event of ['failure_refund', 'settlement_refund']) assert.deepEqual(availableTaskOutputs({ ...row, funds_event }, now), [])
+  for (const url of ['javascript:alert(1)', 'data:image/png;base64,a', '//example.test/a', 'https://user:secret@example.test/a']) {
+    assert.deepEqual(availableTaskOutputs({ task_outputs: [{ ...output, url }] }, now), [])
+  }
+  for (const expires_at of [undefined, '', 'invalid']) assert.deepEqual(availableTaskOutputs({ task_outputs: [{ ...output, expires_at }] }, now), [])
+  assert.deepEqual(availableTaskOutputs({}), [])
 })
 
 test('only refund rows show a refund and failure detail; settlement refunds are not failures', () => {

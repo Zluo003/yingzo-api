@@ -688,6 +688,7 @@ func usageLogFromServiceUser(l *service.UsageLog) UsageLog {
 		requestedModel = l.Model
 	}
 	return UsageLog{
+		TaskOutputs:               l.TaskOutputs,
 		TaskError:                 l.TaskError,
 		ID:                        l.ID,
 		UserID:                    l.UserID,

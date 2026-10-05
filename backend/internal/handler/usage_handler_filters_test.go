@@ -10,7 +10,7 @@ import (
 )
 
 func TestUserUsageListCombinedMediaFilters(t *testing.T) {
-	for _, media := range []string{"text", "image", "video"} {
+	for _, media := range []string{"text", "image", "audio", "video"} {
 		t.Run(media, func(t *testing.T) {
 			repo := &userUsageRepoCapture{}
 			router := newUserUsageRequestTypeTestRouter(repo)

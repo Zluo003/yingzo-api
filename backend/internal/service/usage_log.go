@@ -107,6 +107,7 @@ func ApplyLegacyRequestFields(requestType RequestType, fallbackStream bool, fall
 }
 
 type UsageLog struct {
+	TaskOutputs     []UsageTaskOutput
 	MusicTaskID     *string
 	MusicTaskStatus *string
 	MusicMode       *string

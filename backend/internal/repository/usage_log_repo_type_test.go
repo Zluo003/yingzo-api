@@ -13,7 +13,7 @@ import (
 )
 
 func TestUsageLogListMediaFiltersCountAndPagination(t *testing.T) {
-	for _, media := range []string{"text", "image", "video"} {
+	for _, media := range []string{"text", "image", "audio", "video"} {
 		t.Run(media, func(t *testing.T) {
 			db, mock := newSQLMock(t)
 			repo := &usageLogRepository{sql: db}

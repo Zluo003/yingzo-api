@@ -155,9 +155,9 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 
 	usageType := strings.TrimSpace(c.Query("usage_type"))
 	switch usageType {
-	case "", "text", "image", "video":
+	case "", "text", "image", "audio", "video":
 	default:
-		response.BadRequest(c, "Invalid usage_type, use text, image or video")
+		response.BadRequest(c, "Invalid usage_type, use text, image, audio or video")
 		return nil, false
 	}
 
@@ -281,6 +281,10 @@ func (h *UsageHandler) List(c *gin.Context) {
 		return
 	}
 
+	if err := h.usageService.LoadTaskOutputs(c.Request.Context(), parsed.Filters.UserID, records); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
 	out := make([]dto.UsageLog, 0, len(records))
 	for i := range records {
 		out = append(out, *dto.UsageLogFromService(&records[i]))
@@ -429,7 +433,12 @@ func (h *UsageHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	response.Success(c, dto.UsageLogFromService(record))
+	records := []service.UsageLog{*record}
+	if err := h.usageService.LoadTaskOutputs(c.Request.Context(), subject.UserID, records); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, dto.UsageLogFromService(&records[0]))
 }
 
 // Stats handles getting usage statistics

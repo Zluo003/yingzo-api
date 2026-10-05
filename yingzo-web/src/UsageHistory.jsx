@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { request } from './lib.js'
 import UsageRecords from './UsageRecords.jsx'
 import { usageRecordsQuery } from './usage-records.js'
@@ -8,12 +8,19 @@ export default function UsageHistory({ query, setQuery }) {
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const onOutputsChange = useCallback((id, outputs) => {
+    setRows(current => current.map(row => row.id === id ? { ...row, task_outputs: outputs } : row))
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
     setLoading(true)
     setError('')
-    request(`/usage?${usageRecordsQuery(query)}`, { signal: controller.signal })
+    let inFlight = false
+    function load(background = false) {
+      if (inFlight) return
+      inFlight = true
+      request(`/usage?${usageRecordsQuery(query)}`, { signal: controller.signal })
       .then(data => {
         if (controller.signal.aborted) return
         const items = Array.isArray(data) ? data : data?.items || []
@@ -25,10 +32,17 @@ export default function UsageHistory({ query, setQuery }) {
         }
         setRows(items)
         setTotal(count)
+        setError('')
       })
-      .catch(err => { if (!controller.signal.aborted) { setRows([]); setTotal(0); setError(err.message || '请稍后重试') } })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
-    return () => controller.abort()
+      .catch(err => { if (!controller.signal.aborted && !background) { setRows([]); setTotal(0); setError(err.message || '请稍后重试') } })
+      .finally(() => { inFlight = false; if (!controller.signal.aborted) setLoading(false) })
+    }
+    load()
+    const refresh = () => { if (document.visibilityState === 'visible') load(true) }
+    const timer = setInterval(refresh, 30000)
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => { controller.abort(); clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
   }, [query])
 
   const pages = Math.max(1, Math.ceil(total / query.pageSize))
@@ -36,7 +50,7 @@ export default function UsageHistory({ query, setQuery }) {
 
   return <section className="panel usage-history" aria-label="使用记录明细">
     <div aria-busy={loading}>
-      {loading ? <div className="empty" role="status">正在加载使用记录…</div> : error ? <div className="usage-load-error" role="alert"><p>使用记录加载失败：{error}</p><button className="outline" onClick={() => setQuery(current => ({ ...current }))}>重试</button></div> : <UsageRecords rows={rows} emptyMessage={filtered ? '没有符合筛选条件的使用记录' : '暂无使用记录'} />}
+      {loading ? <div className="empty" role="status">正在加载使用记录…</div> : error ? <div className="usage-load-error" role="alert"><p>使用记录加载失败：{error}</p><button className="outline" onClick={() => setQuery(current => ({ ...current }))}>重试</button></div> : <UsageRecords rows={rows} onOutputsChange={onOutputsChange} emptyMessage={filtered ? '没有符合筛选条件的使用记录' : '暂无使用记录'} />}
     </div>
     <div className="usage-foot">
       <span aria-live="polite">{loading ? '正在查询…' : error ? '未能加载记录' : `${filtered ? '筛选结果 · ' : ''}共 ${total} 条记录`}</span>

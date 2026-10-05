@@ -26,9 +26,21 @@ export function trendBarPercent(value, maximum) {
 
 // request_type describes transport (sync/stream), not the generated media.
 export function usageType(row) {
+  if (row.music_task_id || row.media_type === 'audio' || row.request_id?.startsWith('music:')) return '音频'
   if (row.video_task_id || row.billing_mode === 'video_duration' || row.media_type === 'video' || row.request_type === 'video' || Number(row.video_count) > 0 || row.request_id?.startsWith('video:')) return '视频'
   if (row.image_task_id || row.billing_mode === 'image' || row.media_type === 'image' || Number(row.image_count) > 0 || Number(row.image_output_tokens) > 0 || Number(row.image_output_cost) > 0 || row.request_id?.startsWith('image:')) return '图片'
   return '文本'
+}
+
+export function availableTaskOutputs(row, now = Date.now()) {
+  if (!row || isRefund(row) || !Array.isArray(row.task_outputs)) return []
+  return row.task_outputs.filter(output => {
+    if (!['image', 'audio', 'video'].includes(output.media_type) || !(Date.parse(output.expires_at) > now)) return false
+    try {
+      const url = new URL(output.url)
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+    } catch { return false }
+  })
 }
 
 export function isRefund(row) {

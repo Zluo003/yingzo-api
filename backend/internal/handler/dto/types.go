@@ -597,19 +597,20 @@ type BatchUpdateRedeemCodesRequest struct {
 
 // UsageLog 是普通用户接口使用的 usage log DTO（不包含管理员字段）。
 type UsageLog struct {
-	TaskError       *service.UsageTaskError `json:"task_error,omitempty"`
-	MusicTaskID     *string                 `json:"music_task_id,omitempty"`
-	MusicTaskStatus *string                 `json:"music_task_status,omitempty"`
-	MusicMode       *string                 `json:"music_mode,omitempty"`
-	ImageTaskID     *string                 `json:"image_task_id,omitempty"`
-	FundsEvent      *string                 `json:"funds_event,omitempty"`
-	ImageTaskStatus *string                 `json:"image_task_status,omitempty"`
-	ID              int64                   `json:"id"`
-	UserID          int64                   `json:"user_id"`
-	APIKeyID        int64                   `json:"api_key_id"`
-	AccountID       *int64                  `json:"account_id"`
-	RequestID       string                  `json:"request_id"`
-	Model           string                  `json:"model"`
+	TaskOutputs     []service.UsageTaskOutput `json:"task_outputs,omitempty"`
+	TaskError       *service.UsageTaskError   `json:"task_error,omitempty"`
+	MusicTaskID     *string                   `json:"music_task_id,omitempty"`
+	MusicTaskStatus *string                   `json:"music_task_status,omitempty"`
+	MusicMode       *string                   `json:"music_mode,omitempty"`
+	ImageTaskID     *string                   `json:"image_task_id,omitempty"`
+	FundsEvent      *string                   `json:"funds_event,omitempty"`
+	ImageTaskStatus *string                   `json:"image_task_status,omitempty"`
+	ID              int64                     `json:"id"`
+	UserID          int64                     `json:"user_id"`
+	APIKeyID        int64                     `json:"api_key_id"`
+	AccountID       *int64                    `json:"account_id"`
+	RequestID       string                    `json:"request_id"`
+	Model           string                    `json:"model"`
 	// ServiceTier records the OpenAI service tier used for billing, e.g. "priority" / "flex".
 	ServiceTier *string `json:"service_tier,omitempty"`
 	// ReasoningEffort is the client-requested effort (mapping-hidden, like Model).
