@@ -11,6 +11,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestImageTaskPublicViewPreservesUpstreamError(t *testing.T) {
+	for _, code := range []int{451, 429, 503} {
+		task := imageTaskToPublic(&ImageTaskRecord{
+			ID: "imgtask_failure", UserID: 12, APIKeyID: 34,
+			Status: ImageTaskStatusFailed, HTTPStatus: 502,
+			TaskError: &UsageTaskError{Code: code, Message: "upstream failure"},
+		})
+		body, err := json.Marshal(task)
+		require.NoError(t, err)
+		var response map[string]any
+		require.NoError(t, json.Unmarshal(body, &response))
+		require.Equal(t, float64(code), response["task_error"].(map[string]any)["code"])
+		require.Equal(t, float64(502), response["http_status"])
+		require.NotContains(t, response, "user_id")
+		require.NotContains(t, response, "api_key_id")
+	}
+}
+
 type imageTaskMemoryStore struct {
 	task    *ImageTaskRecord
 	ttl     time.Duration

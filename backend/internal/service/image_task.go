@@ -53,10 +53,11 @@ type ImageTaskRecord struct {
 
 // ImageTask is the API-safe task representation returned to callers.
 type ImageTask struct {
-	Phase         string `json:"phase,omitempty"`
-	BillingStatus string `json:"billing_status,omitempty"`
-	RefundStatus  string `json:"refund_status,omitempty"`
-	DeadlineAt    int64  `json:"deadline_at,omitempty"`
+	TaskError     *UsageTaskError `json:"task_error,omitempty"`
+	Phase         string          `json:"phase,omitempty"`
+	BillingStatus string          `json:"billing_status,omitempty"`
+	RefundStatus  string          `json:"refund_status,omitempty"`
+	DeadlineAt    int64           `json:"deadline_at,omitempty"`
 
 	ID          string          `json:"id"`
 	TaskID      string          `json:"task_id"`
@@ -252,7 +253,8 @@ func imageTaskToPublic(task *ImageTaskRecord) *ImageTask {
 		return nil
 	}
 	return &ImageTask{
-		Phase: task.Phase, BillingStatus: task.BillingStatus, RefundStatus: task.RefundStatus, DeadlineAt: task.DeadlineAt,
+		TaskError: task.TaskError,
+		Phase:     task.Phase, BillingStatus: task.BillingStatus, RefundStatus: task.RefundStatus, DeadlineAt: task.DeadlineAt,
 		ID:          task.ID,
 		TaskID:      task.ID,
 		Object:      "image.generation.task",
