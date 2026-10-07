@@ -6,7 +6,7 @@ import QRCode from 'qrcode'
 import {
   request, isMobileDevice, isWechatBrowser,
   getVisibleMethods, sortMethodEntries, normalizeVisibleMethod, METHOD_LABELS,
-  buildCreateOrderPayload, decidePaymentLaunch, buildStripeRouteUrl, buildAirwallexRouteUrl,
+  buildCreateOrderPayload, decidePaymentLaunch, buildStripeRouteUrl, buildAirwallexRouteUrl, buildPaymentResultUrl,
   readPaymentRecoverySnapshot, writePaymentRecoverySnapshot, clearPaymentRecoverySnapshot,
   buildAlipayDeepLink, currencySymbol, formatPaymentAmount, feeAmountFor, totalAmountFor,
   formatPaymentDate, relativeTime, renderMarkdown, ORDER_STATUS_LABELS, isTerminalSuccess,
@@ -480,7 +480,7 @@ export function Recharge({ user, setUser }) {
             if (!ok) setFormError('微信支付失败，请重试或更换支付方式。')
           } else {
             clearPaymentRecoverySnapshot()
-            location.href = `/recharge/result?order_id=${decision.paymentState.orderId}${decision.paymentState.outTradeNo ? `&out_trade_no=${decision.paymentState.outTradeNo}` : ''}${decision.paymentState.resumeToken ? `&resume_token=${decision.paymentState.resumeToken}` : ''}`
+            location.href = buildPaymentResultUrl(decision.paymentState)
           }
         } catch (err) {
           const ok = await attemptMobileQrFallback(err, { orderAmount, orderType, planId, paymentType: visibleMethod })
@@ -762,7 +762,7 @@ async function invokeWechatJsapiPayment(payload) {
 }
 
 // ---------------------------------------------------------------------------
-// /recharge/result — return_url landing page (parity with PaymentResultView)
+// /payment/result — canonical return_url page; /recharge/result remains an alias.
 // ---------------------------------------------------------------------------
 const RESULT_POLL_INTERVAL_MS = 2000
 const RESULT_POLL_MAX_ATTEMPTS = 15
@@ -895,7 +895,7 @@ export function StripePayment() {
     setStatusText('支付成功，正在关闭…')
     setTimeout(() => {
       if (window.opener) window.close()
-      else location.href = `/recharge/result?order_id=${orderId}&status=success`
+      else location.href = buildPaymentResultUrl({ orderId, status: 'success' })
     }, 2000)
   }
 
@@ -920,7 +920,7 @@ export function StripePayment() {
         const stripe = await loadStripe(config.stripe_publishable_key)
         if (!stripe) throw new Error('Stripe 加载失败，请检查网络后重试。')
         if (!alive) return
-        const returnUrl = `${location.origin}/recharge/result?order_id=${orderId}&status=success`
+        const returnUrl = buildPaymentResultUrl({ origin: location.origin, orderId, status: 'success' })
         if (method === 'alipay') {
           setStatusText('正在跳转支付宝…')
           const { error: confirmError } = await stripe.confirmAlipayPayment(clientSecret, { return_url: returnUrl })
@@ -1023,7 +1023,7 @@ export function AirwallexPayment() {
           client_secret: snapshot.clientSecret,
           currency: snapshot.currency || undefined,
           country_code: snapshot.countryCode || undefined,
-          successUrl: `${location.origin}/recharge/result?order_id=${snapshot.orderId}${outTradeNo ? `&out_trade_no=${outTradeNo}` : ''}${resumeToken ? `&resume_token=${resumeToken}` : ''}`,
+          successUrl: buildPaymentResultUrl({ origin: location.origin, orderId: snapshot.orderId, outTradeNo, resumeToken }),
         })
       } catch (e) {
         setError(e?.message || '无法跳转 Airwallex 收银台，请稍后重试。')

@@ -4,7 +4,7 @@
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
-const API = import.meta.env.VITE_API_BASE || '/api/v1'
+const API = import.meta.env?.VITE_API_BASE || '/api/v1'
 export const UPDATE_API = 'https://updata.yingzo.art/v1/updates'
 
 // ---- Auth session persistence (mirrors frontend/src/api/tokenRefresh.ts) ----
@@ -164,6 +164,17 @@ export function feeAmountFor(amount, feeRate) { return Math.ceil(Number(amount |
 export function totalAmountFor(amount, feeRate) { return Math.round(Number(amount || 0) + feeAmountFor(amount, feeRate)) }
 
 // ---- Order creation payload / launch decision (paymentFlow.ts port) ----
+// Keep this path aligned with the backend's CanonicalizeReturnURL allowlist.
+export function buildPaymentResultUrl({ origin = '', orderId, outTradeNo, resumeToken, status } = {}) {
+  const params = new URLSearchParams()
+  if (orderId) params.set('order_id', String(orderId))
+  if (outTradeNo) params.set('out_trade_no', outTradeNo)
+  if (resumeToken) params.set('resume_token', resumeToken)
+  if (status) params.set('status', status)
+  const query = params.toString()
+  return `${String(origin).trim().replace(/\/+$/, '')}/payment/result${query ? `?${query}` : ''}`
+}
+
 export function buildCreateOrderPayload(input) {
   const visibleMethod = normalizeVisibleMethod(input.paymentType) || String(input.paymentType || '').trim()
   const origin = String(input.origin || location.origin).replace(/\/+$/, '')
@@ -178,7 +189,7 @@ export function buildCreateOrderPayload(input) {
     payment_source: visibleMethod === 'wxpay' && input.isWechatBrowser ? 'wechat_in_app_resume' : 'hosted_redirect',
   }
   if (input.planId) payload.plan_id = input.planId
-  payload.return_url = `${origin}/recharge/result`
+  payload.return_url = buildPaymentResultUrl({ origin })
   return payload
 }
 
