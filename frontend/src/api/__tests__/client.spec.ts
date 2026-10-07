@@ -310,6 +310,32 @@ describe('API Client', () => {
   // --- 401 Token 刷新 ---
 
   describe('401 Token 刷新', () => {
+    it.each([false, true])('管理后台会话失效后保留 /admin/ 登录入口（刷新令牌：%s）', async (hasRefreshToken) => {
+      vi.stubEnv('BASE_URL', '/admin/')
+      localStorage.setItem('auth_token', 'expired-token')
+      if (hasRefreshToken) {
+        localStorage.setItem('refresh_token', 'expired-refresh-token')
+        localStorage.setItem('token_expires_at', String(Date.now() - 1))
+        vi.spyOn(axios, 'post').mockRejectedValueOnce(new Error('refresh failed'))
+      }
+      const originalLocation = window.location
+      Object.defineProperty(window, 'location', {
+        value: { ...originalLocation, pathname: '/admin/admin/settings', href: '/admin/admin/settings' },
+        writable: true,
+      })
+      try {
+        apiClient.defaults.adapter = vi.fn().mockRejectedValueOnce({
+          response: { status: 401, data: { code: 'TOKEN_EXPIRED' } },
+          config: { url: '/admin/settings', headers: { Authorization: 'Bearer expired-token' } },
+        })
+        await expect(apiClient.get('/admin/settings')).rejects.toBeDefined()
+        expect(window.location.href).toBe('/admin/login')
+        expect(localStorage.getItem('auth_token')).toBeNull()
+      } finally {
+        Object.defineProperty(window, 'location', { value: originalLocation, writable: true })
+      }
+    })
+
     it('无 refresh_token 时 401 清除 localStorage', async () => {
       localStorage.setItem('auth_token', 'expired-token')
       // 不设置 refresh_token

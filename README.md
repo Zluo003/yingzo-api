@@ -96,7 +96,9 @@ docker compose up -d          # 默认镜像 ghcr.io/zluo003/yingzo-api
 docker compose logs -f        # 首次启动会打印自动生成的管理员密码
 ```
 
-访问 `http://<主机>:8080`，用 `ADMIN_EMAIL` / `ADMIN_PASSWORD` 登录；`.env` 未设密码时以日志里自动生成的为准。
+管理员访问 `http://<主机>:8080/admin`，进入原版管理后台，用 `ADMIN_EMAIL` / `ADMIN_PASSWORD` 登录；`.env` 未设密码时以日志里自动生成的为准。根路径 `/` 为新版用户前端。服务默认使用 HTTP，只有配置了 HTTPS 反向代理后才使用 HTTPS 地址。
+
+未启用自动初始化且尚未安装时，访问 `/`、`/admin` 或 `/setup` 会进入原版安装向导（`/admin/setup`），配置数据库、Redis 和管理员账号；安装完成后跳转到原版后台登录页。
 
 其他 compose 文件：
 

@@ -99,17 +99,8 @@ func (s *FrontendServer) Middleware() gin.HandlerFunc {
 			cleanPath = "index.html"
 		}
 
-		// The legacy admin app uses history-mode routes such as
-		// /admin/dashboard. Those URLs do not exist as physical files, so
-		// return the admin entrypoint instead of falling through to Yingzo's
-		// root SPA. This also keeps an authenticated admin session intact on
-		// browser refreshes and direct navigation.
-		if strings.HasPrefix(cleanPath, "admin/") && !s.fileExists(cleanPath) {
-			if adminIndex, err := fs.ReadFile(s.distFS, "admin/index.html"); err == nil {
-				c.Data(http.StatusOK, "text/html; charset=utf-8", adminIndex)
-				c.Abort()
-				return
-			}
+		if serveAdminFrontend(c, s.distFS, s.overrideDir, cleanPath) {
+			return
 		}
 
 		// For index.html or SPA routes, serve with injected settings
@@ -326,10 +317,23 @@ func replaceNoncePlaceholder(html []byte, nonce string) []byte {
 // ServeEmbeddedFrontend returns a middleware for serving embedded frontend
 // This is the legacy function for backward compatibility when no settings provider is available
 func ServeEmbeddedFrontend() gin.HandlerFunc {
+	return serveEmbeddedFrontend(embeddedDistFS(), false)
+}
+
+// ServeSetupFrontend keeps first-run navigation in the legacy setup wizard.
+func ServeSetupFrontend() gin.HandlerFunc {
+	return serveEmbeddedFrontend(embeddedDistFS(), true)
+}
+
+func embeddedDistFS() fs.FS {
 	distFS, err := fs.Sub(frontendFS, "dist")
 	if err != nil {
 		panic("failed to get dist subdirectory: " + err.Error())
 	}
+	return distFS
+}
+
+func serveEmbeddedFrontend(distFS fs.FS, setupMode bool) gin.HandlerFunc {
 	fileServer := http.FileServer(http.FS(distFS))
 	overrideDir := filepath.Join("data", "public")
 
@@ -346,6 +350,25 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 			cleanPath = "index.html"
 		}
 
+		if setupMode {
+			switch cleanPath {
+			case "index.html", "admin", "admin/", "admin/index.html", "setup":
+				if _, err := fs.Stat(distFS, "admin/index.html"); err == nil {
+					redirectFrontend(c, "/admin/setup")
+					return
+				}
+				// Standalone legacy builds keep the wizard at /setup.
+				if cleanPath != "setup" {
+					redirectFrontend(c, "/setup")
+					return
+				}
+			}
+		}
+
+		if serveAdminFrontend(c, distFS, overrideDir, cleanPath) {
+			return
+		}
+
 		if file, err := distFS.Open(cleanPath); err == nil {
 			_ = file.Close()
 			// Try local override first
@@ -360,6 +383,43 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 
 		serveIndexHTML(c, distFS)
 	}
+}
+
+// Both the setup server and the normal server must select the admin SPA before
+// falling back to the public SPA. The admin bundle is optional in legacy builds.
+func serveAdminFrontend(c *gin.Context, distFS fs.FS, overrideDir, cleanPath string) bool {
+	if cleanPath != "setup" && cleanPath != "admin" && !strings.HasPrefix(cleanPath, "admin/") {
+		return false
+	}
+	adminIndex, err := fs.ReadFile(distFS, "admin/index.html")
+	if err != nil {
+		return false
+	}
+	if cleanPath == "setup" {
+		redirectFrontend(c, "/admin/setup")
+		return true
+	}
+	if cleanPath != "admin" && cleanPath != "admin/" && cleanPath != "admin/index.html" {
+		if _, err := fs.Stat(distFS, cleanPath); err == nil {
+			return false // Let the caller serve admin assets normally.
+		}
+	}
+	if tryServeOverrideFile(c, overrideDir, "admin/index.html") {
+		return true
+	}
+	c.Header("Cache-Control", "no-cache")
+	c.Data(http.StatusOK, "text/html; charset=utf-8", adminIndex)
+	c.Abort()
+	return true
+}
+
+func redirectFrontend(c *gin.Context, target string) {
+	if c.Request.URL.RawQuery != "" {
+		target += "?" + c.Request.URL.RawQuery
+	}
+	c.Header("Cache-Control", "no-store")
+	c.Redirect(http.StatusTemporaryRedirect, target)
+	c.Abort()
 }
 
 // tryServeOverrideFile is a standalone version of tryServeOverride for legacy usage.

@@ -24,7 +24,6 @@ COPY frontend/package.json frontend/pnpm-lock.yaml ./
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --frozen-lockfile
 COPY frontend/ ./
 COPY docs/legal/ /app/docs/legal/
-RUN pnpm exec vite build --outDir /app/yingzo-web/public/admin --base /admin/
 
 WORKDIR /app/yingzo-web
 ENV NODE_OPTIONS=--max-old-space-size=1536
@@ -43,6 +42,8 @@ RUN npm ci --no-audit --no-fund
 # in the image (WORKDIR /app/yingzo-web -> resolves to /app/docs/legal/*.md).
 # Copy only that subtree to keep the build dependency minimal.
 COPY yingzo-web/ ./
+# Build after COPY so the checked-in admin bundle cannot overwrite these fixes.
+RUN cd /app/legacy-frontend && pnpm exec vite build --outDir /app/yingzo-web/public/admin --base /admin/
 RUN npm run build
 
 # -----------------------------------------------------------------------------

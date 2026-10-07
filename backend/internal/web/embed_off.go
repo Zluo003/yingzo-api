@@ -46,3 +46,7 @@ func ServeEmbeddedFrontend() gin.HandlerFunc {
 func HasEmbeddedFrontend() bool {
 	return false
 }
+
+func ServeSetupFrontend() gin.HandlerFunc {
+	return ServeEmbeddedFrontend()
+}
