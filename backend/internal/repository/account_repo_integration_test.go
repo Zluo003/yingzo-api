@@ -1123,13 +1123,13 @@ func (s *AccountRepoSuite) TestSetError() {
 
 	got, err := s.repo.GetByID(s.ctx, account.ID)
 	s.Require().NoError(err)
-	s.Require().Equal(service.StatusError, got.Status)
+	s.Require().Equal(service.StatusActive, got.Status)
 	s.Require().Equal("something went wrong", got.ErrorMessage)
-	s.Require().False(got.Schedulable)
+	s.Require().True(got.IsSchedulable())
 	s.Require().Len(cacheRecorder.setAccounts, 1)
 	s.Require().Equal(account.ID, cacheRecorder.setAccounts[0].ID)
-	s.Require().Equal(service.StatusError, cacheRecorder.setAccounts[0].Status)
-	s.Require().False(cacheRecorder.setAccounts[0].Schedulable)
+	s.Require().Equal(service.StatusActive, cacheRecorder.setAccounts[0].Status)
+	s.Require().True(cacheRecorder.setAccounts[0].IsSchedulable())
 
 	var outboxCount int
 	err = scanSingleRow(
@@ -1141,6 +1141,47 @@ func (s *AccountRepoSuite) TestSetError() {
 	)
 	s.Require().NoError(err)
 	s.Require().Equal(1, outboxCount)
+}
+
+func (s *AccountRepoSuite) TestRepeatedErrorsPreserveScheduling() {
+	for _, platform := range []string{service.PlatformGemini, service.PlatformOpenAI, service.PlatformAnthropic, service.PlatformAntigravity, service.PlatformVideo} {
+		s.Run(platform, func() {
+			account := mustCreateAccount(s.T(), s.client, &service.Account{
+				Name: "repeated-errors-" + platform, Platform: platform,
+				Status: service.StatusActive, Schedulable: true,
+			})
+			for range 5 {
+				s.Require().NoError(s.repo.SetError(s.ctx, account.ID, "temporary upstream failure"))
+			}
+			got, err := s.repo.GetByID(s.ctx, account.ID)
+			s.Require().NoError(err)
+			s.Require().Equal(service.StatusActive, got.Status)
+			s.Require().True(got.IsSchedulable())
+			s.Require().Equal("temporary upstream failure", got.ErrorMessage)
+			accounts, err := s.repo.ListSchedulableByPlatform(s.ctx, platform)
+			s.Require().NoError(err)
+			s.Require().Contains(idsOfAccounts(accounts), account.ID)
+		})
+	}
+}
+
+func (s *AccountRepoSuite) TestSetErrorPreservesManualSchedulingState() {
+	for _, status := range []string{service.StatusActive, service.StatusDisabled, service.StatusError} {
+		s.Run(status, func() {
+			account := mustCreateAccount(s.T(), s.client, &service.Account{
+				Name: "manual-state-" + status, Status: status, Schedulable: false,
+			})
+			// The fixture defaults schedulable to true; pause through the real
+			// administrator mutation before recording a subsequent failure.
+			s.Require().NoError(s.repo.SetSchedulable(s.ctx, account.ID, false))
+			s.Require().NoError(s.repo.SetError(s.ctx, account.ID, "upstream failure"))
+			got, err := s.repo.GetByID(s.ctx, account.ID)
+			s.Require().NoError(err)
+			s.Require().Equal(status, got.Status)
+			s.Require().False(got.Schedulable)
+			s.Require().False(got.IsSchedulable())
+		})
+	}
 }
 
 func (s *AccountRepoSuite) TestSetGrokOAuthErrorIfCredentialsUnchanged_AppliesAndSyncsSchedulerState() {

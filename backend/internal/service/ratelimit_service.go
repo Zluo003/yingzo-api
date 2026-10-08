@@ -322,8 +322,8 @@ func (s *RateLimitService) CheckErrorPolicy(ctx context.Context, account *Accoun
 	return ErrorPolicyNone
 }
 
-// HandleUpstreamError 处理上游错误响应，标记账号状态
-// 返回是否应该停止该账号的调度
+// HandleUpstreamError 处理上游错误响应，记录错误或设置可恢复的冷却状态。
+// 返回是否应该跳过当前账号；不会自动关闭持久化调度开关。
 func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Account, statusCode int, headers http.Header, responseBody []byte, requestedModel ...string) (shouldDisable bool) {
 	ctx = withTempUnschedulableModel(ctx, requestedModel)
 	// Team 联动熔断必须先于池模式/自定义错误码/临时不可调度的各类早退；
@@ -396,7 +396,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 
 	switch statusCode {
 	case 400:
-		// "organization has been disabled" → 永久禁用
+		// 上游组织被停用：记录原因，当前请求跳过此账号。
 		if strings.Contains(strings.ToLower(upstreamMsg), "organization has been disabled") {
 			msg := "Organization disabled (400): " + upstreamMsg
 			s.handleAuthError(ctx, account, msg)
@@ -407,23 +407,21 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			s.handleAuthError(ctx, account, msg)
 			shouldDisable = true
 		} else if strings.Contains(strings.ToLower(upstreamMsg), "identity verification is required") {
-			// KYC 身份验证要求 → 永久禁用，账号需完成身份验证后才能恢复
+			// KYC 身份验证要求：记录原因，保留本地账号状态与调度开关。
 			msg := "Identity verification required (400): " + upstreamMsg
 			s.handleAuthError(ctx, account, msg)
 			shouldDisable = true
 		}
 		// 其他 400 错误（如参数问题）不处理，不禁用账号
 	case 401:
-		// 外审第9轮:Spark 影子无独立凭据,401 是母账号 token 问题——失效缓存 / refresh_token 判断 /
-		// 永久禁用 / 临时不可调度都必须落到凭据 owner(母账号),否则影子(无 refresh_token)必中
-		// "refresh_token missing"永久禁用分支、母账号 token cache 也不会被清,把母账号可恢复的 token
-		// 问题变成影子永久死亡。母账号被标记 temp-unschedulable 后由 parentHealthyForShadow 级联排除影子。
+		// Spark 影子无独立凭据，401 的缓存失效、refresh_token 检查和错误记录
+		// 都落到凭据 owner（母账号）。母账号临时冷却时，影子也会暂时跳过。
 		// 非影子时 resolveCredentialAccount 返回自身;母账号缺失/损坏(orphan 影子,罕见)时回退到原 account。
 		authAccount := account
 		if resolved, rerr := resolveCredentialAccount(ctx, s.accountRepo, account); rerr == nil && resolved != nil {
 			authAccount = resolved
 		}
-		// OpenAI: token_invalidated / token_revoked 表示 token 被永久作废（非过期），直接标记 error
+		// OpenAI: token_invalidated / token_revoked 表示 token 被永久作废，记录认证错误。
 		openai401Code := extractUpstreamErrorCode(responseBody)
 		if authAccount.Platform == PlatformOpenAI && (openai401Code == "token_invalidated" || openai401Code == "token_revoked") {
 			msg := "Token revoked (401): account authentication permanently revoked"
@@ -434,7 +432,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			shouldDisable = true
 			break
 		}
-		// OpenAI: {"detail":"Unauthorized"} 表示 token 完全无效（非标准 OpenAI 错误格式），直接标记 error
+		// OpenAI: {"detail":"Unauthorized"} 表示 token 完全无效，记录认证错误。
 		if authAccount.Platform == PlatformOpenAI && gjson.GetBytes(responseBody, "detail").String() == "Unauthorized" {
 			msg := "Unauthorized (401): account authentication failed permanently"
 			if upstreamMsg != "" {
@@ -444,7 +442,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			shouldDisable = true
 			break
 		}
-		// OAuth 账号在 401 错误时临时不可调度（给 token 刷新窗口）；非 OAuth 账号保持原有 SetError 行为。
+		// OAuth 账号在 401 错误时临时冷却（给 token 刷新窗口）；非 OAuth 账号仅记录错误。
 		if authAccount.Type == AccountTypeOAuth {
 			// 1. 失效缓存
 			if s.tokenCacheInvalidator != nil {
@@ -452,8 +450,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 					slog.Warn("oauth_401_invalidate_cache_failed", "account_id", authAccount.ID, "error", err)
 				}
 			}
-			// 缺少 refresh_token 的 OAuth 账号无法在冷却期内自愈（后台刷新服务也会跳过），
-			// 直接走 SetError 永久禁用，避免冷却结束后再被选中产生一发无意义的 502。
+			// 缺少 refresh_token 时记录无法自动刷新的原因，当前请求跳过账号。
 			if strings.TrimSpace(authAccount.GetCredential("refresh_token")) == "" {
 				msg := "Authentication failed (401): refresh_token missing, cannot recover"
 				if upstreamMsg != "" {
@@ -501,7 +498,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			}
 			shouldDisable = true
 		} else {
-			// 非 OAuth：保持 SetError 行为
+			// 非 OAuth：记录错误，保留账号状态和调度开关。
 			msg := "Authentication failed (401): invalid or expired credentials"
 			if upstreamMsg != "" {
 				msg = "Authentication failed (401): " + upstreamMsg
@@ -517,7 +514,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 			shouldDisable = true
 			break
 		}
-		// OpenAI: deactivated_workspace 表示工作区已停用，直接标记 error
+		// OpenAI: deactivated_workspace 表示工作区已停用，记录上游错误。
 		if account.Platform == PlatformOpenAI && gjson.GetBytes(responseBody, "detail.code").String() == "deactivated_workspace" {
 			msg := "Workspace deactivated (402): workspace has been deactivated"
 			s.handleAuthError(ctx, account, msg)
@@ -551,7 +548,7 @@ func (s *RateLimitService) HandleUpstreamError(ctx context.Context, account *Acc
 		// Handled after pool/custom-code policy gates above.
 		shouldDisable = false
 	default:
-		// 自定义错误码启用时：在列表中的错误码都应该停止调度
+		// 自定义错误码命中时记录错误，并让当前请求跳过账号。
 		if customErrorCodesEnabled {
 			msg := "Custom error code triggered"
 			if upstreamMsg != "" {
@@ -939,14 +936,14 @@ func (s *RateLimitService) GeminiCooldown(ctx context.Context, account *Account)
 	return s.geminiQuotaService.CooldownForAccount(ctx, account)
 }
 
-// handleAuthError 处理认证类错误(401/403)，停止账号调度
+// handleAuthError 记录认证类错误(401/403)，仅通知运行时短暂跳过账号。
 func (s *RateLimitService) handleAuthError(ctx context.Context, account *Account, errorMsg string) {
 	s.notifyAccountSchedulingBlocked(account, time.Time{}, "auth_error")
 	if err := s.accountRepo.SetError(ctx, account.ID, errorMsg); err != nil {
 		slog.Warn("account_set_error_failed", "account_id", account.ID, "error", err)
 		return
 	}
-	slog.Warn("account_disabled_auth_error", "account_id", account.ID, "error", errorMsg)
+	slog.Warn("account_auth_error_recorded", "account_id", account.ID, "error", errorMsg)
 }
 
 func buildForbiddenErrorMessage(prefix string, upstreamMsg string, responseBody []byte, fallback string) string {
@@ -974,8 +971,8 @@ func buildForbiddenErrorMessage(prefix string, upstreamMsg string, responseBody 
 }
 
 // handle403 处理 403 Forbidden 错误
-// Antigravity 平台区分 validation/violation/generic 三种类型，均 SetError 永久禁用；
-// 其他平台保持原有 SetError 行为。
+// Antigravity 平台区分 validation/violation/generic 三种类型，记录对应原因。
+// 错误记录不改变持久化账号状态或调度开关。
 func (s *RateLimitService) handle403(ctx context.Context, account *Account, upstreamMsg string, responseBody []byte) (shouldDisable bool) {
 	if account.Platform == PlatformAntigravity {
 		return s.handleAntigravity403(ctx, account, upstreamMsg, responseBody)
@@ -1072,15 +1069,13 @@ func (s *RateLimitService) handleOpenAI403(ctx context.Context, account *Account
 }
 
 // handleAntigravity403 处理 Antigravity 平台的 403 错误
-// validation（需要验证）→ 永久 SetError（需人工去 Google 验证后恢复）
-// violation（违规封号）→ 永久 SetError（需人工处理）
-// generic（通用禁止）→ 永久 SetError
+// validation / violation / generic 均记录上游返回的原因，不永久停调。
 func (s *RateLimitService) handleAntigravity403(ctx context.Context, account *Account, upstreamMsg string, responseBody []byte) (shouldDisable bool) {
 	fbType := classifyForbiddenType(string(responseBody))
 
 	switch fbType {
 	case forbiddenTypeValidation:
-		// VALIDATION_REQUIRED: 永久禁用，需人工去 Google 验证后手动恢复
+		// VALIDATION_REQUIRED: 记录 Google 验证要求与验证链接。
 		msg := buildForbiddenErrorMessage(
 			"Validation required (403):",
 			upstreamMsg,
@@ -1094,7 +1089,7 @@ func (s *RateLimitService) handleAntigravity403(ctx context.Context, account *Ac
 		return true
 
 	case forbiddenTypeViolation:
-		// 违规封号: 永久禁用，需人工处理
+		// 违规封号：记录上游原因。
 		msg := buildForbiddenErrorMessage(
 			"Account violation (403):",
 			upstreamMsg,
@@ -1117,7 +1112,7 @@ func (s *RateLimitService) handleAntigravity403(ctx context.Context, account *Ac
 	}
 }
 
-// handleCustomErrorCode 处理自定义错误码，停止账号调度
+// handleCustomErrorCode 记录自定义错误码，保留账号状态和调度开关。
 func (s *RateLimitService) handleCustomErrorCode(ctx context.Context, account *Account, statusCode int, errorMsg string) {
 	msg := "Custom error code " + strconv.Itoa(statusCode) + ": " + errorMsg
 	s.notifyAccountSchedulingBlocked(account, time.Time{}, "custom_error_code")
@@ -1125,7 +1120,7 @@ func (s *RateLimitService) handleCustomErrorCode(ctx context.Context, account *A
 		slog.Warn("account_set_error_failed", "account_id", account.ID, "status_code", statusCode, "error", err)
 		return
 	}
-	slog.Warn("account_disabled_custom_error", "account_id", account.ID, "status_code", statusCode, "error", errorMsg)
+	slog.Warn("account_custom_error_recorded", "account_id", account.ID, "status_code", statusCode, "error", errorMsg)
 }
 
 // handle429 处理429限流错误
@@ -2715,8 +2710,8 @@ func truncateTempUnschedMessage(body []byte, maxBytes int) string {
 }
 
 // HandleStreamTimeout 处理流数据超时
-// 根据系统设置决定是否标记账户为临时不可调度或错误状态
-// 返回是否应该停止该账号的调度
+// 根据系统设置决定是否临时冷却账号或记录错误。
+// 返回是否应该跳过当前账号，不改变持久化调度开关。
 func (s *RateLimitService) HandleStreamTimeout(ctx context.Context, account *Account, model string) bool {
 	if account == nil {
 		return false
@@ -2816,7 +2811,7 @@ func (s *RateLimitService) triggerStreamTimeoutTempUnsched(ctx context.Context, 
 	return true
 }
 
-// triggerStreamTimeoutError 触发流超时错误状态
+// triggerStreamTimeoutError 记录重复流超时，不改变账号状态或调度开关。
 func (s *RateLimitService) triggerStreamTimeoutError(ctx context.Context, account *Account, model string) bool {
 	errorMsg := "Stream data interval timeout (repeated failures) for model: " + model
 
@@ -2833,6 +2828,6 @@ func (s *RateLimitService) triggerStreamTimeoutError(ctx context.Context, accoun
 		}
 	}
 
-	slog.Warn("stream_timeout_account_error", "account_id", account.ID, "model", model)
+	slog.Warn("stream_timeout_error_recorded", "account_id", account.ID, "model", model)
 	return true
 }

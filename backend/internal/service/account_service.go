@@ -77,6 +77,7 @@ type AccountRepository interface {
 
 	UpdateLastUsed(ctx context.Context, id int64) error
 	BatchUpdateLastUsed(ctx context.Context, updates map[int64]time.Time) error
+	// SetError records the error message while preserving status and schedulable.
 	SetError(ctx context.Context, id int64, errorMsg string) error
 	ClearError(ctx context.Context, id int64) error
 	SetSchedulable(ctx context.Context, id int64, schedulable bool) error

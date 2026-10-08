@@ -1361,12 +1361,13 @@ func (r *accountRepository) BatchUpdateLastUsed(ctx context.Context, updates map
 	return nil
 }
 
+// SetError records an upstream failure without changing account availability.
+// Account status and the scheduling switch are administrator-controlled;
+// transient failures must not require a manual scheduling reset.
 func (r *accountRepository) SetError(ctx context.Context, id int64, errorMsg string) error {
 	_, err := r.client.Account.Update().
 		Where(dbaccount.IDEQ(id)).
-		SetStatus(service.StatusError).
 		SetErrorMessage(errorMsg).
-		SetSchedulable(false).
 		Save(ctx)
 	if err != nil {
 		return err

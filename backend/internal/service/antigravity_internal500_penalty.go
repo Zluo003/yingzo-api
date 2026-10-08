@@ -14,7 +14,7 @@ import (
 const (
 	internal500PenaltyTier1Duration  = 30 * time.Minute // 第 1 轮：临时不可调度 30 分钟
 	internal500PenaltyTier2Duration  = 2 * time.Hour    // 第 2 轮：临时不可调度 2 小时
-	internal500PenaltyTier3Threshold = 3                // 第 3+ 轮：永久禁用
+	internal500PenaltyTier3Threshold = 3                // 第 3+ 轮：记录错误，保持调度开关
 )
 
 // isAntigravityInternalServerError 检测特定的 INTERNAL 500 错误
@@ -29,9 +29,9 @@ func isAntigravityInternalServerError(statusCode int, body []byte) bool {
 }
 
 // applyInternal500Penalty 根据连续 INTERNAL 500 轮次数应用渐进惩罚
-// count=1: temp_unschedulable 10 分钟
-// count=2: temp_unschedulable 10 小时
-// count>=3: SetError 永久禁用
+// count=1: temp_unschedulable 30 分钟
+// count=2: temp_unschedulable 2 小时
+// count>=3: 记录错误，不再永久禁用
 func (s *AntigravityGatewayService) applyInternal500Penalty(
 	ctx context.Context, prefix string, account *Account, count int64,
 ) {
@@ -42,7 +42,7 @@ func (s *AntigravityGatewayService) applyInternal500Penalty(
 			slog.Error("internal500_set_error_failed", "account_id", account.ID, "error", err)
 			return
 		}
-		slog.Warn("internal500_account_disabled",
+		slog.Warn("internal500_error_recorded",
 			"account_id", account.ID, "account_name", account.Name, "consecutive_count", count)
 	case count == 2:
 		until := time.Now().Add(internal500PenaltyTier2Duration)
