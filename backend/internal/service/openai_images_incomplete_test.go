@@ -34,18 +34,18 @@ func TestExtractImagesUpstreamError_IncompleteIsRetryable(t *testing.T) {
 	}
 }
 
-// incomplete 因 content_filter → 400，重试无意义，不应触发 failover。
-func TestExtractImagesUpstreamError_IncompleteContentFilterNotRetryable(t *testing.T) {
+// incomplete 因 content_filter → 400：按"除 451 全部换号"规则仍应触发 failover。
+func TestExtractImagesUpstreamError_IncompleteContentFilterRetryable(t *testing.T) {
 	body := "data: {\"type\":\"response.incomplete\",\"response\":{\"id\":\"r\",\"status\":\"incomplete\",\"incomplete_details\":{\"reason\":\"content_filter\"}}}\n\n"
 	got := extractOpenAIImagesUpstreamError([]byte(body))
 	if got == nil {
 		t.Fatal("content_filter incomplete should produce error")
 	}
 	if got.StatusCode != http.StatusBadRequest {
-		t.Fatalf("content_filter should be 400 (non-retryable), got %d", got.StatusCode)
+		t.Fatalf("content_filter should map to 400, got %d", got.StatusCode)
 	}
-	if IsOpenAIImagesRetryableUpstreamError(got) {
-		t.Fatal("content_filter must NOT be retryable")
+	if !IsOpenAIImagesRetryableUpstreamError(got) {
+		t.Fatal("content_filter 400 should be retryable (only 451 is terminal)")
 	}
 }
 
@@ -219,7 +219,7 @@ func TestImagesOAuthStreaming_TextFallbackReturnsCapabilityError(t *testing.T) {
 	}
 }
 
-func TestImagesOAuthStreaming_SplitSafetyRefusalReturns400(t *testing.T) {
+func TestImagesOAuthStreaming_SplitSafetyRefusalStaysUnflushedForFailover(t *testing.T) {
 	upstreamSSE := "event: response.output_text.delta\n" +
 		"data: {\"type\":\"response.output_text.delta\",\"delta\":\"安全系\"}\n\n" +
 		"event: response.output_text.delta\n" +
@@ -242,8 +242,11 @@ func TestImagesOAuthStreaming_SplitSafetyRefusalReturns400(t *testing.T) {
 	if imgErr.StatusCode != http.StatusBadRequest || imgErr.Code != "content_policy_violation" {
 		t.Fatalf("split safety refusal should remain a content-policy 400, got status=%d code=%q", imgErr.StatusCode, imgErr.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "event: error") {
-		t.Fatal("content-policy refusal must reach the streaming client")
+	if !IsOpenAIImagesRetryableUpstreamError(imgErr) {
+		t.Fatal("content-policy 400 must be retryable (only 451 is terminal)")
+	}
+	if strings.Contains(rec.Body.String(), "event: error") {
+		t.Fatal("retryable content-policy 400 must remain unflushed for failover")
 	}
 }
 

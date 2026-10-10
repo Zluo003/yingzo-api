@@ -305,9 +305,10 @@ func (h *OpenAIGatewayHandler) Images(c *gin.Context) {
 				var imageUpstreamErr *service.OpenAIImagesUpstreamError
 				if errors.As(err, &imageUpstreamErr) {
 					retryableServerError := service.IsOpenAIImagesRetryableUpstreamError(imageUpstreamErr)
-					// 媒体故障转移：5xx 类上游故障且尚未向客户端写出响应时（如
-					// OAuth responses 桥接路径只返回错误不写响应），换下一个满足
-					// 能力要求的账号重试；内容/参数类 4xx 为终态，直接返回。
+					// 媒体故障转移：除内容审核（451）外的一切上游报错，只要尚未向
+					// 客户端写出响应（如 OAuth responses 桥接路径只返回错误不写
+					// 响应），就换下一个满足能力要求的账号重试；451 为终态，直接
+					// 返回。
 					if retryableServerError &&
 						service.OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c) == writerSizeBeforeForward &&
 						!failoverClientGone(c) {

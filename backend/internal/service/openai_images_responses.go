@@ -100,10 +100,12 @@ func (e *OpenAIImagesUpstreamError) clientMessage() string {
 	return "Upstream request failed"
 }
 
-// IsOpenAIImagesRetryableUpstreamError reports whether an Images error is an
-// upstream server failure that may be retried on another account.
+// IsOpenAIImagesRetryableUpstreamError reports whether an Images error should
+// fail over to another account. 除内容审核（451，换账号结果相同）外的一切上游
+// 错误——含内容审核类 400、参数错误、限流、5xx——都换账号重试；451 直接返回
+// 给客户端。
 func IsOpenAIImagesRetryableUpstreamError(err *OpenAIImagesUpstreamError) bool {
-	return err != nil && err.StatusCode >= http.StatusInternalServerError
+	return err != nil && err.StatusCode != http.StatusUnavailableForLegalReasons
 }
 
 func openAIImagesSSEErrorStatus(errType, code string) int {
@@ -890,17 +892,17 @@ func openAIImagesUpstreamErrorFromHTTP(statusCode int, header http.Header, body 
 	}
 }
 
-// handleOpenAIImagesErrorResponse is the non-failover error handler for the
-// images endpoints (/v1/images/generations and /v1/images/edits). Unlike the
-// generic handleErrorResponse — which collapses every non-failover upstream
-// error into a generic 502 "Upstream request failed" — it surfaces the real
-// upstream status code and error message/type/code/param to the client. This
-// mirrors how the Chat Completions and Messages compat paths use
-// handleCompatErrorResponse.
+// handleOpenAIImagesErrorResponse is the upstream error handler for the images
+// endpoints (/v1/images/generations and /v1/images/edits). It returns an
+// *UpstreamFailoverError for every upstream failure except content moderation
+// (451) and the retired-driver configuration guard — the images handler then
+// excludes the account and reselects the next candidate. Only those terminal
+// cases are written to the client, surfacing the real upstream status code and
+// error message/type/code/param instead of a generic 502.
 //
-// It returns an *OpenAIImagesUpstreamError (already written to the client) so
-// the images handler treats it as a terminal user-facing error rather than
-// re-writing a fallback response.
+// Terminal errors come back as an *OpenAIImagesUpstreamError (already written
+// to the client) so the images handler treats them as user-facing errors
+// rather than re-writing a fallback response.
 func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 	ctx context.Context,
 	resp *http.Response,
@@ -966,66 +968,6 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 		return nil, upErr
 	}
 
-	// 媒体故障转移：账号侧/容量侧故障（401/402/403/404/408/425/429/5xx）不向
-	// 客户端写出响应，返回 failover 错误让 handler 换下一个满足能力要求的账号
-	// 重试，最多尝试 MediaFailoverMaxAccounts 个上游；请求内容侧故障（400 等）
-	// 换上游结果相同，走下方原逻辑。
-	if IsMediaFailoverStatus(resp.StatusCode) {
-		var modelForCooldown string
-		if len(requestedModel) > 0 {
-			modelForCooldown = strings.TrimSpace(requestedModel[0])
-		}
-		shouldDisable := s.handleOpenAIAccountUpstreamError(ctx, account, resp.StatusCode, resp.Header, body, modelForCooldown)
-		failoverErr := s.newOpenAIAccountFailoverError(
-			account,
-			resp.StatusCode,
-			resp.Header,
-			body,
-			upstreamMsg,
-			shouldDisable,
-			false,
-		)
-		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-			ProxyID:            opsUpstreamProxyID(account),
-			ProxyName:          opsUpstreamProxyName(account),
-			Platform:           account.Platform,
-			AccountID:          account.ID,
-			AccountName:        account.Name,
-			UpstreamStatusCode: resp.StatusCode,
-			UpstreamRequestID:  resp.Header.Get("x-request-id"),
-			Kind:               "failover",
-			Message:            upstreamMsg,
-			Detail:             upstreamDetail,
-		})
-		return nil, failoverErr
-	}
-
-	// If the account is not configured to handle this status code, fall back to
-	// a generic gateway error without exposing upstream internals (mirrors
-	// handleCompatErrorResponse).
-	if !account.ShouldHandleErrorCode(resp.StatusCode) {
-		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
-			ProxyID:            opsUpstreamProxyID(account),
-			ProxyName:          opsUpstreamProxyName(account),
-			Platform:           account.Platform,
-			AccountID:          account.ID,
-			AccountName:        account.Name,
-			UpstreamStatusCode: resp.StatusCode,
-			UpstreamRequestID:  resp.Header.Get("x-request-id"),
-			Kind:               "http_error",
-			Message:            upstreamMsg,
-			Detail:             upstreamDetail,
-		})
-		upErr := &OpenAIImagesUpstreamError{
-			StatusCode:        http.StatusInternalServerError,
-			ErrorType:         "upstream_error",
-			Message:           "Upstream gateway error",
-			UpstreamRequestID: strings.TrimSpace(resp.Header.Get("x-request-id")),
-		}
-		writeOpenAIImagesUpstreamErrorResponse(c, upErr)
-		return nil, upErr
-	}
-
 	// A retired/configured Responses driver is not an image-model quota failure.
 	// Surface the actionable upstream error instead of cooling every image account
 	// and eventually hiding the configuration problem behind a generic 503.
@@ -1037,7 +979,11 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 		return nil, upErr
 	}
 
-	// Track rate limits / decide whether to disable the account (secondary failover).
+	// 媒体故障转移：除内容审核（451，上方已直接返回）与驱动模型配置守卫外，
+	// 一切上游报错（含参数类 400、限流、5xx）都不向客户端写出响应，返回
+	// failover 错误让 handler 换下一个满足能力要求的账号重试，最多尝试
+	// MediaFailoverMaxAccounts 个上游；全部失败时由 handler 返回脱敏后的
+	// 最后一个上游错误。
 	var modelForCooldown string
 	if len(requestedModel) > 0 {
 		modelForCooldown = strings.TrimSpace(requestedModel[0])
@@ -1052,11 +998,6 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 		shouldDisable,
 		false,
 	)
-	shouldFailover := shouldDisable || (account.IsOpenAIOAuthLike() && resp.StatusCode == http.StatusTooManyRequests && failoverErr.RetryableOnSameAccount)
-	kind := "http_error"
-	if shouldFailover {
-		kind = "failover"
-	}
 	appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
 		ProxyID:            opsUpstreamProxyID(account),
 		ProxyName:          opsUpstreamProxyName(account),
@@ -1065,18 +1006,11 @@ func (s *OpenAIGatewayService) handleOpenAIImagesErrorResponse(
 		AccountName:        account.Name,
 		UpstreamStatusCode: resp.StatusCode,
 		UpstreamRequestID:  resp.Header.Get("x-request-id"),
-		Kind:               kind,
+		Kind:               "failover",
 		Message:            upstreamMsg,
 		Detail:             upstreamDetail,
 	})
-	if shouldFailover {
-		return nil, failoverErr
-	}
-
-	// Surface the real upstream error to the client.
-	upErr := openAIImagesUpstreamErrorFromHTTP(resp.StatusCode, resp.Header, body)
-	writeOpenAIImagesUpstreamErrorResponse(c, upErr)
-	return nil, upErr
+	return nil, failoverErr
 }
 
 func buildOpenAIImagesAPIResponse(

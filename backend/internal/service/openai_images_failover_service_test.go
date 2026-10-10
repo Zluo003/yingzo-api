@@ -10,9 +10,9 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-// 媒体故障转移（图片）：账号侧/容量侧故障（429/5xx 等）不写响应、返回 failover
-// 错误交给 handler 换下一个账号；内容类错误（451/400）为终态，直接给下游
-// 中文报错信息库的文案或脱敏后的原始报错。
+// 媒体故障转移（图片）：除内容审核（451）外的一切上游报错（含参数类 400、
+// 限流、5xx）都不写响应、返回 failover 错误交给 handler 换下一个账号；仅 451
+// 为终态，直接给下游中文报错信息库的文案。
 func TestHandleOpenAIImagesErrorResponseFailoverClassification(t *testing.T) {
 	svc := &OpenAIGatewayService{}
 	account := &Account{ID: 21, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Name: "img-acct"}
@@ -59,7 +59,7 @@ func TestHandleOpenAIImagesErrorResponseFailoverClassification(t *testing.T) {
 		require.Equal(t, "内容未通过安全审核，请检查提示词或参考图", gjson.Get(rec.Body.String(), "error.message").String())
 	})
 
-	t.Run("400 keeps actionable upstream message", func(t *testing.T) {
+	t.Run("400 also fails over without writing response", func(t *testing.T) {
 		c, rec := newOpenAIUpstreamErrorTestContext(t)
 		_, err := svc.handleOpenAIImagesErrorResponse(
 			context.Background(),
@@ -68,9 +68,8 @@ func TestHandleOpenAIImagesErrorResponseFailoverClassification(t *testing.T) {
 		)
 		require.Error(t, err)
 		var failoverErr *UpstreamFailoverError
-		require.False(t, errors.As(err, &failoverErr))
-		require.True(t, rec.Body.Len() > 0)
-		require.Equal(t, http.StatusBadRequest, rec.Code)
-		require.Equal(t, "Size must be 1024x1024", gjson.Get(rec.Body.String(), "error.message").String())
+		require.ErrorAs(t, err, &failoverErr)
+		require.Equal(t, http.StatusBadRequest, failoverErr.StatusCode)
+		require.Equal(t, 0, rec.Body.Len(), "failover 前不应向客户端写出响应")
 	})
 }

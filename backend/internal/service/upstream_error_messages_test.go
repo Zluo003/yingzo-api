@@ -75,3 +75,18 @@ func TestMediaFailoverMaxAccountsBound(t *testing.T) {
 	assert.Equal(t, 3, MediaFailoverMaxAccounts)
 	assert.Equal(t, 2, MediaFailoverMaxSwitches)
 }
+
+func TestIsImageFailoverStatus(t *testing.T) {
+	// 图片路径：除内容审核（451）外的一切状态码都换号重试。
+	for _, statusCode := range []int{
+		0,
+		http.StatusBadRequest, http.StatusPaymentRequired, http.StatusUnauthorized,
+		http.StatusForbidden, http.StatusNotFound, http.StatusConflict,
+		http.StatusRequestTimeout, http.StatusUnprocessableEntity,
+		http.StatusTooManyRequests, 529,
+		http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout,
+	} {
+		assert.True(t, IsImageFailoverStatus(statusCode), "status %d should failover", statusCode)
+	}
+	assert.False(t, IsImageFailoverStatus(http.StatusUnavailableForLegalReasons), "451 should NOT failover")
+}

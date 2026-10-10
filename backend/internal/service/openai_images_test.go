@@ -944,11 +944,11 @@ func TestBoundedJSONNonNegativeInt(t *testing.T) {
 	}
 }
 
-func TestOpenAIGatewayServiceForwardImages_OAuthUpstreamHTTPErrorSurfacesRealError(t *testing.T) {
+func TestOpenAIGatewayServiceForwardImages_OAuthUpstreamHTTPErrorFailsOverBeforeFlush(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"model":"gpt-image-2","prompt":"draw a cat","response_format":"b64_json"}`)
 
-	// The non-failover upstream error path is shared by /generations and /edits;
+	// The failover upstream error path is shared by /generations and /edits;
 	// use /generations here so the request parses without an uploaded image.
 	req := httptest.NewRequest(http.MethodPost, "/v1/images/generations", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -987,22 +987,16 @@ func TestOpenAIGatewayServiceForwardImages_OAuthUpstreamHTTPErrorSurfacesRealErr
 	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
 	require.Nil(t, result)
 
-	var upstreamErr *OpenAIImagesUpstreamError
-	require.ErrorAs(t, err, &upstreamErr)
-	require.Equal(t, http.StatusBadRequest, upstreamErr.StatusCode)
-	require.Equal(t, "invalid_request_error", upstreamErr.ErrorType)
-	require.Equal(t, "unknown_parameter", upstreamErr.Code)
-
-	// The client must receive the actual upstream status code and message instead
-	// of a generic 502 "Upstream request failed".
-	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Equal(t, "invalid_request_error", gjson.Get(rec.Body.String(), "error.type").String())
-	require.Equal(t, "unknown_parameter", gjson.Get(rec.Body.String(), "error.code").String())
-	require.Equal(t, "size", gjson.Get(rec.Body.String(), "error.param").String())
-	require.Contains(t, gjson.Get(rec.Body.String(), "error.message").String(), "Invalid value for 'size'")
+	// 除 451 外的上游错误一律换号：400 也不写响应，交给 handler 换下一个账号。
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Equal(t, http.StatusBadRequest, failoverErr.StatusCode)
+	require.Equal(t, 0, rec.Body.Len(), "failover 前不应向客户端写出响应")
+	require.Contains(t, string(failoverErr.ResponseBody), "Invalid value for 'size'")
+	require.Equal(t, "req_img_badreq", failoverErr.ResponseHeaders.Get("x-request-id"))
 }
 
-func TestOpenAIGatewayServiceForwardImages_OAuthNonStreamModerationBlockedReturnsClientError(t *testing.T) {
+func TestOpenAIGatewayServiceForwardImages_OAuthNonStreamModerationBlockedFailsOverBeforeFlush(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	body := []byte(`{"model":"gpt-image-2","prompt":"draw blocked image","response_format":"b64_json"}`)
 
@@ -1044,15 +1038,14 @@ func TestOpenAIGatewayServiceForwardImages_OAuthNonStreamModerationBlockedReturn
 
 	result, err := svc.ForwardImages(context.Background(), c, account, body, parsed, "")
 	require.Nil(t, result)
-	var upstreamErr *OpenAIImagesUpstreamError
-	require.ErrorAs(t, err, &upstreamErr)
-	require.Equal(t, http.StatusBadRequest, upstreamErr.StatusCode)
-	require.Equal(t, "moderation_blocked", upstreamErr.Code)
 
-	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Equal(t, "image_generation_user_error", gjson.Get(rec.Body.String(), "error.type").String())
-	require.Equal(t, "moderation_blocked", gjson.Get(rec.Body.String(), "error.code").String())
-	require.Contains(t, gjson.Get(rec.Body.String(), "error.message").String(), "safety system")
+	// 内容审核类 400 按"除 451 全部换号"规则同样 failover：不写响应，交给
+	// handler 换下一个账号重试。
+	var failoverErr *UpstreamFailoverError
+	require.ErrorAs(t, err, &failoverErr)
+	require.Equal(t, http.StatusBadRequest, failoverErr.StatusCode)
+	require.Equal(t, 0, rec.Body.Len(), "failover 前不应向客户端写出响应")
+	require.Contains(t, string(failoverErr.ResponseBody), "moderation_blocked")
 }
 
 func TestOpenAIGatewayServiceForwardImages_OAuthNonStreamServerErrorReturnsFailoverBeforeFlush(t *testing.T) {
@@ -1181,12 +1174,18 @@ func TestOpenAIImagesOAuthBodyReadTransportErrorFailover(t *testing.T) {
 
 func TestOpenAIImagesOAuthBodyReadErrorsNotMisclassified(t *testing.T) {
 	tests := []struct {
-		name string
-		err  error
+		name         string
+		err          error
+		wantFailover bool
 	}{
 		{name: "context canceled", err: context.Canceled},
 		{name: "response too large", err: fmt.Errorf("%w: limit=1", ErrUpstreamResponseBodyTooLarge)},
-		{name: "semantic error", err: &OpenAIImagesUpstreamError{StatusCode: http.StatusBadRequest, ErrorType: "invalid_request_error", Code: "invalid_value", Message: "bad image request"}},
+		// 除 451 外的上游错误一律换号：语义类 400 也触发 failover。
+		{
+			name:         "semantic error",
+			err:          &OpenAIImagesUpstreamError{StatusCode: http.StatusBadRequest, ErrorType: "invalid_request_error", Code: "invalid_value", Message: "bad image request"},
+			wantFailover: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1202,7 +1201,12 @@ func TestOpenAIImagesOAuthBodyReadErrorsNotMisclassified(t *testing.T) {
 
 			got := (&OpenAIGatewayService{}).handleOpenAIImagesOAuthResponseError(context.Background(), c, &Account{Platform: PlatformOpenAI}, "gpt-image-2", "", resp, OpenAIImagesJSONKeepaliveAdjustedWrittenSize(c), err)
 			var failoverErr *UpstreamFailoverError
-			require.False(t, errors.As(got, &failoverErr))
+			require.Equal(t, tt.wantFailover, errors.As(got, &failoverErr))
+			if tt.wantFailover {
+				require.Equal(t, http.StatusBadRequest, failoverErr.StatusCode)
+				require.Contains(t, string(failoverErr.ResponseBody), "invalid_value")
+				return
+			}
 			require.ErrorIs(t, got, tt.err)
 		})
 	}
@@ -1304,26 +1308,31 @@ func TestOpenAIGatewayServiceForwardImages_OAuthStreamServerErrorAfterFlushDoesN
 	require.Equal(t, account.ID, events[0].AccountID)
 }
 
-func TestOpenAIImagesSSEClientErrorsAreNotRetryable(t *testing.T) {
+// SSE 上报的上游错误除内容审核（451）外都应触发换号 failover；451 为终态。
+func TestOpenAIImagesSSEUpstreamErrorFailoverClassification(t *testing.T) {
 	tests := []struct {
-		name       string
-		payload    string
-		wantStatus int
+		name        string
+		payload     string
+		wantStatus  int
+		wantRetryab bool
 	}{
 		{
-			name:       "invalid request",
-			payload:    `{"type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad size"}}`,
-			wantStatus: http.StatusBadRequest,
+			name:        "invalid request",
+			payload:     `{"type":"error","error":{"type":"invalid_request_error","code":"invalid_value","message":"bad size"}}`,
+			wantStatus:  http.StatusBadRequest,
+			wantRetryab: true,
 		},
 		{
-			name:       "content policy",
-			payload:    `{"type":"error","error":{"type":"image_generation_user_error","code":"content_policy_violation","message":"blocked"}}`,
-			wantStatus: http.StatusBadRequest,
+			name:        "content policy",
+			payload:     `{"type":"error","error":{"type":"image_generation_user_error","code":"content_policy_violation","message":"blocked"}}`,
+			wantStatus:  http.StatusBadRequest,
+			wantRetryab: true,
 		},
 		{
-			name:       "rate limit remains distinct from server error",
-			payload:    `{"type":"error","error":{"type":"rate_limit_exceeded","code":"rate_limit_exceeded","message":"try again"}}`,
-			wantStatus: http.StatusTooManyRequests,
+			name:        "rate limit remains distinct from server error",
+			payload:     `{"type":"error","error":{"type":"rate_limit_exceeded","code":"rate_limit_exceeded","message":"try again"}}`,
+			wantStatus:  http.StatusTooManyRequests,
+			wantRetryab: true,
 		},
 	}
 
@@ -1332,9 +1341,14 @@ func TestOpenAIImagesSSEClientErrorsAreNotRetryable(t *testing.T) {
 			upstreamErr := openAIImagesUpstreamErrorFromSSEPayload([]byte(tt.payload))
 			require.NotNil(t, upstreamErr)
 			require.Equal(t, tt.wantStatus, upstreamErr.StatusCode)
-			require.False(t, IsOpenAIImagesRetryableUpstreamError(upstreamErr))
+			require.Equal(t, tt.wantRetryab, IsOpenAIImagesRetryableUpstreamError(upstreamErr))
 		})
 	}
+
+	t.Run("451 moderation is not retryable", func(t *testing.T) {
+		upstreamErr := &OpenAIImagesUpstreamError{StatusCode: http.StatusUnavailableForLegalReasons}
+		require.False(t, IsOpenAIImagesRetryableUpstreamError(upstreamErr))
+	})
 }
 
 func TestOpenAIGatewayServiceForwardImages_APIKeyGenerationUsesConfiguredV1BaseURL(t *testing.T) {

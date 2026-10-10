@@ -80,10 +80,18 @@ const (
 	MediaFailoverMaxSwitches = MediaFailoverMaxAccounts - 1
 )
 
-// IsMediaFailoverStatus 判断图片/视频上游的 HTTP 状态码是否值得切换下一个
+// IsImageFailoverStatus 判断图片生成的上游 HTTP 状态码是否切换下一个账号重试：
+// 除内容审核（451，换账号结果相同）外的一切报错（含参数类 400、限流、5xx）
+// 都换号重试；451 在调用方已直接返回给客户端，不进入换号流程。
+func IsImageFailoverStatus(statusCode int) bool {
+	return statusCode != http.StatusUnavailableForLegalReasons
+}
+
+// IsMediaFailoverStatus 判断视频上游的 HTTP 状态码是否值得切换下一个
 // 上游重试：账号侧/容量侧故障（认证失效、欠费、算力不足、限流、超时、5xx）
 // 换一个上游大概率能成功；请求内容侧故障（400 参数错误、451 内容审核）换
 // 上游结果相同，直接返回错误让用户检查请求。statusCode 0 表示网络层失败。
+// 图片生成路径不使用本函数，改用 IsImageFailoverStatus（除 451 外全部换号）。
 func IsMediaFailoverStatus(statusCode int) bool {
 	if statusCode == 0 {
 		return true
