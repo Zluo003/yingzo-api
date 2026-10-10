@@ -170,7 +170,7 @@ curl -sSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/insta
 
 ## 本地开发
 
-环境要求：Go 1.27+、Node 24+（含 pnpm）、Docker（跑集成测试与开发栈）。
+环境要求：Go 1.27.2+、Node 24+（含 pnpm）、Docker（跑集成测试与开发栈）。
 
 ```bash
 # 后端（在 backend/ 下）

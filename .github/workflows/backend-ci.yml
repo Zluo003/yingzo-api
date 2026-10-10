@@ -38,7 +38,7 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: Verify Go version
         run: |
-          go version | grep -q 'go1.27.0'
+          go version | grep -q 'go1.27.2'
       - name: Install media validation runtime
         run: |
           sudo apt-get update
@@ -88,10 +88,28 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: Verify Go version
         run: |
-          go version | grep -q 'go1.27.0'
+          go version | grep -q 'go1.27.2'
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.13
+          version: v2.14.0
           args: --timeout=30m
           working-directory: backend
+
+  yingzo-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: yingzo-web/package-lock.json
+      - name: Install Yingzo Web dependencies
+        working-directory: yingzo-web
+        run: npm ci --no-audit --no-fund
+      - name: Build and test Yingzo Web
+        working-directory: yingzo-web
+        run: |
+          npm run build
+          npm test

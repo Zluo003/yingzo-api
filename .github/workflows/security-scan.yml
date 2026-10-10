@@ -23,7 +23,7 @@ jobs:
           cache-dependency-path: backend/go.sum
       - name: Verify Go version
         run: |
-          go version | grep -q 'go1.27.0'
+          go version | grep -q 'go1.27.2'
       - name: Run govulncheck
         working-directory: backend
         run: |
@@ -56,3 +56,19 @@ jobs:
           python tools/check_pnpm_audit_exceptions.py \
             --audit frontend/audit.json \
             --exceptions .github/audit-exceptions.yml
+
+  yingzo-web-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: yingzo-web/package-lock.json
+      - name: Install dependencies
+        working-directory: yingzo-web
+        run: npm ci --no-audit --no-fund
+      - name: Audit Yingzo Web dependencies
+        working-directory: yingzo-web
+        run: npm audit --omit=dev --audit-level=high

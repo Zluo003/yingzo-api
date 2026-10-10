@@ -14,6 +14,13 @@ linters:
   settings:
     depguard:
       rules:
+        no-unmaintained-openpgp:
+          list-mode: original
+          files:
+            - "**/*.go"
+          deny:
+            - pkg: golang.org/x/crypto/openpgp
+              desc: "openpgp is unmaintained and unsafe; use a maintained implementation"
         # Enforce: service must not depend on repository.
         service-no-repository:
           list-mode: original

@@ -22,7 +22,9 @@ func TestImageTaskPublicViewPreservesUpstreamError(t *testing.T) {
 		require.NoError(t, err)
 		var response map[string]any
 		require.NoError(t, json.Unmarshal(body, &response))
-		require.Equal(t, float64(code), response["task_error"].(map[string]any)["code"])
+		taskError, ok := response["task_error"].(map[string]any)
+		require.True(t, ok, "task_error must be an object")
+		require.Equal(t, float64(code), taskError["code"])
 		require.Equal(t, float64(502), response["http_status"])
 		require.NotContains(t, response, "user_id")
 		require.NotContains(t, response, "api_key_id")
