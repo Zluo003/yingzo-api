@@ -125,6 +125,8 @@ backend/.installed
 tests
 !deploy/tests/
 !deploy/tests/**
+!yingzo-web/tests/
+!yingzo-web/tests/sites-worker.test.mjs
 CLAUDE.md
 .claude
 scripts
