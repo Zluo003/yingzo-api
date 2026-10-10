@@ -12,7 +12,7 @@ export const UPDATE_API = 'https://updata.yingzo.art/v1/updates'
 // out whenever it expires. These helpers refresh on demand and coordinate with
 // the legacy admin app, which shares the same localStorage keys and rotates the
 // one-time refresh token on every use.
-const AUTH_PATHS_NO_REFRESH = ['/auth/login', '/auth/register', '/auth/refresh']
+const AUTH_PATHS_NO_REFRESH = ['/auth/login', '/auth/register', '/auth/refresh', '/auth/send-verify-code', '/auth/forgot-password', '/auth/reset-password']
 export const AUTH_EXPIRED_EVENT = 'yingzo:auth-expired'
 
 export function clearAuthKeys() {

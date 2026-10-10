@@ -10,7 +10,8 @@
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "test:pricing": "node --test src/model-pricing.test.mjs",
     "test:usage": "node --test src/usage-records.test.mjs",
-    "test:payment": "node --test src/payment-flow.test.mjs"
+    "test:payment": "node --test src/payment-flow.test.mjs",
+    "test:auth": "node --test src/auth-flow.test.mjs"
   },
   "dependencies": {
     "@airwallex/components-sdk": "^1.35.2",
