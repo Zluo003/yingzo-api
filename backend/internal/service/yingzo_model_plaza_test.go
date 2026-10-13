@@ -126,3 +126,30 @@ func TestYingzoPlazaMidjourneyOperationPrices(t *testing.T) {
 		require.Equal(t, expected, model.Prices)
 	}
 }
+
+func TestYingzoPlazaMusicEnabledPrices(t *testing.T) {
+	off := false
+	prices := []AgentModelPrice{}
+	for i, tier := range []string{"upload_cover", "create_model", "persona", "sounds", "upload", "sample", "upload_cover:v6-mini"} {
+		prices = append(prices, AgentModelPrice{Resolution: tier, BillingUnit: "request", UnitPrice: float64(i)})
+	}
+	prices = append(prices, AgentModelPrice{Resolution: "song", BillingUnit: "request", UnitPrice: 99, Enabled: &off}, AgentModelPrice{Resolution: "invalid", BillingUnit: "request", UnitPrice: 99})
+	for _, enabled := range []bool{true, false} {
+		s, catalog := yingzoTestPlaza([]AgentGroupModel{{ModelCode: SunoModel, Platform: PlatformOpenAI, MediaType: AgentMediaTypeAudio, Enabled: enabled, Prices: prices}}, nil, nil)
+		result, err := s.ListYingzoModels(context.Background(), catalog, 10)
+		require.NoError(t, err)
+		if !enabled {
+			require.Empty(t, result.Models)
+			continue
+		}
+		require.Len(t, result.Models, 1)
+		model := result.Models[0]
+		require.Equal(t, "audio", model.MediaType)
+		require.Len(t, model.Prices, 7)
+		for i, price := range model.Prices {
+			require.Equal(t, "request", price.Unit)
+			require.Equal(t, float64(i), *price.UnitPrice)
+			require.Equal(t, prices[i].Resolution, price.Resolution)
+		}
+	}
+}
