@@ -323,6 +323,17 @@ func (p *TemporaryAssetPublisher) publishGeneratedVideo(
 		maxBytes = maxPublishedGeneratedVideoBytes
 	}
 	id := uuid.New()
+	if stable, ok := ctx.Value(generatedAssetIDKey{}).(uuid.UUID); ok {
+		id = stable
+		var filename string
+		err := p.db.QueryRowContext(ctx, "SELECT original_filename FROM temporary_assets WHERE id=$1 AND user_id=$2 AND api_key_id=$3 AND purpose='generated' AND deleted_at IS NULL AND expires_at>NOW()", id, owner.UserID, owner.APIKeyID).Scan(&filename)
+		if err == nil {
+			return strings.TrimRight(publicBaseURL, "/") + "/media/" + id.String() + "/asset" + filepath.Ext(filename), nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+	}
 	localRoot, err := p.fileStorage.GeneratedLocalPath(ctx, runtime.Config.Generated)
 	if err != nil {
 		return "", fmt.Errorf("resolve local asset directory: %w", err)

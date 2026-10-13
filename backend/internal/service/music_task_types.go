@@ -25,6 +25,7 @@ var (
 )
 
 type MusicTaskRecord struct {
+	Operation     string          `json:"operation,omitempty"`
 	Mode          string          `json:"mode"`
 	Progress      float64         `json:"progress"`
 	TaskError     *UsageTaskError `json:"task_error,omitempty"`
@@ -47,6 +48,7 @@ type MusicTaskRecord struct {
 
 // MusicTask is the API-safe task representation returned to callers.
 type MusicTask struct {
+	Operation     string  `json:"operation,omitempty"`
 	Mode          string  `json:"mode"`
 	Progress      float64 `json:"progress"`
 	PollURL       string  `json:"poll_url"`
@@ -105,5 +107,5 @@ type MusicTaskLedger interface {
 }
 
 func musicTaskToPublic(t *MusicTaskRecord) *MusicTask {
-	return &MusicTask{ID: t.ID, TaskID: t.ID, Object: "music.generation.task", Status: t.Status, Phase: t.Phase, Mode: t.Mode, Progress: t.Progress, PollURL: "/v1/music/tasks/" + t.ID, BillingStatus: t.BillingStatus, RefundStatus: t.RefundStatus, DeadlineAt: t.DeadlineAt, HTTPStatus: t.HTTPStatus, Result: t.Result, Error: t.Error, CreatedAt: t.CreatedAt, CompletedAt: t.CompletedAt, ExpiresAt: t.ExpiresAt}
+	return &MusicTask{Operation: t.Operation, ID: t.ID, TaskID: t.ID, Object: "music.generation.task", Status: t.Status, Phase: t.Phase, Mode: t.Mode, Progress: t.Progress, PollURL: "/v1/music/tasks/" + t.ID, BillingStatus: t.BillingStatus, RefundStatus: t.RefundStatus, DeadlineAt: t.DeadlineAt, HTTPStatus: t.HTTPStatus, Result: t.Result, Error: t.Error, CreatedAt: t.CreatedAt, CompletedAt: t.CompletedAt, ExpiresAt: t.ExpiresAt}
 }

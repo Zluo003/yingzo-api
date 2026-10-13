@@ -150,6 +150,19 @@ describe('admin YingzoAgentView', () => {
     expect(updateAgentModel).toHaveBeenCalledWith(7, 9, { media_type: 'audio', enabled: true, prices: [{ resolution: 'instrumental', unit_price: 0 }, { resolution: 'song', unit_price: 3 }] })
   })
 
+  it('saves all six requested music billing dimensions independently', async () => {
+    const tiers = ['upload_cover', 'create_model', 'persona', 'sounds', 'upload', 'sample']
+    getAgentModels.mockResolvedValue({ models: [model({ id: 9, model_code: 'suno-v6', media_type: 'audio', prices: tiers.map(resolution => ({ resolution, unit_price: 1, billing_unit: 'request' })) })] })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="yingzo-agent-tab-audio"]').trigger('click')
+    for (const [index, tier] of tiers.entries()) {
+      await wrapper.get('[data-testid="yingzo-agent-price-9-' + tier + '"]').setValue(String(index + 2))
+    }
+    await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
+    await flushPromises()
+    expect(updateAgentModel).toHaveBeenCalledWith(7, 9, expect.objectContaining({ prices: expect.arrayContaining(tiers.map((resolution, index) => ({ resolution, unit_price: index + 2 }))) }))
+  })
+
   it('locates the built-in agent group and loads its catalog', async () => {
     const wrapper = await mountView()
 

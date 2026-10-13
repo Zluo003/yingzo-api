@@ -255,6 +255,7 @@ func RegisterGatewayRoutes(
 		music := r.Group("/v1/music")
 		music.Use(bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), requireGroupOpenAI)
 		music.POST("/generations", h.Music.Submit)
+		music.POST("/generations/:operation", h.Music.Submit)
 		music.GET("/tasks/:task_id", h.Music.Get)
 		music.GET("/tasks/by-idempotency/:idempotency_key", h.Music.GetByIdempotency)
 	}

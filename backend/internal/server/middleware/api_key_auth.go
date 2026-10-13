@@ -170,8 +170,8 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
 		replay := isAsyncImageSubmission(c.Request.Method, c.Request.URL.Path, c.GetHeader("Prefer")) && apiKeyService.HasAcceptedImageTask(c.Request.Context(), apiKey.ID, c.GetHeader("Idempotency-Key"))
-		musicAdmission := c.Request.Method == http.MethodPost && c.Request.URL.Path == "/v1/music/generations" && service.IsYingzoMusicGroup(apiKey.Group)
-		musicReplay := c.Request.Method == http.MethodPost && c.Request.URL.Path == "/v1/music/generations" && apiKeyService.HasAcceptedMusicTask(c.Request.Context(), apiKey.ID, c.GetHeader("Idempotency-Key"))
+		musicAdmission := c.Request.Method == http.MethodPost && (c.Request.URL.Path == "/v1/music/generations" || strings.HasPrefix(c.Request.URL.Path, "/v1/music/generations/")) && service.IsYingzoMusicGroup(apiKey.Group)
+		musicReplay := c.Request.Method == http.MethodPost && (c.Request.URL.Path == "/v1/music/generations" || strings.HasPrefix(c.Request.URL.Path, "/v1/music/generations/")) && apiKeyService.HasAcceptedMusicTask(c.Request.Context(), apiKey.ID, c.GetHeader("Idempotency-Key"))
 		c.Set("async_music_accepted_replay", musicReplay)
 		c.Set(ContextKeyAsyncImageTaskReplay, replay)
 		skipBilling := service.IsAsyncImageExecution(c.Request.Context()) || replay || musicReplay || (c.Request.Method == http.MethodGet && strings.HasPrefix(c.Request.URL.Path, "/v1/music/tasks/")) || c.Request.URL.Path == "/v1/usage" || c.Request.URL.Path == "/v1/account" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)

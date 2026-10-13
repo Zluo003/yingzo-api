@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,9 +21,10 @@ import (
 )
 
 type musicSnapshot struct {
-	GroupID       int64       `json:"group_id"`
-	PublicBaseURL string      `json:"public_base_url"`
-	Request       SunoRequest `json:"request"`
+	GroupID         int64       `json:"group_id"`
+	PublicBaseURL   string      `json:"public_base_url"`
+	SourceAccountID int64       `json:"source_account_id,omitempty"`
+	Request         SunoRequest `json:"request"`
 }
 type MusicTrack struct {
 	AudioID       string  `json:"audio_id,omitempty"`
@@ -44,11 +44,11 @@ type MusicResult struct {
 type sunoTaskResponse struct {
 	Code int `json:"code"`
 	Data struct {
-		Status      string      `json:"status"`
-		Progress    float64     `json:"progress"`
-		Cost        *float64    `json:"cost"`
-		CreditsCost *float64    `json:"credits_cost"`
-		Result      MusicResult `json:"result"`
+		Status      string          `json:"status"`
+		Progress    float64         `json:"progress"`
+		Cost        *float64        `json:"cost"`
+		CreditsCost *float64        `json:"credits_cost"`
+		Result      json.RawMessage `json:"result"`
 		Error       struct {
 			Message string `json:"message"`
 		} `json:"error"`
@@ -128,7 +128,22 @@ func (s *MusicTaskService) Accept(ctx context.Context, key *APIKey, sub *UserSub
 	if len(accounts) == 0 {
 		return nil, infraerrors.New(503, "music_account_unavailable", "No available Suno account")
 	}
-	price = QuantizeUsageBillingAmount(price)
+	resolved, sourceAccount, err := s.resolveSunoSources(ctx, owner, r)
+	if err != nil {
+		return nil, err
+	}
+	if sourceAccount != 0 {
+		found := false
+		for _, a := range accounts {
+			if a.ID == sourceAccount {
+				found = true
+			}
+		}
+		if !found {
+			return nil, infraerrors.New(503, "music_account_unavailable", "Source music account is unavailable")
+		}
+	}
+	price = QuantizeUsageBillingAmount(price * r.PriceMultiplier())
 	now := time.Now()
 	id := "musictask_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	q := MusicTaskQuote{Model: SunoModel, Mode: r.Mode(), QuotaPlatform: PlatformOpenAI, PricingAt: now}
@@ -142,9 +157,9 @@ func (s *MusicTaskService) Accept(ctx context.Context, key *APIKey, sub *UserSub
 	}
 	mode := string(BillingModePerRequest)
 	tier := r.Mode()
-	endpoint := "/v1/music/generations"
+	endpoint := r.Endpoint()
 	q.Usage = UsageLog{UserID: key.UserID, APIKeyID: key.ID, RequestID: q.Charge.RequestID, Model: SunoModel, RequestedModel: SunoModel, GroupID: key.GroupID, SubscriptionID: q.Charge.SubscriptionID, BillingType: q.Charge.BillingType, ActualCost: price, RateMultiplier: 1, BillingMode: &mode, BillingTier: &tier, InboundEndpoint: &endpoint, CreatedAt: now}
-	snapshot, _ := json.Marshal(musicSnapshot{GroupID: *key.GroupID, PublicBaseURL: base, Request: *r})
+	snapshot, _ := json.Marshal(musicSnapshot{GroupID: *key.GroupID, PublicBaseURL: base, Request: *resolved, SourceAccountID: sourceAccount})
 	encrypted, err := s.encryptor.Encrypt(string(snapshot))
 	if err != nil {
 		return nil, err
@@ -153,7 +168,7 @@ func (s *MusicTaskService) Accept(ctx context.Context, key *APIKey, sub *UserSub
 	if err != nil {
 		return nil, err
 	}
-	t := &DurableMusicTask{MusicTaskRecord: MusicTaskRecord{ID: id, UserID: key.UserID, APIKeyID: key.ID, Mode: r.Mode(), Status: MusicTaskStatusProcessing, Phase: "queued", BillingStatus: "precharged", RefundStatus: "none", CreatedAt: now.Unix(), ExpiresAt: now.Add(time.Duration(cfg.ResultRetentionHours) * time.Hour).Unix(), DeadlineAt: now.Add(30 * time.Minute).Unix()}, Quote: q, IdempotencyKey: idem, Fingerprint: fingerprint, EncryptedRequest: encrypted}
+	t := &DurableMusicTask{MusicTaskRecord: MusicTaskRecord{Operation: r.Operation, ID: id, UserID: key.UserID, APIKeyID: key.ID, Mode: r.Mode(), Status: MusicTaskStatusProcessing, Phase: "queued", BillingStatus: "precharged", RefundStatus: "none", CreatedAt: now.Unix(), ExpiresAt: now.Add(time.Duration(cfg.ResultRetentionHours) * time.Hour).Unix(), DeadlineAt: now.Add(30 * time.Minute).Unix()}, Quote: q, IdempotencyKey: idem, Fingerprint: fingerprint, EncryptedRequest: encrypted}
 	t, _, err = s.ledger.Accept(ctx, t)
 	if err != nil {
 		return nil, err
@@ -176,30 +191,16 @@ func (s *MusicTaskService) Get(ctx context.Context, owner MusicTaskOwner, id str
 		if time.Now().Unix() >= t.ExpiresAt {
 			return nil, ErrMusicTaskExpired
 		}
-		var result MusicResult
-		if json.Unmarshal(t.Result, &result) != nil {
+		result, err := transformSunoResult(t.Result, func(path, kind, value string) (string, error) {
+			return s.publisher.RefreshGeneratedURL(ctx, TemporaryAssetOwner{UserID: owner.UserID, APIKeyID: owner.APIKeyID}, value)
+		})
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, ErrMusicTaskExpired
+			}
 			return nil, ErrMusicTaskUnavailable
 		}
-		assetOwner := TemporaryAssetOwner{UserID: owner.UserID, APIKeyID: owner.APIKeyID}
-		for i := range result.Music {
-			track := &result.Music[i]
-			for index, v := range []*string{&track.AudioURL, &track.ImageURL, &track.ImageLargeURL} {
-				if *v != "" {
-					*v, err = s.publisher.RefreshGeneratedURL(ctx, assetOwner, *v)
-					if err != nil {
-						if errors.Is(err, sql.ErrNoRows) {
-							if index > 0 { // An expired optional cover does not hide playable music.
-								*v = ""
-								continue
-							}
-							return nil, ErrMusicTaskExpired
-						}
-						return nil, ErrMusicTaskUnavailable
-					}
-				}
-			}
-		}
-		t.Result, _ = json.Marshal(result)
+		t.Result = result
 	}
 	return musicTaskToPublic(&t.MusicTaskRecord), nil
 }
@@ -357,6 +358,9 @@ func (s *MusicTaskService) submit(ctx context.Context, t *DurableMusicTask, snap
 	}
 	var selected *Account
 	for i := range accounts {
+		if snapshot.SourceAccountID != 0 && accounts[i].ID != snapshot.SourceAccountID {
+			continue
+		}
 		ok, e := s.ledger.Pin(ctx, t, accounts[i].ID, accounts[i].Concurrency)
 		if e != nil {
 			return
@@ -372,7 +376,7 @@ func (s *MusicTaskService) submit(ctx context.Context, t *DurableMusicTask, snap
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
-	body, err := sunoHTTP(callCtx, s.gateway, selected, http.MethodPost, "/v1/music/generations", snapshot.Request.UpstreamBody())
+	body, err := sunoHTTP(callCtx, s.gateway, selected, http.MethodPost, snapshot.Request.Endpoint(), snapshot.Request.UpstreamBody())
 	if err != nil {
 		var upstream *sunoHTTPError
 		if errors.As(err, &upstream) && upstream.status >= 400 && upstream.status < 500 && upstream.status != 408 {
@@ -440,17 +444,11 @@ func (s *MusicTaskService) poll(ctx context.Context, t *DurableMusicTask) {
 		s.fail(t, "music_upstream_failed", "Suno generation failed")
 		return
 	}
-	tracks := []MusicTrack{}
-	for _, track := range response.Data.Result.Music {
-		if track.AudioURL != "" && (track.Status == "" || track.Status == "complete" || track.Status == "completed") {
-			tracks = append(tracks, track)
-		}
-	}
-	if len(tracks) == 0 {
-		s.fail(t, "music_empty_result", "Suno returned no playable audio")
+	if err := validateSunoResult(t.Operation, response.Data.Result); err != nil {
+		s.fail(t, "music_empty_result", "Suno returned an invalid or empty result")
 		return
 	}
-	result, _ := json.Marshal(MusicResult{Music: tracks})
+	result := response.Data.Result
 	t.EncryptedResult, err = s.encryptor.Encrypt(string(result))
 	if err != nil {
 		return
@@ -464,31 +462,24 @@ func (s *MusicTaskService) publish(ctx context.Context, t *DurableMusicTask, sna
 		s.fail(t, "music_result_unavailable", "Saved music result unavailable")
 		return
 	}
-	var result MusicResult
-	if json.Unmarshal([]byte(raw), &result) != nil || len(result.Music) == 0 {
-		s.fail(t, "music_empty_result", "Saved music result invalid")
+	owner := TemporaryAssetOwner{UserID: t.UserID, APIKeyID: t.APIKeyID, GroupID: snapshot.GroupID}
+	result, err := transformSunoResult([]byte(raw), func(path, kind, value string) (string, error) {
+		stable := uuid.NewSHA1(uuid.NameSpaceOID, []byte(t.ID+":"+path))
+		switch kind {
+		case "image":
+			return s.publisher.PublishGeneratedMusicCover(ctx, owner, snapshot.PublicBaseURL, value, stable)
+		case "video":
+			assetCtx := context.WithValue(ctx, generatedAssetIDKey{}, stable)
+			return s.publisher.PublishGeneratedVideo(assetCtx, owner, snapshot.PublicBaseURL, value)
+		default:
+			return s.publisher.PublishGeneratedMusic(ctx, owner, snapshot.PublicBaseURL, value, stable)
+		}
+	})
+	if err != nil {
+		s.checkpoint(ctx, t, 5*time.Second)
 		return
 	}
-	owner := TemporaryAssetOwner{UserID: t.UserID, APIKeyID: t.APIKeyID, GroupID: snapshot.GroupID}
-	for i := range result.Music {
-		track := &result.Music[i]
-		stable := uuid.NewSHA1(uuid.NameSpaceOID, []byte(t.ID+":"+strconv.Itoa(i)+":audio"))
-		track.AudioURL, err = s.publisher.PublishGeneratedMusic(ctx, owner, snapshot.PublicBaseURL, track.AudioURL, stable)
-		if err != nil {
-			s.checkpoint(ctx, t, 5*time.Second)
-			return
-		}
-		for j, cover := range []*string{&track.ImageURL, &track.ImageLargeURL} {
-			if *cover != "" {
-				stable = uuid.NewSHA1(uuid.NameSpaceOID, []byte(t.ID+":"+strconv.Itoa(i)+":cover:"+strconv.Itoa(j)))
-				*cover, err = s.publisher.PublishGeneratedMusicCover(ctx, owner, snapshot.PublicBaseURL, *cover, stable)
-				if err != nil {
-					*cover = ""
-				}
-			}
-		}
-	}
-	t.Result, _ = json.Marshal(result)
+	t.Result = result
 	t.Progress = 100
 	t.HTTPStatus = 200
 	if t.CapturedUsage == nil {

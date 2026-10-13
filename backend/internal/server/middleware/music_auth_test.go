@@ -21,6 +21,7 @@ func TestMusicAuthDefersExactPriceChecksButKeepsIdentityChecks(t *testing.T) {
 		userActive, keyExpired     bool
 		want                       int
 	}{
+		{"zero_balance_tool", "POST", "/v1/music/generations/bpm", service.StatusAPIKeyQuotaExhausted, true, false, 204},
 		{"zero_balance_creation", "POST", "/v1/music/generations", service.StatusAPIKeyQuotaExhausted, true, false, 204},
 		{"exhausted_key_poll", "GET", "/v1/music/tasks/musictask_test", service.StatusAPIKeyQuotaExhausted, true, false, 204},
 		{"exhausted_key_recover", "GET", "/v1/music/tasks/by-idempotency/saved", service.StatusAPIKeyQuotaExhausted, true, false, 204},

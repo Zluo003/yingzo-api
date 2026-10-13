@@ -62,7 +62,7 @@ func TestMusicHandlerReceiptsAndRecovery(t *testing.T) {
 	require.Equal(t, 200, call("GET", "/v1/music/tasks/musictask_fixture", "", "").Code)
 	require.Equal(t, 409, call("POST", "/v1/music/generations", `{"prompt":"other"}`, "saved").Code)
 	require.Equal(t, 503, call("POST", "/v1/music/generations", `{"prompt":"钢琴"}`, "new").Code)
-	require.Equal(t, 400, call("POST", "/v1/music/generations", `{"prompt":"钢琴","version":"v6"}`, "new").Code)
+	require.Equal(t, 400, call("POST", "/v1/music/generations", `{"prompt":"钢琴","version":"v5"}`, "new").Code)
 	key.ID = 3
 	require.Equal(t, 404, call("GET", "/v1/music/tasks/musictask_fixture", "", "").Code)
 	key.Group.SystemCode = "other"
@@ -86,5 +86,5 @@ func TestSunoCatalogAndPriceSnapshot(t *testing.T) {
 	capabilities := capabilitiesOf(t, model)
 	require.Equal(t, []string{"instrumental"}, capabilities["supported_modes"])
 	require.Equal(t, true, capabilities["asynchronous"])
-	require.Equal(t, []string{"audio"}, capabilities["output_modalities"])
+	require.Equal(t, []string{"audio", "text", "video"}, capabilities["output_modalities"])
 }

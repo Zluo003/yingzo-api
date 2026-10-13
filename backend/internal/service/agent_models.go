@@ -644,7 +644,7 @@ func normalizeAgentPriceResolution(mediaType, resolution string) (string, error)
 	resolution = strings.TrimSpace(resolution)
 	if mediaType == AgentMediaTypeAudio {
 		if !IsSunoPriceTier(resolution) {
-			return "", errors.New("audio mode must be instrumental or song")
+			return "", errors.New("unsupported Suno operation or version price tier")
 		}
 		return resolution, nil
 	}

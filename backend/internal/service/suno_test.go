@@ -58,7 +58,7 @@ func TestSunoRequestModesAndUnicode(t *testing.T) {
 	}
 }
 func TestSunoRejectsUnsupportedRequests(t *testing.T) {
-	for _, body := range []string{`null`, `[]`, `{} {}`, `{"prompt":""}`, `{"prompt":"ok","custom":null}`, `{"prompt":"ok","model":"suno-v6-mini"}`, `{"prompt":"ok","instrumental":false}`, `{"prompt":"ok","custom":true,"style":"pop","instrumental":true}`, `{"prompt":"ok","custom":true}`, `{"prompt":"ok","style":"pop"}`, `{"prompt":"ok","title":"ignored"}`, `{"prompt":"ok","auto_lyrics":true}`, `{"prompt":"ok","version":"v6"}`, `{"prompt":"ok","max_mode":true}`, `{"prompt":"ok","audio_url":"https://example/a.mp3"}`, `{"prompt":"ok","persona_id":"x"}`, `{"prompt":"ok","n":2}`, `{"prompt":"ok","duration":30}`, `{"prompt":"ok","custom":true,"style":"pop","duration":361}`, `{"prompt":"ok","style_weight":1.1}`, `{"prompt":"ok","weirdness_constraint":-1}`, `{"prompt":"ok","audio_format":"ogg"}`} {
+	for _, body := range []string{`null`, `[]`, `{} {}`, `{"prompt":""}`, `{"prompt":"ok","custom":null}`, `{"prompt":"ok","model":"suno-v6-mini"}`, `{"prompt":"ok","max_mode":true}`, `{"prompt":"ok","audio_url":"https://example/a.mp3"}`, `{"prompt":"ok","n":2}`, `{"prompt":"ok","duration":30}`, `{"prompt":"ok","custom":true,"style":"pop","duration":361}`, `{"prompt":"ok","style_weight":1.1}`, `{"prompt":"ok","weirdness_constraint":-1}`, `{"prompt":"ok","audio_format":"ogg"}`} {
 		t.Run(body, func(t *testing.T) { _, err := ParseSunoRequest([]byte(body)); require.Error(t, err) })
 	}
 }

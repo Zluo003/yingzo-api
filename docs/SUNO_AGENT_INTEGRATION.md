@@ -1,6 +1,6 @@
 # Yingzo Agent Suno v6 对接指南
 
-Suno 音乐生成使用 Yingzo 地址和 **Yingzo API Key**。该 Key 必须绑定系统 Yingzo Agent 分组。APIMart API Key 仅由管理员保存到服务端，不能发给客户端。首期固定模型 `suno-v6`，提供提示词生成纯音乐、歌词与风格生成歌曲两种模式，不支持上传、翻唱、续写、分轨、Persona、Max 或其他版本。
+Suno 音乐生成使用 Yingzo 地址和 **Yingzo API Key**。该 Key 必须绑定系统 Yingzo Agent 分组。APIMart API Key 仅由管理员保存到服务端，不能发给客户端。下游模型统一为 `suno-v6`，上游仍为 APIMart。已接入 Suno 目录全部操作，完整参数与结果见 [全功能接口参考](SUNO_FULL_API_REFERENCE.md)。
 
 ## 管理员配置
 
@@ -9,9 +9,9 @@ Suno 音乐生成使用 Yingzo 地址和 **Yingzo API Key**。该 Key 必须绑�
 3. 开启独立的「音乐生成」开关。默认关闭；配置账号和价格完成之前无法生成。
 4. 账号管理 → 添加音乐模型 → **Suno v6 · APIMart**：填写名称、备注、API Key、Base URL、并发、优先级和代理。Base URL 默认 `https://api.apimart.ai`，兼容末尾 `/v1`，只允许 HTTPS origin 或 `/v1`。绑定系统 Yingzo Agent 分组。编辑时 API Key 留空保留原值。
 5. 账号测试只发送只读连接与鉴权请求。提示连接正常不等于实际生成成功，也不会产生音乐生成费用。
-6. Yingzo Agent → 音乐计费：发现 `suno-v6` 后，配置纯音乐 `instrumental` 和歌词歌曲 `song` 的价格与启用状态，再启用模型并保存。两项单位均为 **credit / 次**。新发现模型默认停用，不填充售价。缺失或停用价格拒绝创建；明确配置为 `0` 并启用表示免费。
+6. Yingzo Agent → 音乐计费：发现 `suno-v6` 后，配置各操作和版本价格与启用状态（基础生成保留 `instrumental` / `song`），再启用模型并保存。所有档位单位均为 **credit / 次**。新发现模型默认停用，不填充售价。缺失或停用价格拒绝创建；明确配置为 `0` 并启用表示免费。
 
-一次受理任务只收取该模式的固定价格，多首音轨不增加收费。Agent 价格为最终单价，不叠加文本、图片或视频倍率。任务受理时在同一数据库事务中落库、预扣余额和相关额度，冻结当时价格；成功结算，失败或超过 30 分钟全额退款。查询免费。后续调价不影响已受理任务。
+一次受理任务收取该操作、版本的固定价格；支持的操作开启 `max_mode=true` 时为对应价格的 2 倍，多首音轨不增加收费。Agent 价格为最终单价，不叠加文本、图片或视频倍率。任务受理时在同一数据库事务中落库、预扣余额和相关额度，冻结当时价格；成功结算，失败或超过 30 分钟全额退款。查询免费。后续调价不影响已受理任务。
 
 用量记录展示 `music_task_id`、`music_mode`、`music_task_status` 和 `funds_event`。预扣记录成功后更新任务状态，退款另记负数金额事件；免费任务仍有状态记录。上游美元 `cost` 与 APIMart `credits_cost` 分开保存用于成本核对，不决定 Yingzo 下游售价。
 
@@ -19,7 +19,7 @@ Suno 音乐生成使用 Yingzo 地址和 **Yingzo API Key**。该 Key 必须绑�
 
 ## 模型发现与价格
 
-以下所有示例中的 `https://yingzo.example` 应替换为部署的 Yingzo 地址，`YINGZO_API_KEY` 应替换为 Yingzo 凭证。
+以下所有示例中的 `https://yingzo.example` 应替换为部署的 Yingzo 地址(`https://yingzo.art`)，`YINGZO_API_KEY` 应替换为 Yingzo 凭证。
 
 ```bash
 export YINGZO_BASE_URL='https://yingzo.example'
@@ -37,8 +37,8 @@ curl "$YINGZO_BASE_URL/api/v1/agent/pricing" -H "Authorization: Bearer $YINGZO_A
   "platforms": ["openai"],
   "interfaces": ["music.generations"],
   "capabilities": {
-    "input_modalities": ["text"],
-    "output_modalities": ["audio"],
+    "input_modalities": ["text", "audio"],
+    "output_modalities": ["audio", "text", "video"],
     "streaming": false,
     "asynchronous": true,
     "supported_modes": ["instrumental", "song"]
@@ -46,7 +46,7 @@ curl "$YINGZO_BASE_URL/api/v1/agent/pricing" -H "Authorization: Bearer $YINGZO_A
 }
 ```
 
-按 `supported_modes` 分别控制纯音乐与歌曲入口。只有启用价格的模式会下发，目录不保证每次提交时账号仍有容量。
+按 `supported_modes` 控制对应价格档位入口；`capabilities.operations` 提供操作路径及参数类型/必填说明，`versions` 给出公共版本，`max_mode_multiplier=2`。只有启用价格的模式会下发，目录不保证每次提交时账号仍有容量。
 
 价格快照读取 `rules` 中 `model=suno-v6`、`platform=openai`、`media_type=audio` 的规则。模式沿用字段名 `resolution`，界面应显示「生成模式」，不是音频分辨率。示意规则如下，数值不代表默认售价：
 
@@ -63,29 +63,7 @@ curl "$YINGZO_BASE_URL/api/v1/agent/pricing" -H "Authorization: Bearer $YINGZO_A
 }
 ```
 
-使用 `effective_unit_price` 展示 credit/次，遵循顶层 `pricing_version`、`fetched_at` 和 `valid_until`。模型广场也暴露两项配置价格。快照是展示依据，最终按任务受理时服务端价格预扣。
-
-## 字段约束
-
-`POST /v1/music/generations`，JSON 请求。无需 `Prefer`；始终异步。未知字段、`null` 和不适用于该模式的字段返回 400，不会静默忽略。
-
-| 字段 | 纯音乐 | 歌曲 |
-| --- | --- | --- |
-| `model` | 可省略，固定 `suno-v6` | 同左 |
-| `custom` | `false`（默认） | 必须 `true` |
-| `instrumental` | `true`，可省略 | `false`，可省略 |
-| `prompt` | 必填，创作描述，1–3000 Unicode 字符 | 必填，歌词，1–5000 Unicode 字符 |
-| `style` | 禁止 | 必填，音乐风格，最多 1000 Unicode 字符 |
-| `title` | 禁止 | 可选，最多 80 Unicode 字符 |
-| `auto_lyrics` | 可省略或 `false` | 可省略或 `false` |
-| `style_weight` | 可选，0–1 | 同左 |
-| `weirdness_constraint` | 可选，创意度 0–1 | 同左 |
-| `vocal_gender` | 禁止 | 可选，`Male` / `Female` |
-| `negative_tags` | 禁止 | 可选，需要排除的风格 |
-| `duration` | 禁止 | 可选，整数 10–360，单位秒 |
-| `audio_format` | `wav` / `mp3` / `m4a`，默认 `wav` | 同左 |
-
-权重 `0` 有效，不等同于省略。字符数按 Unicode 码点计数；保留歌词换行、空格及 `[Verse]`、`[Chorus]` 等标记，不截断、不改写歌词。`duration` 为目标时长，生成的实际时长以音轨 `duration` 为准。不能自行指定版本、音轨数量或辅助能力参数。
+使用 `effective_unit_price` 展示 credit/次，遵循顶层 `pricing_version`、`fetched_at` 和 `valid_until`。模型广场暴露已启用的配置价格。快照是展示依据，最终按任务受理时服务端价格预扣。
 
 ## 纯音乐 cURL
 
@@ -104,7 +82,7 @@ curl -i "$YINGZO_BASE_URL/v1/music/generations" \
     "prompt":"宁静温暖的钢琴与弦乐纯音乐，适合清晨阅读，轻柔节奏，无人声",
     "style_weight":0.7,
     "weirdness_constraint":0.3,
-    "audio_format":"wav"
+    "audio_format":"mp3"
   }'
 ```
 
@@ -129,7 +107,7 @@ curl -i "$YINGZO_BASE_URL/v1/music/generations" \
     "duration":120,
     "style_weight":0.8,
     "weirdness_constraint":0,
-    "audio_format":"wav"
+    "audio_format":"m4a"
   }'
 ```
 
@@ -144,7 +122,7 @@ const headers = { Authorization: `Bearer ${yingzoKey}` };
 
 const instrumental = {
   model: 'suno-v6', custom: false, instrumental: true,
-  prompt: '舒缓的钢琴纯音乐，温暖、平静，无人声', audio_format: 'wav'
+  prompt: '舒缓的钢琴纯音乐，温暖、平静，无人声', audio_format: 'mp3'
 };
 const song = {
   model: 'suno-v6', custom: true, instrumental: false, auto_lyrics: false,
@@ -226,13 +204,13 @@ async function readMusic(taskId) {
   "http_status":200,
   "completed_at":1790812950,
   "result":{"music":[
-    {"audio_id":"track-a","status":"complete","title":"晨光","lyrics":"[Verse]\n晨光落在你肩上","tags":"indie pop, acoustic","duration":118.4,"audio_url":"https://yingzo.example/media/9b381044-1d32-4a01-96d3-13aef9178e35/asset.wav","image_url":"https://yingzo.example/media/7cdd7be4-2a31-43e2-9aaa-0663f7a1c227/asset.jpg"},
-    {"audio_id":"track-b","status":"complete","title":"晨光","lyrics":"[Verse]\n晨光落在你肩上","tags":"indie pop, acoustic","duration":124.1,"audio_url":"https://yingzo.example/media/826826ca-c801-4dd3-965b-a7acbf5f2d27/asset.wav"}
+    {"audio_id":"track-a","status":"complete","title":"晨光","lyrics":"[Verse]\n晨光落在你肩上","tags":"indie pop, acoustic","duration":118.4,"audio_url":"https://yingzo.example/media/9b381044-1d32-4a01-96d3-13aef9178e35/asset.m4a","image_url":"https://yingzo.example/media/7cdd7be4-2a31-43e2-9aaa-0663f7a1c227/asset.jpg"},
+    {"audio_id":"track-b","status":"complete","title":"晨光","lyrics":"[Verse]\n晨光落在你肩上","tags":"indie pop, acoustic","duration":124.1,"audio_url":"https://yingzo.example/media/826826ca-c801-4dd3-965b-a7acbf5f2d27/asset.m4a"}
   ]}
 }
 ```
 
-音轨数量不固定，遍历 `result.music[]` 展示标题、歌词、风格（`tags` / `display_tags`）、封面和实际时长。至少有一首有效音频才会成功。音频转存失败只重试转存，直到完成或任务超时，不重新生成；封面可用时转存，否则可省略。
+音轨数量不固定，遍历 `result.music[]` 展示标题、歌词、风格（`tags` / `display_tags`）、封面和实际时长。音乐生成类任务至少有一首有效音频才会成功；上传、歌词、MIDI 等工具任务按各自结果结构判定。音频转存失败只重试转存，直到完成或任务超时，不重新生成；封面可用时转存，否则可省略。
 
 失败响应保留任务标识，并包含如下字段。查询 HTTP 状态仍为 200，`http_status` 是任务错误信息：
 
@@ -259,26 +237,44 @@ async function readMusic(taskId) {
 
 错误采用 `{"error":{"type":"…","code":"…","message":"…"}}`；认证中间件沿用现有错误协议。
 
-| HTTP / code | 含义与处理 |
-| --- | --- |
-| 400 `invalid_request_error` | 参数组合、长度、字段不正确，修正输入 |
-| 400 `pricing_not_configured` | 模型或该模式未启用、缺价或价格停用，刷新价格并提示管理员 |
-| 401 | Key 无效、停用或用户不可用，恢复认证 |
-| 403 `music_group_required` / `model_not_allowed` | 分组或模型权限不符 |
-| 400 `INSUFFICIENT_BALANCE` | 可用余额不足，不创建任务、不调用上游 |
-| 403 `music_key_quota_exceeded` / `music_subscription_quota_exceeded` / `music_platform_quota_exceeded` | 对应额度不足 |
-| 429 `music_rate_quota_exceeded` | Key 时间窗口额度不足，待额度恢复 |
-| 404 `music_task_not_found` | 任务不存在或不属于当前 Key，不泄露他人任务 |
-| 409 `idempotency_conflict` | 同 Key 已用于另一请求，停止自动重试 |
-| 410 `music_result_expired` | 结果已过期或清理 |
-| 413 | 请求体超限 |
-| 503 `music_tasks_disabled` | 管理员尚未开启音乐生成 |
-| 503 `music_account_unavailable` | 无可用专用账号，稍后使用同一幂等键重试 |
-| 503 `music_tasks_unavailable` | 任务或结果存储暂不可用，稍后重查 |
-| 200 且任务 `status=failed` | 上游失败、空结果或超时，按退款状态展示，不用新 Key 自动重提 |
+
+| HTTP / code                                                                                            | 含义与处理                            |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------- |
+| 400 `invalid_request_error`                                                                            | 参数组合、长度、字段不正确，修正输入               |
+| 400 `pricing_not_configured`                                                                           | 模型或该模式未启用、缺价或价格停用，刷新价格并提示管理员     |
+| 401                                                                                                    | Key 无效、停用或用户不可用，恢复认证             |
+| 403 `music_group_required` / `model_not_allowed`                                                       | 分组或模型权限不符                        |
+| 400 `INSUFFICIENT_BALANCE`                                                                             | 可用余额不足，不创建任务、不调用上游               |
+| 403 `music_key_quota_exceeded` / `music_subscription_quota_exceeded` / `music_platform_quota_exceeded` | 对应额度不足                           |
+| 429 `music_rate_quota_exceeded`                                                                        | Key 时间窗口额度不足，待额度恢复               |
+| 404 `music_task_not_found`                                                                             | 任务不存在或不属于当前 Key，不泄露他人任务          |
+| 409 `idempotency_conflict`                                                                             | 同 Key 已用于另一请求，停止自动重试             |
+| 410 `music_result_expired`                                                                             | 结果已过期或清理                         |
+| 413                                                                                                    | 请求体超限                            |
+| 503 `music_tasks_disabled`                                                                             | 管理员尚未开启音乐生成                      |
+| 503 `music_account_unavailable`                                                                        | 无可用专用账号，稍后使用同一幂等键重试              |
+| 503 `music_tasks_unavailable`                                                                          | 任务或结果存储暂不可用，稍后重查                 |
+| 200 且任务 `status=failed`                                                                                | 上游失败、空结果或超时，按退款状态展示，不用新 Key 自动重提 |
+
 
 ## 上线验收
 
 配置完成后，分别发起一笔纯音乐和一笔歌词歌曲，核对：预扣价格、全部音轨播放下载、实际时长、最终结算、成本记录。模拟客户端丢失提交响应后按幂等键恢复，确认不重复扣费；关闭开关后验证旧任务仍能查询。真实验收会消耗 APIMart 生成费用，连接测试不能代替此步骤。
 
-上游协议依据：[APIMart Suno 生成](https://docs.apimart.ai/cn/api-reference/audios/suno/generation)、[任务查询](https://docs.apimart.ai/cn/api-reference/audios/suno/overview)。上游提供的其他能力不代表 Yingzo 已开放。
+上游协议依据：[APIMart Suno 生成](https://docs.apimart.ai/cn/api-reference/audios/suno/generation)、[任务查询](https://docs.apimart.ai/cn/api-reference/audios/suno/overview)。各操作的开放状态由对应价格档位决定，完整端点见 [全功能接口参考](SUNO_FULL_API_REFERENCE.md)。
+
+
+## 指定音乐计费维度
+
+以下维度均按次计费（billing_unit=request），在 Yingzo Agent 分组的音乐计费中独立配置价格和启用状态。计费标识与上游端点名称分开，接口路径保持不变。
+
+| 功能 | 计费标识（resolution） | 操作端点末段 |
+| --- | --- | --- |
+| 上传音频翻唱 | upload_cover | uploadCover |
+| 创建自定义音色模型 | create_model | createModel |
+| 创建歌手 | persona | persona |
+| 音效生成 | sounds | sounds |
+| 上传音频 | upload | uploadTask |
+| 样本转歌曲 | sample | sample |
+
+支持版本选择的操作继续按版本后缀区分，例如 upload_cover:v6-mini；支持 Max 的操作仍按对应单次价格乘 2。创建自定义音色模型与后续使用模型生成分别计费。

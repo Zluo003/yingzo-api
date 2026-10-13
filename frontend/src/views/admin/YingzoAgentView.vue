@@ -314,7 +314,7 @@ import type { AdminGroup } from '@/types'
 
 const { t } = useI18n()
 
-const SUNO_PRICE_TIERS = ['instrumental', 'song']
+import { SUNO_PRICE_TIERS } from '@/components/account/suno'
 const IMAGE_RESOLUTIONS = ['1K', '2K', '4K']
 
 interface ModelDraft {

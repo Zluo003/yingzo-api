@@ -44,7 +44,7 @@ func (h *MusicTaskHandler) Submit(c *gin.Context) {
 		imageTaskJSONError(c, 400, "invalid_request_error", "Unable to read music request")
 		return
 	}
-	r, err := service.ParseSunoRequest(body)
+	r, err := service.ParseSunoOperation(c.Param("operation"), body)
 	if err != nil {
 		imageTaskJSONError(c, 400, "invalid_request_error", err.Error())
 		return
@@ -55,7 +55,7 @@ func (h *MusicTaskHandler) Submit(c *gin.Context) {
 			imageTaskJSONError(c, 500, "api_error", "User context unavailable")
 			return
 		}
-		auditBody, _ := json.Marshal(map[string]any{"model": service.SunoModel, "messages": []map[string]string{{"role": "user", "content": r.Prompt + "\n" + r.Style + "\n" + r.Title + "\n" + r.NegativeTags}}})
+		auditBody, _ := json.Marshal(map[string]any{"model": service.SunoModel, "messages": []map[string]string{{"role": "user", "content": r.AuditText()}}})
 		decision := h.openAI.checkSecurityAudit(c, requestLogger(c, "handler.music.security_audit"), key, subject, service.ContentModerationProtocolOpenAIChat, service.SunoModel, auditBody)
 		if decision != nil && !decision.AllowNextStage {
 			h.openAI.openAISecurityAuditError(c, decision)

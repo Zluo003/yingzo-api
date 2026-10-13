@@ -1,0 +1,1856 @@
+{
+  "addInstrumental": {
+    "path": "/v1/music/generations/addInstrumental",
+    "doc": "add-instrumental",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "`POST /v1/music/generations/uploadTask` 返回的上传任务 ID。普通生成任务不能使用；缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID，与 `version` 互斥。"
+      },
+      "custom": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=自定义模式（用 `prompt` 作歌词）；`false`=灵感模式（用 `gpt_description`）；不传时按内容推断（见上方 Warning）。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "歌词，`custom=true` 时生效（灵感模式下会被忽略）。"
+      },
+      "gpt_description": {
+        "type": "string",
+        "required": false,
+        "description": "灵感提示词，`custom=false` 时**必填**（缺了提交期直接 400、不扣费）。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题。**仅 `custom=true` 时生效**。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "要排除的风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，`0.00`–`1.00`（越界提交期直接返回 `400`）。**仅 `custom=true` 时生效**。"
+      },
+      "weirdness": {
+        "type": "number",
+        "required": false,
+        "description": "创意权重，`0.00`–`1.00`。兼容旧名 `weirdness_constraint`；新请求请使用 `weirdness`。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，`0.00`–`1.00`。**仅 `custom=true` 时生效**。"
+      },
+      "vocal_gender": {
+        "type": "string",
+        "required": false,
+        "description": "人声性别：`Male` / `Female`。**两种模式都生效**。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式。启用时要求自定义模式，并按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。本接口不支持目标时长字段。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "兼容 weirdness 的旧字段名，不能与 weirdness 同时提供。"
+      }
+    }
+  },
+  "addStem": {
+    "path": "/v1/music/generations/addStem",
+    "doc": "add-stem",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID，与 `version` 互斥。"
+      },
+      "custom": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=自定义模式（用 `prompt` 作歌词）；`false`=灵感模式（用 `gpt_description`）；不传时按内容推断（见上方 Warning）。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "歌词，`custom=true` 时生效（灵感模式下会被忽略）。"
+      },
+      "gpt_description": {
+        "type": "string",
+        "required": false,
+        "description": "灵感提示词，`custom=false` 时**必填**（缺了提交期直接 400、不扣费）。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题。**仅 `custom=true` 时生效**。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "要排除的风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，`0.00`–`1.00`（越界提交期直接返回 `400`）。**仅 `custom=true` 时生效**。"
+      },
+      "weirdness": {
+        "type": "number",
+        "required": false,
+        "description": "创意权重，`0.00`–`1.00`。兼容旧名 `weirdness_constraint`；新请求请使用 `weirdness`。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，`0.00`–`1.00`。**仅 `custom=true` 时生效**。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式。启用时要求自定义模式，并按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。本接口不支持目标时长字段。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "兼容 weirdness 的旧字段名，不能与 weirdness 同时提供。"
+      }
+    }
+  },
+  "addVocals": {
+    "path": "/v1/music/generations/addVocals",
+    "doc": "add-vocals",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "`POST /v1/music/generations/uploadTask` 返回的上传任务 ID。普通生成任务不能使用；缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID，与 `version` 互斥。"
+      },
+      "custom": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=自定义模式（用 `prompt` 作歌词）；`false`=灵感模式（用 `gpt_description`）；不传时按内容推断（见上方 Warning）。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "歌词，`custom=true` 时生效（灵感模式下会被忽略）。"
+      },
+      "gpt_description": {
+        "type": "string",
+        "required": false,
+        "description": "灵感提示词，`custom=false` 时**必填**（缺了提交期直接 400、不扣费）。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题。**仅 `custom=true` 时生效**。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "排除的风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，`0.00`–`1.00`（超出范围提交期直接返回 `400`）。**仅 `custom=true` 时生效**。"
+      },
+      "weirdness": {
+        "type": "number",
+        "required": false,
+        "description": "创意度权重，`0.00`–`1.00`。兼容旧名 `weirdness_constraint`；新请求请使用 `weirdness`。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，`0.00`–`1.00`。**仅 `custom=true` 时生效**。"
+      },
+      "vocal_gender": {
+        "type": "string",
+        "required": false,
+        "description": "人声性别：`Male` / `Female`。**两种模式均生效**。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式。启用时要求自定义模式，并按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。本接口不支持目标时长字段。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "兼容 weirdness 的旧字段名，不能与 weirdness 同时提供。"
+      }
+    }
+  },
+  "adjustSpeed": {
+    "path": "/v1/music/generations/adjustSpeed",
+    "doc": "adjust-speed",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "speed": {
+        "type": "number",
+        "required": true,
+        "description": "倍速，范围 `0.25`～`4`，如 `1.25`。缺失或越界提交期直接返回 `400`。"
+      },
+      "keep_pitch": {
+        "type": "boolean",
+        "required": false,
+        "description": "变速时是否保持原音高（默认 `true`）。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题（默认 `Untitled`）。"
+      }
+    }
+  },
+  "alignedLyrics": {
+    "path": "/v1/music/generations/alignedLyrics",
+    "doc": "aligned-lyrics",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      }
+    }
+  },
+  "bpm": {
+    "path": "/v1/music/generations/bpm",
+    "doc": "bpm",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      }
+    }
+  },
+  "concat": {
+    "path": "/v1/music/generations/concat",
+    "doc": "concat",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "源任务的 `task_id`——**必须是 extend（续写）产生的分段**（见上方 Warning）。缺失、非 extend 产物或无法解析源时，提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。"
+      }
+    }
+  },
+  "coverSong": {
+    "path": "/v1/music/generations/coverSong",
+    "doc": "cover-song",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`；缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based：1=第 1 首；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID。与 `version`、`persona_id` 互斥。"
+      },
+      "custom": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=自定义模式（用 `prompt` 作歌词）；`false`=灵感模式（用 `gpt_description`）；不传时按内容推断（见上方 Warning）。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "歌词，`custom=true` 时生效（灵感模式下会被忽略）。"
+      },
+      "gpt_description": {
+        "type": "string",
+        "required": false,
+        "description": "灵感提示词，`custom=false` 时**必填**（缺了提交期直接 400、不扣费）。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题。**仅 `custom=true` 时生效**。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "目标风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "排除的风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，`0.00`–`1.00`（超出范围提交期直接返回 `400`）。**仅 `custom=true` 时生效**。"
+      },
+      "weirdness": {
+        "type": "number",
+        "required": false,
+        "description": "创意度权重，`0.00`–`1.00`。兼容旧名 `weirdness_constraint`；新请求请使用 `weirdness`。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，`0.00`–`1.00`。**仅 `custom=true` 时生效**。"
+      },
+      "vocal_gender": {
+        "type": "string",
+        "required": false,
+        "description": "人声性别：`Male` / `Female`。**两种模式均生效**。"
+      },
+      "persona_id": {
+        "type": "string",
+        "required": false,
+        "description": "Persona 风格 ID。**仅 `custom=true` 时生效**，与 `custom_model_id` 互斥。"
+      },
+      "duration_s": {
+        "type": "integer",
+        "required": false,
+        "description": "目标生成时长，范围 10–360 秒，仅 `custom=true` 时可用。实际时长以结果为准。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。可省略。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式。启用时要求自定义模式，并按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "兼容 weirdness 的旧字段名，不能与 weirdness 同时提供。"
+      }
+    }
+  },
+  "createModel": {
+    "path": "/v1/music/generations/createModel",
+    "doc": "create-model",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "固定使用 `suno`。"
+      },
+      "name": {
+        "type": "string",
+        "required": true,
+        "description": "自定义模型名称。去掉首尾空白后不能为空。"
+      },
+      "audio_urls": {
+        "type": "string[]",
+        "required": true,
+        "description": "6–24 条公网可访问的 HTTP(S) 音频直链，建议使用 MP3、WAV 或 M4A。每条 URL 都应直接返回音频文件，不能是需要登录的网页。"
+      }
+    }
+  },
+  "createVoice": {
+    "path": "/v1/music/generations/createVoice",
+    "doc": "create-voice",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "audio_url": {
+        "type": "string",
+        "required": true,
+        "description": "源音轨的公网可访问 URL，系统据此提取音色。**仅接受 MP3 / WAV。** 缺失返回 400 `audio_url cannot be empty`。"
+      }
+    }
+  },
+  "crop": {
+    "path": "/v1/music/generations/crop",
+    "doc": "crop",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "start_s": {
+        "type": "number",
+        "required": true,
+        "description": "裁剪起点（秒），必须大于等于 0；支持小数秒。"
+      },
+      "end_s": {
+        "type": "number",
+        "required": true,
+        "description": "裁剪终点（秒）。必须大于 `start_s`，且不能超过已知源时长；支持小数秒。"
+      }
+    }
+  },
+  "extend": {
+    "path": "/v1/music/generations/extend",
+    "doc": "extend",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`；缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "continue_at": {
+        "type": "number",
+        "required": true,
+        "description": "从第几秒开始续写，必须大于等于 1 且小于源音轨实际时长。支持小数秒。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID。与 `version`、`persona_id` 互斥。"
+      },
+      "custom": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=按 `prompt` 歌词续写；`false`=灵感续写。省略时默认 `true`。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "续写歌词，`custom=true` 时生效。"
+      },
+      "gpt_description": {
+        "type": "string",
+        "required": false,
+        "description": "灵感提示词，仅在显式传入 `custom=false` 时生效，用于引导续写方向。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题。**仅 `custom=true` 时生效**。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "排除的风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "vocal_gender": {
+        "type": "string",
+        "required": false,
+        "description": "人声性别：`Male` / `Female`。**两种模式均生效**。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，`0.00`–`1.00`（超出范围提交期直接返回 `400`）。**仅 `custom=true` 时生效**。"
+      },
+      "weirdness": {
+        "type": "number",
+        "required": false,
+        "description": "创意度权重，`0.00`–`1.00`。兼容旧名 `weirdness_constraint`；新请求请使用 `weirdness`。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，`0.00`–`1.00`。**仅 `custom=true` 时生效**。"
+      },
+      "auto_lyrics": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=对输入歌词进行二次创作。**仅 `custom=true` 时生效**。"
+      },
+      "persona_id": {
+        "type": "string",
+        "required": false,
+        "description": "Persona 风格 ID。**仅 `custom=true` 时生效**，与 `custom_model_id` 互斥。"
+      },
+      "duration_s": {
+        "type": "integer",
+        "required": false,
+        "description": "目标生成时长，范围 10–360 秒，仅 `custom=true` 时可用。实际时长以结果为准。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。可省略。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式。启用时要求 `custom=true`，并按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "兼容 weirdness 的旧字段名，不能与 weirdness 同时提供。"
+      }
+    }
+  },
+  "fadeIn": {
+    "path": "/v1/music/generations/fadeIn",
+    "doc": "fade-in",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "duration_s": {
+        "type": "number",
+        "required": true,
+        "description": "淡入时长（秒）。必须大于 0，且不能超过已知源时长；支持小数秒。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题（默认 `Untitled`）。"
+      }
+    }
+  },
+  "fadeOut": {
+    "path": "/v1/music/generations/fadeOut",
+    "doc": "fade-out",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "duration_s": {
+        "type": "number",
+        "required": true,
+        "description": "淡出时长（秒）。必须大于 0，且不能超过已知源时长；支持小数秒。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题（默认 `Untitled`）。"
+      }
+    }
+  },
+  "generateMp4": {
+    "path": "/v1/music/generations/generateMp4",
+    "doc": "generate-mp4",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      }
+    }
+  },
+  "generation": {
+    "path": "/v1/music/generations",
+    "doc": "generation",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "custom": {
+        "type": "boolean",
+        "required": false,
+        "description": "`false`=灵感模式；`true`=自定义模式（`prompt` 作歌词）。默认 `false`。"
+      },
+      "instrumental": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=纯音乐、无人声。默认 `false`。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`。与 `custom_model_id` 至少提供一个；使用自定义模型时省略本字段。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建自定义模型任务返回的完整 UUID。与 `version`、`persona_id` 互斥；提供本字段后按自定义模型价格档计费。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "灵感提示词 / 歌词。**`custom=false` 时必填**且不超过 3000 个字符；`custom=true` 且 `instrumental=false` 时**必填**且不超过 5000 个字符；自定义纯音乐可省略。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题（自定义模式），不超过 80 个字符。**`custom=false`（灵感模式）时忽略**。"
+      },
+      "style": {
+        "type": "string",
+        "required": false,
+        "description": "风格标签（自定义模式），不超过 1000 个字符。**`custom=false`（灵感模式）时忽略**。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "负向风格标签（不希望出现的风格）。**仅 `custom=true` 时生效**。"
+      },
+      "auto_lyrics": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=对输入歌词进行二次创作。**仅 `custom=true` 时生效**。"
+      },
+      "persona_id": {
+        "type": "string",
+        "required": false,
+        "description": "Persona 风格 ID。**仅 `custom=true` 时生效**，与 `custom_model_id` 互斥。"
+      },
+      "vocal_gender": {
+        "type": "string",
+        "required": false,
+        "description": "人声性别：`Male` / `Female`（也接受 `m` / `f` / `male` / `female`，后端自动归一）。**两种模式均生效**。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，`0.00`–`1.00`。两种模式下都会校验并生效。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "创意度，`0.00`–`1.00`。两种模式下都会校验并生效。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，`0.00`–`1.00`。两种模式下都会校验并生效。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。可省略，没有固定默认值。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式。启用时要求 `custom=true`，并按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。省略时由服务自动选择。"
+      },
+      "duration": {
+        "type": "integer",
+        "required": false,
+        "description": "目标生成时长，范围 10–360 秒，仅 `custom=true` 时可用。实际成品时长以任务结果为准。"
+      }
+    }
+  },
+  "inspo": {
+    "path": "/v1/music/generations/inspo",
+    "doc": "inspo",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "audio_urls": {
+        "type": "array",
+        "required": true,
+        "description": "1–4 个可公开访问的音频 URL 数组。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID，与 `version` 互斥。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "歌词 / 内容。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "风格标签。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "排除的风格标签。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，`0.00`–`1.00`。"
+      },
+      "weirdness": {
+        "type": "number",
+        "required": false,
+        "description": "创意度权重，`0.00`–`1.00`。兼容旧名 `weirdness_constraint`；新请求请使用 `weirdness`。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，`0.00`–`1.00`。"
+      },
+      "vocal_gender": {
+        "type": "string",
+        "required": false,
+        "description": "人声性别：`Male` / `Female`。"
+      },
+      "auto_lyrics": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=对输入歌词进行二次创作。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。可省略。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式；启用后按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "兼容 weirdness 的旧字段名，不能与 weirdness 同时提供。"
+      }
+    }
+  },
+  "lyrics": {
+    "path": "/v1/music/generations/lyrics",
+    "doc": "lyrics",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": true,
+        "description": "想生成什么歌词的描述，去掉首尾空白后不能为空。"
+      },
+      "lyrics_model": {
+        "type": "string",
+        "required": false,
+        "description": "歌词模型：`classic` / `remi`。不传时使用服务默认设置。"
+      }
+    }
+  },
+  "mashup": {
+    "path": "/v1/music/generations/mashup",
+    "doc": "mashup",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_ids": {
+        "type": "string[]",
+        "required": true,
+        "description": "2 个源音轨所属任务的 `task_id` 数组（须**恰好 2 个**；数量不对提交期直接返回 `400`）。"
+      },
+      "audio_indexes": {
+        "type": "integer[]",
+        "required": false,
+        "description": "与 `task_ids` 平行的数组，指定各任务取结果 `data.result.music[]` 第几首（1-based，默认都取 `1`）。"
+      },
+      "instrumental": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否纯器乐（`true`=无人声）；不传默认 `false`（要人声）。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID。与 `version`、`persona_id` 互斥。"
+      },
+      "custom": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=自定义模式（用 `prompt` 作歌词）；`false`=灵感模式（用 `gpt_description`）；不传时按内容推断（见上方 Warning）。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "**条件必填**：`custom=true && instrumental=false` 时必须提供歌词；灵感模式下不生效，但已提交值仍须满足长度要求。"
+      },
+      "gpt_description": {
+        "type": "string",
+        "required": false,
+        "description": "灵感提示词，`custom=false` 时**必填**（缺了提交期直接 400、不扣费）。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题。**仅 `custom=true` 时生效**。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "要排除的风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "auto_lyrics": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=对输入歌词进行二次创作。**仅 `custom=true` 时生效**。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，`0.00`–`1.00`（越界提交期直接返回 `400`）。**仅 `custom=true` 时生效**。"
+      },
+      "weirdness": {
+        "type": "number",
+        "required": false,
+        "description": "创意权重，`0.00`–`1.00`。兼容旧名 `weirdness_constraint`；新请求请使用 `weirdness`。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，`0.00`–`1.00`。**仅 `custom=true` 时生效**。"
+      },
+      "vocal_gender": {
+        "type": "string",
+        "required": false,
+        "description": "人声性别：`Male` / `Female`。**两种模式都生效**。"
+      },
+      "persona_id": {
+        "type": "string",
+        "required": false,
+        "description": "Persona 风格 ID。**仅 `custom=true` 时生效**，与 `custom_model_id` 互斥。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。可省略。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式。启用时要求自定义模式，并按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。本接口不支持目标时长字段。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "兼容 weirdness 的旧字段名，不能与 weirdness 同时提供。"
+      }
+    }
+  },
+  "midi": {
+    "path": "/v1/music/generations/midi",
+    "doc": "midi",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      }
+    }
+  },
+  "persona": {
+    "path": "/v1/music/generations/persona",
+    "doc": "persona",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "name": {
+        "type": "string",
+        "required": true,
+        "description": "Persona 名称；缺失直接返回 `400`。"
+      },
+      "describe": {
+        "type": "string",
+        "required": false,
+        "description": "描述。"
+      },
+      "styles": {
+        "type": "string",
+        "required": false,
+        "description": "风格。"
+      },
+      "vocal_start_s": {
+        "type": "number",
+        "required": false,
+        "description": "人声片段起点（秒），必须大于等于 0。建议与 `vocal_end_s` 成对提供。"
+      },
+      "vocal_end_s": {
+        "type": "number",
+        "required": false,
+        "description": "人声片段终点（秒），必须大于起点且不能超过已知源时长。"
+      }
+    }
+  },
+  "remaster": {
+    "path": "/v1/music/generations/remaster",
+    "doc": "remaster",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`；缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "variation_category": {
+        "type": "string",
+        "required": false,
+        "description": "改编强度：`subtle` / `normal` / `high`。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。"
+      }
+    }
+  },
+  "removeSection": {
+    "path": "/v1/music/generations/removeSection",
+    "doc": "remove-section",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "start_s": {
+        "type": "number",
+        "required": true,
+        "description": "删除起点（秒），必须大于等于 0；支持小数秒。"
+      },
+      "end_s": {
+        "type": "number",
+        "required": true,
+        "description": "删除终点（秒）。必须大于 `start_s`，且不能超过已知源时长；支持小数秒。"
+      }
+    }
+  },
+  "replaceMusic": {
+    "path": "/v1/music/generations/replaceMusic",
+    "doc": "replace-music",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "infill_lyrics": {
+        "type": "string",
+        "required": false,
+        "description": "替换段歌词。"
+      },
+      "start_s": {
+        "type": "number",
+        "required": true,
+        "description": "替换起点（秒）。缺失直接返回 `400`。"
+      },
+      "end_s": {
+        "type": "number",
+        "required": true,
+        "description": "替换终点（秒）。必须满足 `0 ≤ start_s < end_s`；源时长已知时不能越界。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID，与 `version` 互斥。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "上下文歌词。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "风格标签。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "要排除的风格标签。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。可省略。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式；启用后按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。本接口不支持目标时长字段。"
+      }
+    }
+  },
+  "sample": {
+    "path": "/v1/music/generations/sample",
+    "doc": "sample",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`，必须为 `uploadTask` 上传任务。缺失、不是上传任务或无法解析源时，提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based：1=第 1 首；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "start_s": {
+        "type": "number",
+        "required": true,
+        "description": "采样起点（秒）。缺失直接返回 `400`。"
+      },
+      "end_s": {
+        "type": "number",
+        "required": true,
+        "description": "采样终点（秒）。必须满足 `0 ≤ start_s < end_s`；源时长已知时不能越界。"
+      },
+      "instrumental": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否纯器乐（`true`=无人声）；不传默认 `false`（要人声）。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID，与 `version` 互斥。"
+      },
+      "custom": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=自定义模式（用 `prompt` 作歌词）；`false`=灵感模式（用 `gpt_description`）；不传时按内容推断（见上方 Warning）。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "**条件必填**：`custom=true && instrumental=false` 时必须提供歌词；灵感模式下不生效，但已提交值仍须满足长度要求。"
+      },
+      "gpt_description": {
+        "type": "string",
+        "required": false,
+        "description": "灵感提示词，`custom=false` 时**必填**（缺了提交期直接 400、不扣费）。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题。**仅 `custom=true` 时生效**。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "要排除的风格标签。**仅 `custom=true` 时生效**。"
+      },
+      "auto_lyrics": {
+        "type": "boolean",
+        "required": false,
+        "description": "`true`=对输入歌词进行二次创作。**仅 `custom=true` 时生效**。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，`0.00`–`1.00`（越界提交期直接返回 `400`）。**仅 `custom=true` 时生效**。"
+      },
+      "weirdness": {
+        "type": "number",
+        "required": false,
+        "description": "创意权重，`0.00`–`1.00`。兼容旧名 `weirdness_constraint`；新请求请使用 `weirdness`。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，`0.00`–`1.00`。**仅 `custom=true` 时生效**。"
+      },
+      "vocal_gender": {
+        "type": "string",
+        "required": false,
+        "description": "人声性别：`Male` / `Female`。**两种模式都生效**。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。可省略。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式。启用时要求自定义模式，并按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。本接口不支持目标时长字段。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "兼容 weirdness 的旧字段名，不能与 weirdness 同时提供。"
+      }
+    }
+  },
+  "sounds": {
+    "path": "/v1/music/generations/sounds",
+    "doc": "sounds",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": true,
+        "description": "音效文本描述；缺失时提交期直接返回 `400`（不扣费）。建议尽量使用英文提示词，效果更佳。"
+      },
+      "type": {
+        "type": "string",
+        "required": false,
+        "description": "音效类型：`one-shot`（默认，单次）/ `loop`（可循环）。"
+      },
+      "bpm": {
+        "type": "integer",
+        "required": false,
+        "description": "速度，`1`–`300`；超出范围提交期直接返回 `400`。"
+      },
+      "key": {
+        "type": "string",
+        "required": false,
+        "description": "调性枚举：大调 `C` / `C#` / `D` / `D#` / `E` / `F` / `F#` / `G` / `G#` / `A` / `A#` / `B`；小调在后面加 `m`（`Cm` / `C#m` / … / `Bm`）。仅支持升号（`#`）写法，降号（`Db` / `Eb` 等）与 `B#` 会返回 `400`（key param error）。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。"
+      }
+    }
+  },
+  "stemsAll": {
+    "path": "/v1/music/generations/stemsAll",
+    "doc": "stems-all",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`；缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。本接口不发送 `stem_type`、`version` 或 Max 字段。"
+      }
+    }
+  },
+  "stems": {
+    "path": "/v1/music/generations/stems",
+    "doc": "stems",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`；缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "stem_type": {
+        "type": "string",
+        "required": false,
+        "description": "要提取的分轨类型。省略时默认使用 `lead_vocal`。常用值包括 `lead_vocal`、`backing_vocals`、`drum_kit`、`bass`、`piano` 和 `electric_guitar`。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出音频格式：`mp3` / `m4a` / `wav`。"
+      }
+    }
+  },
+  "uploadCover": {
+    "path": "/v1/music/generations/uploadCover",
+    "doc": "upload-cover",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "固定使用 `suno`。"
+      },
+      "audio_url": {
+        "type": "string",
+        "required": true,
+        "description": "公网可访问的 HTTP(S) 音频直链，建议原音频不超过 8 分钟。本地路径、`blob:` URL 和需要登录的页面链接不可用。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`。使用 `custom_model_id` 时省略。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID。与 `version`、`persona_id` 互斥。"
+      },
+      "custom": {
+        "type": "boolean",
+        "required": false,
+        "description": "建议显式发送。`false` 使用 `gpt_description`；`true` 使用歌词和风格字段。"
+      },
+      "instrumental": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否生成纯音乐。`custom=true` 且本字段为 `false` 时，`prompt` 必填。"
+      },
+      "gpt_description": {
+        "type": "string",
+        "required": false,
+        "description": "灵感描述，`custom=false` 时必填，不超过 3000 个字符。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "自定义模式歌词，不超过 5000 个字符。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "风格描述，不超过 1000 个字符。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题，不超过 80 个字符。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "不希望出现的风格。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，范围 0–1。"
+      },
+      "weirdness": {
+        "type": "number",
+        "required": false,
+        "description": "创意度权重，范围 0–1。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，范围 0–1。"
+      },
+      "auto_lyrics": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否对输入歌词进行二次创作。"
+      },
+      "vocal_gender": {
+        "type": "string",
+        "required": false,
+        "description": "人声性别：`Male` / `Female`。"
+      },
+      "persona_id": {
+        "type": "string",
+        "required": false,
+        "description": "Persona ID，与 `custom_model_id` 互斥。"
+      },
+      "duration_s": {
+        "type": "integer",
+        "required": false,
+        "description": "目标生成时长，范围 10–360 秒，仅自定义模式可用。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式。启用时要求自定义模式，并按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出格式：`mp3` / `m4a` / `wav`。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "兼容 weirdness 的旧字段名，不能与 weirdness 同时提供。"
+      }
+    }
+  },
+  "uploadExtend": {
+    "path": "/v1/music/generations/uploadExtend",
+    "doc": "upload-extend",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "固定使用 `suno`。"
+      },
+      "audio_url": {
+        "type": "string",
+        "required": true,
+        "description": "公网可访问的 HTTP(S) 音频直链，建议不超过 8 分钟。本地路径与 `blob:` URL 不可用。"
+      },
+      "continue_at": {
+        "type": "number",
+        "required": true,
+        "description": "延伸起点，必须大于等于 1 秒，并严格小于源音频实际时长。"
+      },
+      "version": {
+        "type": "string",
+        "required": false,
+        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`。使用 `custom_model_id` 时省略。"
+      },
+      "custom_model_id": {
+        "type": "string",
+        "required": false,
+        "description": "创建模型任务返回的完整 UUID。与 `version`、`persona_id` 互斥。"
+      },
+      "prompt": {
+        "type": "string",
+        "required": false,
+        "description": "延伸段歌词，不超过 5000 个字符；省略时按纯音乐延伸语义使用。"
+      },
+      "tags": {
+        "type": "string",
+        "required": false,
+        "description": "风格描述，不超过 1000 个字符。"
+      },
+      "title": {
+        "type": "string",
+        "required": false,
+        "description": "标题，不超过 80 个字符。"
+      },
+      "negative_tags": {
+        "type": "string",
+        "required": false,
+        "description": "不希望出现的风格。"
+      },
+      "style_weight": {
+        "type": "number",
+        "required": false,
+        "description": "风格权重，范围 0–1。"
+      },
+      "weirdness": {
+        "type": "number",
+        "required": false,
+        "description": "创意度权重，范围 0–1。"
+      },
+      "audio_weight": {
+        "type": "number",
+        "required": false,
+        "description": "音频权重，范围 0–1。"
+      },
+      "auto_lyrics": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否对输入歌词进行二次创作。"
+      },
+      "vocal_gender": {
+        "type": "string",
+        "required": false,
+        "description": "人声性别：`Male` / `Female`。"
+      },
+      "persona_id": {
+        "type": "string",
+        "required": false,
+        "description": "Persona ID，与 `custom_model_id` 互斥。"
+      },
+      "duration_s": {
+        "type": "integer",
+        "required": false,
+        "description": "目标生成时长，范围 10–360 秒。实际成品时长以任务结果为准。"
+      },
+      "variety": {
+        "type": "string",
+        "required": false,
+        "description": "风格变化程度：`off` / `normal` / `high` / `extra` / `max`。"
+      },
+      "max_mode": {
+        "type": "boolean",
+        "required": false,
+        "description": "是否启用 Max 模式；启用后按普通售价的 2 倍计费。"
+      },
+      "audio_format": {
+        "type": "string",
+        "required": false,
+        "description": "输出格式：`mp3` / `m4a` / `wav`。"
+      },
+      "weirdness_constraint": {
+        "type": "number",
+        "required": false,
+        "description": "兼容 weirdness 的旧字段名，不能与 weirdness 同时提供。"
+      }
+    }
+  },
+  "uploadTask": {
+    "path": "/v1/music/generations/uploadTask",
+    "doc": "upload",
+    "fields": {
+      "audioFilePath": {
+        "type": "string",
+        "required": true,
+        "description": "已上传到对象存储、可公开读取的音频 HTTP(S) 直链。本机路径与 `blob:` URL 不可用。"
+      }
+    }
+  },
+  "upsampleTags": {
+    "path": "/v1/music/generations/upsampleTags",
+    "doc": "upsample-tags",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "tags": {
+        "type": "string",
+        "required": true,
+        "description": "待增强的风格标签；缺失时提交期直接返回 `400`（不扣费）。"
+      }
+    }
+  },
+  "vox": {
+    "path": "/v1/music/generations/vox",
+    "doc": "vox",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "音频模型。当前传 `suno`（不传默认 `suno`）。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "产出源音轨那次任务的 `task_id`。缺失或无法解析源时提交期直接返回 `400`。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "引用源任务结果 `data.result.music[]` 中的第几首（1-based；默认 `1`；一次生成通常 2 首：索引 1 与 2）。"
+      },
+      "vocal_start_s": {
+        "type": "number",
+        "required": false,
+        "description": "截取起点（秒）。"
+      },
+      "vocal_end_s": {
+        "type": "number",
+        "required": false,
+        "description": "截取终点（秒）。"
+      }
+    }
+  },
+  "download": {
+    "path": "/v1/music/generations/download",
+    "doc": "wav",
+    "fields": {
+      "model": {
+        "type": "string",
+        "required": false,
+        "description": "模型名称。当前填写 `suno`；省略时默认为 `suno`。"
+      },
+      "task_id": {
+        "type": "string",
+        "required": true,
+        "description": "生成源歌曲时返回的任务 ID。 源任务必须： * 属于当前账户 * 已完成 * 包含可下载的音轨 音乐生成、延长、翻唱、分轨等音频任务均可作为来源；歌词、BPM 等仅返回文本的任务无法下载。"
+      },
+      "audio_index": {
+        "type": "integer",
+        "required": false,
+        "description": "要下载源任务结果 `data.result.music[]` 中的第几首歌曲。 * 从 `1` 开始计数 * 默认：`1` * 不得超过源任务实际包含的歌曲数量"
+      },
+      "formats": {
+        "type": "string[]",
+        "required": false,
+        "description": "要下载的文件格式数组，至少包含一项。 可选值： * `mp3` * `m4a` * `wav` 支持同时请求多个格式；格式名大小写不敏感，重复值会自动去重。结果顺序与请求顺序一致。"
+      },
+      "format": {
+        "type": "string",
+        "required": false,
+        "description": "只下载一种格式时，可使用此字段代替 `formats`。 示例：`\"format\": \"mp3\"`"
+      }
+    }
+  }
+}

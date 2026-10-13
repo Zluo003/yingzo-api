@@ -1,0 +1,151 @@
+{
+  "addInstrumental": {
+    "task_id": "musictask_source",
+    "custom": true,
+    "prompt": "lyrics"
+  },
+  "addStem": {
+    "task_id": "musictask_source",
+    "custom": true,
+    "prompt": "lyrics"
+  },
+  "addVocals": {
+    "task_id": "musictask_source",
+    "custom": true,
+    "prompt": "lyrics"
+  },
+  "adjustSpeed": {
+    "task_id": "musictask_source",
+    "speed": 1.25
+  },
+  "alignedLyrics": {
+    "task_id": "musictask_source"
+  },
+  "bpm": {
+    "task_id": "musictask_source"
+  },
+  "concat": {
+    "task_id": "musictask_source"
+  },
+  "coverSong": {
+    "task_id": "musictask_source",
+    "custom": true,
+    "prompt": "lyrics"
+  },
+  "createModel": {
+    "name": "test",
+    "audio_urls": [
+      "https://example.com/a.mp3",
+      "https://example.com/a.mp3",
+      "https://example.com/a.mp3",
+      "https://example.com/a.mp3",
+      "https://example.com/a.mp3",
+      "https://example.com/a.mp3"
+    ]
+  },
+  "createVoice": {
+    "audio_url": "https://example.com/a.mp3"
+  },
+  "crop": {
+    "task_id": "musictask_source",
+    "start_s": 0,
+    "end_s": 2
+  },
+  "extend": {
+    "task_id": "musictask_source",
+    "continue_at": 1,
+    "custom": true,
+    "prompt": "lyrics"
+  },
+  "fadeIn": {
+    "task_id": "musictask_source",
+    "duration_s": 1.5
+  },
+  "fadeOut": {
+    "task_id": "musictask_source",
+    "duration_s": 1.5
+  },
+  "generateMp4": {
+    "task_id": "musictask_source"
+  },
+  "generation": {
+    "prompt": "piano"
+  },
+  "inspo": {
+    "audio_urls": [
+      "https://example.com/a.mp3"
+    ]
+  },
+  "lyrics": {
+    "prompt": "piano"
+  },
+  "mashup": {
+    "task_ids": [
+      "musictask_a",
+      "musictask_b"
+    ],
+    "custom": true,
+    "prompt": "lyrics"
+  },
+  "midi": {
+    "task_id": "musictask_source"
+  },
+  "persona": {
+    "task_id": "musictask_source",
+    "name": "test"
+  },
+  "remaster": {
+    "task_id": "musictask_source"
+  },
+  "removeSection": {
+    "task_id": "musictask_source",
+    "start_s": 0,
+    "end_s": 2
+  },
+  "replaceMusic": {
+    "task_id": "musictask_source",
+    "start_s": 0,
+    "end_s": 2
+  },
+  "sample": {
+    "task_id": "musictask_source",
+    "start_s": 0,
+    "end_s": 2,
+    "custom": true,
+    "prompt": "lyrics"
+  },
+  "sounds": {
+    "prompt": "piano"
+  },
+  "stemsAll": {
+    "task_id": "musictask_source"
+  },
+  "stems": {
+    "task_id": "musictask_source"
+  },
+  "uploadCover": {
+    "audio_url": "https://example.com/a.mp3",
+    "custom": true,
+    "prompt": "lyrics"
+  },
+  "uploadExtend": {
+    "audio_url": "https://example.com/a.mp3",
+    "continue_at": 1
+  },
+  "uploadTask": {
+    "audioFilePath": "https://example.com/a.mp3"
+  },
+  "upsampleTags": {
+    "tags": "pop"
+  },
+  "vox": {
+    "task_id": "musictask_source"
+  },
+  "download": {
+    "task_id": "musictask_source",
+    "formats": [
+      "wav",
+      "mp3"
+    ]
+  }
+}

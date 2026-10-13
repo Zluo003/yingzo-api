@@ -166,6 +166,17 @@ func TestMusicLedger(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "completed", final.Status)
 	require.Equal(t, credits, *final.Quote.UpstreamCreditsCost)
+
+	// Resource lookup must not disclose another key's Persona or custom model.
+	resourceID := uuid.NewString()
+	_, err = integrationDB.ExecContext(ctx, "UPDATE music_tasks SET record=jsonb_set(record, '{result,model_id}', to_jsonb($2::text)) WHERE id=$1", restored.ID, resourceID)
+	require.NoError(t, err)
+	resourceLedger := &durableMusicLedger{db: integrationDB}
+	resource, err := resourceLedger.FindResource(ctx, service.MusicTaskOwner{UserID: user.ID, APIKeyID: key.ID}, "model_id", resourceID)
+	require.NoError(t, err)
+	require.Equal(t, restored.ID, resource.ID)
+	_, err = resourceLedger.FindResource(ctx, service.MusicTaskOwner{UserID: user.ID, APIKeyID: key.ID + 1}, "model_id", resourceID)
+	require.ErrorIs(t, err, service.ErrMusicTaskNotFound)
 	// Free tasks are admitted at an empty balance; unaffordable tasks roll back entirely.
 	_, err = integrationDB.ExecContext(ctx, `UPDATE users SET balance=0 WHERE id=$1`, user.ID)
 	require.NoError(t, err)

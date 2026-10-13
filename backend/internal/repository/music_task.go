@@ -420,3 +420,11 @@ func refundMusicWindowQuotas(ctx context.Context, tx *sql.Tx, t *service.Durable
 }
 
 func mustMusicQuote(q service.MusicTaskQuote) []byte { raw, _ := json.Marshal(q); return raw }
+
+// Resource IDs are scoped to the same API key, just like source task references.
+func (r *durableMusicLedger) FindResource(ctx context.Context, owner service.MusicTaskOwner, field, id string) (*service.DurableMusicTask, error) {
+	if field != "model_id" && field != "persona_id" {
+		return nil, service.ErrMusicTaskNotFound
+	}
+	return scanDurableMusic(r.db.QueryRowContext(ctx, "SELECT "+musicTaskColumns+" FROM music_tasks WHERE user_id=$1 AND api_key_id=$2 AND status='completed' AND record->'result'->>$3=$4 ORDER BY created_at DESC LIMIT 1", owner.UserID, owner.APIKeyID, field, id))
+}
