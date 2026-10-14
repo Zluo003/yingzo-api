@@ -587,7 +587,9 @@ async function saveChanges(): Promise<void> {
       }
       const draft = drafts[model.id]
       const freeImages = normalizeNumber(draft.freeInputImages)
-      if (hasInputImagePricing(model) && (freeImages !== null && (!Number.isInteger(freeImages) || freeImages < 0) || draft.freeInputImages.trim() !== '' && freeImages === null)) {
+      // v-model 在 type="number" 输入框上会把用户输入转成 number，不能直接调 .trim()。
+      const rawFreeImages = String(draft.freeInputImages).trim()
+      if (hasInputImagePricing(model) && ((freeImages !== null && (!Number.isInteger(freeImages) || freeImages < 0)) || (rawFreeImages !== '' && freeImages === null))) {
         throw new Error(t('admin.yingzoAgent.invalidInputImagePricing'))
       }
       // 提交草稿里的媒体类型：管理员在页面上改过类型时，这一次保存就把它落库。

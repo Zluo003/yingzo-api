@@ -163,6 +163,29 @@ describe('admin YingzoAgentView', () => {
     expect(updateAgentModel).toHaveBeenCalledWith(7, 9, expect.objectContaining({ prices: expect.arrayContaining(tiers.map((resolution, index) => ({ resolution, unit_price: index + 2 }))) }))
   })
 
+  it('saves a minimax free input image count typed into the number input', async () => {
+    // v-model 在 type="number" 输入框上会把值转成 number；保存校验若直接对草稿
+    // 调 .trim() 会抛 TypeError，保存被吞掉只剩报错文案。
+    getAgentModels.mockResolvedValue({
+      models: [model({ id: 5, model_code: 'minimax-h3', platform: 'video', media_type: 'video', free_input_images: 5, prices: [{ resolution: '768p', billing_unit: 'second', unit_price: 0.2 }] })],
+    })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="yingzo-agent-tab-video"]').trigger('click')
+    expect(inputValue(wrapper, 'yingzo-agent-free-images-5')).toBe('5')
+
+    await wrapper.get('[data-testid="yingzo-agent-free-images-5"]').setValue('3')
+    await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="yingzo-agent-success"]').exists()).toBe(true)
+    expect(updateAgentModel).toHaveBeenCalledWith(7, 5, {
+      media_type: 'video',
+      enabled: true,
+      prices: [{ resolution: '768p', unit_price: 0.2 }],
+      free_input_images: 3,
+    })
+  })
+
   it('locates the built-in agent group and loads its catalog', async () => {
     const wrapper = await mountView()
 
