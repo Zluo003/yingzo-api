@@ -233,6 +233,7 @@ func (h *UsageHandler) parseUserUsageFilters(c *gin.Context, requireRange bool) 
 
 	return &userUsageFilters{
 		Filters: usagestats.UsageLogFilters{
+			UserTaskView:       true,
 			UserID:             subject.UserID,
 			APIKeyID:           apiKeyID,
 			GroupID:            groupID,
@@ -421,7 +422,7 @@ func (h *UsageHandler) GetByID(c *gin.Context) {
 		return
 	}
 
-	record, err := h.usageService.GetByID(c.Request.Context(), usageID)
+	record, err := h.usageService.GetUserByID(c.Request.Context(), usageID, subject.UserID)
 	if err != nil {
 		response.ErrorFrom(c, err)
 		return

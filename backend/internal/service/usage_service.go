@@ -157,6 +157,20 @@ func (s *UsageService) GetByID(ctx context.Context, id int64) (*UsageLog, error)
 	return log, nil
 }
 
+// GetUserByID projects owned image ledger events to a single net-cost task.
+func (s *UsageService) GetUserByID(ctx context.Context, id, userID int64) (*UsageLog, error) {
+	log, err := s.GetByID(ctx, id)
+	if err != nil || log.UserID != userID {
+		return log, err
+	}
+	if repo, ok := s.usageRepo.(interface {
+		ResolveUserTaskUsage(context.Context, *UsageLog) (*UsageLog, error)
+	}); ok {
+		return repo.ResolveUserTaskUsage(ctx, log)
+	}
+	return log, nil
+}
+
 // ListByUser 获取用户的使用日志列表
 func (s *UsageService) ListByUser(ctx context.Context, userID int64, params pagination.PaginationParams) ([]UsageLog, *pagination.PaginationResult, error) {
 	logs, pagination, err := s.usageRepo.ListByUser(ctx, userID, params)

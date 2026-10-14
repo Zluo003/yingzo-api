@@ -83,15 +83,22 @@ func TestDurableImageWorkerMockUpstream(t *testing.T) {
 		t.Skip("requires disposable PostgreSQL")
 	}
 	const encoded = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	large := selectionTestPNG(t, 64, 32)
 	for _, tc := range []struct {
 		name, path, body string
 		failUpload       bool
+		count, outputs   int
+		large            bool
 	}{
-		{"openai", "/v1/images/generations", `{"data":[{"b64_json":"` + encoded + `"}]}`, false},
-		{"grok", "/v1/images/edits", `{"data":[{"b64_json":"` + encoded + `"}]}`, false},
-		{"gemini", "/v1beta/models/gemini-image:generateContent", `{"candidates":[{"content":{"parts":[{"inlineData":{"data":"` + encoded + `","mimeType":"image/png"}}]}}]}`, false},
-		{"empty", "/v1/images/generations", `{"data":[]}`, false},
-		{"upload_failure", "/v1/images/generations", `{"data":[{"b64_json":"` + encoded + `"}]}`, true},
+		{"openai", "/v1/images/generations", `{"data":[{"b64_json":"` + encoded + `"}]}`, false, 1, 1, false},
+		{"grok", "/v1/images/edits", `{"data":[{"b64_json":"` + encoded + `"}]}`, false, 1, 1, false},
+		{"gemini", "/v1beta/models/gemini-image:generateContent", `{"candidates":[{"content":{"parts":[{"inlineData":{"data":"` + encoded + `","mimeType":"image/png"}}]}}]}`, false, 1, 1, false},
+		{"empty", "/v1/images/generations", `{"data":[]}`, false, 1, 0, false},
+		{"upload_failure", "/v1/images/generations", `{"data":[{"b64_json":"` + encoded + `"}]}`, true, 1, 0, false},
+		{"openai_upscale", "/v1/images/generations", `{"data":[{"b64_json":"` + encoded + `"},{"b64_json":"` + large + `"}]}`, false, 1, 1, true},
+		{"gemini_upscale", "/v1beta/models/gemini-image:generateContent", `{"candidates":[{"content":{"parts":[{"inlineData":{"data":"` + encoded + `","mimeType":"image/png"}},{"inlineData":{"data":"` + large + `","mimeType":"image/png"}}]}}]}`, false, 1, 1, true},
+		{"direct_high", "/v1/images/generations", `{"data":[{"b64_json":"` + large + `"}]}`, false, 1, 1, true},
+		{"multi_image", "/v1/images/generations", `{"data":[{"b64_json":"` + encoded + `"},{"b64_json":"` + large + `"}]}`, false, 2, 2, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			db := openReleaseTestDB(t, dsn)
@@ -124,7 +131,7 @@ func TestDurableImageWorkerMockUpstream(t *testing.T) {
 			protected, err := svc.encryptor.Encrypt(string(snapshot))
 			require.NoError(t, err)
 			require.NotContains(t, protected, key.Key)
-			task := &DurableImageTask{ImageTaskRecord: ImageTaskRecord{ID: "task_" + tc.name, UserID: 1, APIKeyID: 2, Phase: "executing", DeadlineAt: time.Now().Add(time.Minute).Unix()}, EncryptedRequest: protected, LeaseToken: "lease", Quote: ImageTaskQuote{Model: "test-image", PerImage: &CostBreakdown{ActualCost: 2}}}
+			task := &DurableImageTask{ImageTaskRecord: ImageTaskRecord{ID: "task_" + tc.name, UserID: 1, APIKeyID: 2, Phase: "executing", DeadlineAt: time.Now().Add(time.Minute).Unix()}, EncryptedRequest: protected, LeaseToken: "lease", Quote: ImageTaskQuote{Count: tc.count, Model: "test-image", PerImage: &CostBreakdown{ActualCost: 2}}}
 			execute := func(ctx context.Context, snapshot *ImageRequestSnapshot, _ *APIKey, capture *AsyncImageExecution) (int, json.RawMessage, error) {
 				require.True(t, IsAsyncImageExecution(ctx))
 				req, err := http.NewRequestWithContext(ctx, "POST", upstream.URL+snapshot.Path, nil)
@@ -149,7 +156,38 @@ func TestDurableImageWorkerMockUpstream(t *testing.T) {
 				return
 			}
 			require.True(t, ledger.success)
-			require.Equal(t, 2.0, ledger.usage.ActualCost)
+			require.Equal(t, float64(tc.outputs)*2, ledger.usage.ActualCost)
+			require.Equal(t, tc.outputs, ledger.usage.ImageCount)
+			require.Equal(t, 1.0, ledger.usage.TotalCost, "upstream statistics stay independent")
+			var output struct {
+				Data []struct {
+					AssetID string `json:"asset_id"`
+				} `json:"data"`
+			}
+			require.NoError(t, json.Unmarshal(ledger.final.Result, &output))
+			require.Len(t, output.Data, tc.outputs)
+			// Legacy task polling applies the same selection from persisted asset
+			// dimensions, without generating or downloading the images again.
+			if tc.count == 2 {
+				fresh, err := svc.refreshResult(context.Background(), ledger.final.Result, ImageTaskOwner{UserID: 1, APIKeyID: 2}, 1)
+				require.NoError(t, err)
+				var single struct {
+					Data []struct {
+						AssetID string `json:"asset_id"`
+					} `json:"data"`
+				}
+				require.NoError(t, json.Unmarshal(fresh, &single))
+				require.Len(t, single.Data, 1)
+				require.Equal(t, output.Data[1].AssetID, single.Data[0].AssetID)
+			}
+			var published int
+			require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM temporary_assets`).Scan(&published))
+			require.Equal(t, tc.outputs, published, "drafts are not published")
+			if tc.large && tc.count == 1 {
+				var width int
+				require.NoError(t, db.QueryRow(`SELECT (metadata->>'width')::int FROM temporary_assets WHERE id=$1`, output.Data[0].AssetID).Scan(&width))
+				require.Equal(t, 64, width)
+			}
 			require.Contains(t, string(ledger.final.Result), "asset_id")
 			// A persisted upstream response resumes publication without calling upstream.
 			task.Phase = "saving"

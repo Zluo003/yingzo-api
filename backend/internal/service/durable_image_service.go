@@ -259,7 +259,7 @@ func (s *DurableImageService) Get(ctx context.Context, owner ImageTaskOwner, key
 		t.BillingStatus = "refunding"
 	}
 	if t.Status == ImageTaskStatusCompleted {
-		result, err := s.refreshResult(ctx, t.Result, owner)
+		result, err := s.refreshResult(ctx, t.Result, owner, t.Quote.Count)
 		if err != nil {
 			return nil, err
 		}
@@ -542,6 +542,17 @@ func (s *DurableImageService) publishResult(ctx context.Context, t *DurableImage
 	}
 	owner := TemporaryAssetOwner{UserID: key.UserID, APIKeyID: key.ID, GroupID: *key.GroupID}
 	fetcher := NewImageResultUploader(nil, "", maxPublishedGeneratedImageBytes, newGeneratedVideoHTTPClient())
+	// Flow may return a draft and its upscale in one response. A single-image
+	// quote buys one delivered image, regardless of upstream account/model.
+	selectedIndex := 0
+	if t.Quote.Count == 1 && len(items) > 1 {
+		var err error
+		selectedIndex, err = s.selectLargestImage(ctx, items, key, base, fetcher)
+		if err != nil {
+			return nil, 0, err
+		}
+		items = items[selectedIndex : selectedIndex+1]
+	}
 	for i, item := range items {
 		var rawURL string
 		_ = json.Unmarshal(item["url"], &rawURL)
@@ -567,7 +578,7 @@ func (s *DurableImageService) publishResult(ctx context.Context, t *DurableImage
 			if err != nil {
 				return nil, 0, err
 			}
-			stableID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(fmt.Sprintf("%s:%d", t.ID, i)))
+			stableID := uuid.NewSHA1(uuid.NameSpaceOID, []byte(fmt.Sprintf("%s:%d", t.ID, i+selectedIndex)))
 			publishCtx := context.WithValue(ctx, generatedAssetIDKey{}, stableID)
 			stableURL, err := s.publisher.PublishGeneratedImage(publishCtx, owner, base, base64.StdEncoding.EncodeToString(data), "")
 			if err != nil {
@@ -613,7 +624,7 @@ func (s *DurableImageService) assetURL(ctx context.Context, id string, owner Ima
 	}
 	return strings.TrimRight(base, "/") + "/media/" + id + "/asset" + extension, nil
 }
-func (s *DurableImageService) refreshResult(ctx context.Context, result json.RawMessage, owner ImageTaskOwner) (json.RawMessage, error) {
+func (s *DurableImageService) refreshResult(ctx context.Context, result json.RawMessage, owner ImageTaskOwner, count int) (json.RawMessage, error) {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(result, &top); err != nil {
 		return nil, err
@@ -621,6 +632,21 @@ func (s *DurableImageService) refreshResult(ctx context.Context, result json.Raw
 	var items []map[string]json.RawMessage
 	if err := json.Unmarshal(top["data"], &items); err != nil {
 		return nil, err
+	}
+	if count == 1 && len(items) > 1 {
+		best, largest := 0, int64(0)
+		for i, item := range items {
+			var id string
+			_ = json.Unmarshal(item["asset_id"], &id)
+			area, err := s.ownedImageArea(ctx, id, owner)
+			if err != nil {
+				return nil, err
+			}
+			if area > largest {
+				best, largest = i, area
+			}
+		}
+		items = items[best : best+1]
 	}
 	for _, item := range items {
 		var id, old string

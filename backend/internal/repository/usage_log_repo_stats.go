@@ -696,6 +696,13 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 		args = append(args, *filters.EndTime)
 	}
 
+	source := "usage_logs"
+	requestCount := "COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END)"
+	if filters.UserTaskView && filters.UserID > 0 {
+		source = userTaskUsageSource("$1")
+		requestCount = "COUNT(*)"
+	}
+
 	query := fmt.Sprintf(`
 		WITH scoped AS (
 			SELECT
@@ -710,7 +717,7 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 				actual_cost,
 				COALESCE(account_stats_cost, total_cost) * COALESCE(account_rate_multiplier, 1) AS account_cost,
 				duration_ms
-			FROM usage_logs
+			FROM %s
 			%s
 		)
 		SELECT
@@ -718,7 +725,7 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 			GROUPING(upstream_endpoint) AS upstream_grouped,
 			inbound_endpoint,
 			upstream_endpoint,
-			COUNT(CASE WHEN COALESCE(funds_event,'precharge')='precharge' THEN 1 END) AS requests,
+			%s AS requests,
 			COALESCE(SUM(input_tokens), 0) AS input_tokens,
 			COALESCE(SUM(output_tokens), 0) AS output_tokens,
 			COALESCE(SUM(cache_creation_tokens), 0) AS cache_creation_tokens,
@@ -734,7 +741,7 @@ func (r *usageLogRepository) GetStatsWithFilters(ctx context.Context, filters Us
 			(upstream_endpoint),
 			(inbound_endpoint, upstream_endpoint)
 		)
-	`, buildWhere(conditions))
+	`, source, buildWhere(conditions), requestCount)
 
 	stats := &UsageStats{}
 	var totalAccountCost float64

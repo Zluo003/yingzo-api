@@ -276,12 +276,15 @@ type PlatformDashboardStats struct {
 
 // UsageLogFilters represents filters for usage log queries
 type UsageLogFilters struct {
-	UserID    int64
-	APIKeyID  int64
-	AccountID int64
-	GroupID   int64
-	RequestID string
-	Model     string
+	// UserTaskView projects image financial events into one logical user record.
+	// Admin/audit queries keep the original ledger rows.
+	UserTaskView bool
+	UserID       int64
+	APIKeyID     int64
+	AccountID    int64
+	GroupID      int64
+	RequestID    string
+	Model        string
 	// ModelFilterSource controls how Model is matched. Empty preserves raw usage_logs.model semantics.
 	ModelFilterSource     string
 	RequestType           *int16

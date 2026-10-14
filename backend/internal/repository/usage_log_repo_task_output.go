@@ -23,6 +23,7 @@ func (r *usageLogRepository) LoadTaskOutputs(ctx context.Context, userID int64, 
 	args := []any{userID}
 	var holders []string
 	byID := make(map[int64]*service.UsageLog)
+	singleImage := make(map[int64]bool)
 	for i := range logs {
 		log := &logs[i]
 		log.TaskOutputs = nil
@@ -42,7 +43,7 @@ func (r *usageLogRepository) LoadTaskOutputs(ctx context.Context, userID int64, 
 	if len(holders) == 0 {
 		return nil
 	}
-	rows, err := r.sql.QueryContext(ctx, `SELECT ul.id, it.record->'result', mt.record->'result', COALESCE(vt.result_video_url, '')
+	rows, err := r.sql.QueryContext(ctx, `SELECT ul.id, it.record->'result', mt.record->'result', COALESCE(vt.result_video_url, ''), COALESCE(it.quote->>'Count'='1', false)
  FROM usage_logs ul
  LEFT JOIN image_tasks it ON it.id = COALESCE(NULLIF(ul.image_task_id, ''), CASE WHEN ul.request_id LIKE 'image:%' THEN split_part(ul.request_id, ':', 2) END)
  AND it.user_id = ul.user_id AND it.api_key_id = ul.api_key_id AND it.status = 'completed'
@@ -59,11 +60,13 @@ func (r *usageLogRepository) LoadTaskOutputs(ctx context.Context, userID int64, 
 		var id int64
 		var imageResult, musicResult []byte
 		var videoURL string
-		if err := rows.Scan(&id, &imageResult, &musicResult, &videoURL); err != nil {
+		var single bool
+		if err := rows.Scan(&id, &imageResult, &musicResult, &videoURL, &single); err != nil {
 			_ = rows.Close()
 			return err
 		}
 		if log := byID[id]; log != nil {
+			singleImage[id] = single
 			candidates = append(candidates, usageOutputCandidates(log, imageResult, musicResult, videoURL)...)
 		}
 	}
@@ -85,25 +88,50 @@ func (r *usageLogRepository) LoadTaskOutputs(ctx context.Context, userID int64, 
 		holders = append(holders, fmt.Sprintf("($%d::int, $%d::uuid, $%d::bigint, $%d::bigint, $%d::text)", n+1, n+2, n+3, n+4, n+5))
 		args = append(args, i, candidate.assetID.String(), candidate.log.UserID, candidate.log.APIKeyID, candidate.output.MediaType)
 	}
-	assets, err := r.sql.QueryContext(ctx, `SELECT requested.ordinal, GREATEST(a.expires_at, a.lease_until)
+	assets, err := r.sql.QueryContext(ctx, `SELECT requested.ordinal, GREATEST(a.expires_at, a.lease_until), a.metadata,
+ a.deleted_at IS NULL AND GREATEST(a.expires_at, a.lease_until) > NOW()
  FROM (VALUES `+strings.Join(holders, ",")+`) AS requested(ordinal, asset_id, user_id, api_key_id, media_type)
  JOIN temporary_assets a ON a.id = requested.asset_id AND a.user_id = requested.user_id AND a.api_key_id = requested.api_key_id
  AND a.media_type = requested.media_type AND a.purpose = 'generated'
- WHERE a.deleted_at IS NULL AND GREATEST(a.expires_at, a.lease_until) > NOW()
  ORDER BY requested.ordinal`, args...)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = assets.Close() }()
+	bestArea := make(map[int64]int64)
+	selected := make(map[int64]usageOutputCandidate)
+	selectedAvailable := make(map[int64]bool)
 	for assets.Next() {
 		var index int
 		var expires time.Time
-		if err := assets.Scan(&index, &expires); err != nil {
+		var metadata []byte
+		var available bool
+		if err := assets.Scan(&index, &expires, &metadata, &available); err != nil {
 			return err
 		}
 		candidate := candidates[index]
 		candidate.output.ExpiresAt = expires
-		candidate.log.TaskOutputs = append(candidate.log.TaskOutputs, candidate.output)
+		if singleImage[candidate.log.ID] && candidate.output.MediaType == "image" {
+			var dimensions struct{ Width, Height int64 }
+			_ = json.Unmarshal(metadata, &dimensions)
+			area := dimensions.Width * dimensions.Height
+			if _, exists := selected[candidate.log.ID]; exists && area <= bestArea[candidate.log.ID] {
+				continue
+			}
+			bestArea[candidate.log.ID] = area
+			selected[candidate.log.ID] = candidate
+			selectedAvailable[candidate.log.ID] = available
+			continue
+		}
+		if available {
+			candidate.log.TaskOutputs = append(candidate.log.TaskOutputs, candidate.output)
+		}
+	}
+	// Expired/deleted finals must not make a still-live draft reappear.
+	for id, candidate := range selected {
+		if selectedAvailable[id] {
+			candidate.log.TaskOutputs = []service.UsageTaskOutput{candidate.output}
+		}
 	}
 	return assets.Err()
 }

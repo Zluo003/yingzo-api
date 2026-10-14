@@ -52,23 +52,23 @@ func TestUsageTaskOutputsPostgresLifecycleAndOwnership(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = scoped.Close() }()
 	_, err = scoped.Exec(`CREATE TABLE usage_logs(id bigint PRIMARY KEY,user_id bigint,api_key_id bigint,request_id text,image_task_id text,music_task_id text,video_task_id text);
- CREATE TABLE image_tasks(id text PRIMARY KEY,user_id bigint,api_key_id bigint,status text,record jsonb);
+ CREATE TABLE image_tasks(id text PRIMARY KEY,user_id bigint,api_key_id bigint,status text,record jsonb,quote jsonb);
  CREATE TABLE music_tasks(LIKE image_tasks INCLUDING ALL);
  CREATE TABLE video_tasks(public_id text PRIMARY KEY,user_id bigint,api_key_id bigint,status text,result_video_url text);
- CREATE TABLE temporary_assets(id uuid PRIMARY KEY,user_id bigint,api_key_id bigint,media_type text,purpose text,expires_at timestamptz,lease_until timestamptz,deleted_at timestamptz);`)
+ CREATE TABLE temporary_assets(id uuid PRIMARY KEY,user_id bigint,api_key_id bigint,media_type text,purpose text,expires_at timestamptz,lease_until timestamptz,deleted_at timestamptz,metadata jsonb);`)
 	require.NoError(t, err)
 	assetIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	mediaURL := func(index int) string { return "https://example.test/media/" + assetIDs[index] + "/asset" }
 	expires := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
 	for i, media := range []string{"image", "audio", "video", "image"} {
-		_, err = scoped.Exec(`INSERT INTO temporary_assets VALUES($1,42,7,$2,'generated',$3,NULL,NULL)`, assetIDs[i], media, expires)
+		_, err = scoped.Exec(`INSERT INTO temporary_assets VALUES($1,42,7,$2,'generated',$3,NULL,NULL,'{}')`, assetIDs[i], media, expires)
 		require.NoError(t, err)
 	}
 	imageResult, _ := json.Marshal(map[string]any{"result": map[string]any{"data": []any{map[string]string{"url": mediaURL(0)}, map[string]string{"url": mediaURL(3)}}}})
 	musicResult, _ := json.Marshal(map[string]any{"result": service.MusicResult{Music: []service.MusicTrack{{AudioURL: mediaURL(1), Title: "song"}}}})
-	_, err = scoped.Exec(`INSERT INTO image_tasks VALUES('image_one',42,7,'completed',$1);`, imageResult)
+	_, err = scoped.Exec(`INSERT INTO image_tasks VALUES('image_one',42,7,'completed',$1,'{"Count":2}');`, imageResult)
 	require.NoError(t, err)
-	_, err = scoped.Exec(`INSERT INTO music_tasks VALUES('music_one',42,7,'completed',$1);`, musicResult)
+	_, err = scoped.Exec(`INSERT INTO music_tasks VALUES('music_one',42,7,'completed',$1,'{"Count":2}');`, musicResult)
 	require.NoError(t, err)
 	_, err = scoped.Exec(`INSERT INTO video_tasks VALUES('video_one',42,7,'completed',$1);`, mediaURL(2))
 	require.NoError(t, err)
@@ -99,6 +99,24 @@ func TestUsageTaskOutputsPostgresLifecycleAndOwnership(t *testing.T) {
 	for _, log := range logs[3:] {
 		require.Empty(t, log.TaskOutputs)
 	}
+	// Existing single-image tasks also show only the largest retained result.
+	_, err = scoped.Exec(`UPDATE temporary_assets SET metadata=$2 WHERE id=$1`, assetIDs[0], `{"width":1376,"height":768}`)
+	require.NoError(t, err)
+	_, err = scoped.Exec(`UPDATE temporary_assets SET metadata=$2 WHERE id=$1`, assetIDs[3], `{"width":5504,"height":3072}`)
+	require.NoError(t, err)
+	_, err = scoped.Exec(`UPDATE image_tasks SET quote='{"Count":1}'`)
+	require.NoError(t, err)
+	load()
+	require.Len(t, logs[0].TaskOutputs, 1)
+	require.Equal(t, mediaURL(3), logs[0].TaskOutputs[0].URL)
+	_, err = scoped.Exec(`UPDATE temporary_assets SET deleted_at=NOW() WHERE id=$1`, assetIDs[3])
+	require.NoError(t, err)
+	load()
+	require.Empty(t, logs[0].TaskOutputs, "deleted final cannot fall back to a draft")
+	_, err = scoped.Exec(`UPDATE temporary_assets SET deleted_at=NULL WHERE id=$1`, assetIDs[3])
+	require.NoError(t, err)
+	_, err = scoped.Exec(`UPDATE image_tasks SET quote='{"Count":2}'`)
+	require.NoError(t, err)
 	_, err = scoped.Exec(`UPDATE temporary_assets SET expires_at=NOW()-INTERVAL '1 second' WHERE id=$1`, assetIDs[0])
 	require.NoError(t, err)
 	load()

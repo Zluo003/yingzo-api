@@ -20,6 +20,7 @@ func TestUserUsageListCombinedMediaFilters(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, rec.Code)
 			require.Equal(t, int64(42), repo.listFilters.UserID)
+			require.True(t, repo.listFilters.UserTaskView)
 			require.Equal(t, media, repo.listFilters.UsageType)
 			require.Equal(t, "vendor/model+preview", repo.listFilters.Model)
 			require.Nil(t, repo.listFilters.RequestType)

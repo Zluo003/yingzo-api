@@ -154,7 +154,9 @@ func (r *usageLogRepository) ListWithFilters(ctx context.Context, params paginat
 		page *pagination.PaginationResult
 		err  error
 	)
-	if shouldUseFastUsageLogTotal(filters) {
+	if filters.UserTaskView && filters.UserID > 0 {
+		logs, page, err = r.listUserTaskUsage(ctx, whereClause, args, params)
+	} else if shouldUseFastUsageLogTotal(filters) {
 		logs, page, err = r.listUsageLogsWithFastPagination(ctx, whereClause, args, params)
 	} else {
 		logs, page, err = r.listUsageLogsWithPagination(ctx, whereClause, args, params)
