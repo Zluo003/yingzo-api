@@ -4499,7 +4499,7 @@ function onCnPresetSelect(preset: { mode: CnAccountMode; protocol: CnApiProtocol
 }
 
 /** 视频上游平台，名称与后端适配器保持一致。 */
-type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang'
+type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart'
 
 const videoProvider = ref<VideoProvider>('aigod')
 const videoAPIPath = ref('/v1/videos')
@@ -4557,6 +4557,7 @@ const videoProviderDefaultsMap: Record<
     requestTimeoutMs: 1800000,
     connectTimeoutMs: 60000
   },
+  apimart: { baseUrl: 'https://api.apimart.ai', apiPath: '/v1/tasks', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
   xingguang: {
     baseUrl: 'https://xingapi.top',
     apiPath: '/v1/videos',
@@ -4591,6 +4592,11 @@ const videoProviderOptions: {
     value: 'jingyu',
     labelKey: 'admin.accounts.video.providers.jingyu',
     hintKey: 'admin.accounts.video.jingyuAdapter'
+  },
+  {
+    value: 'apimart',
+    labelKey: 'admin.accounts.video.providers.apimart',
+    hintKey: 'admin.accounts.video.apimartAdapter'
   },
   {
     value: 'xingguang',
@@ -4646,7 +4652,9 @@ const upstreamModelsPreviewed = ref(false)
 /** 对外提供的视频模型：单一来源见 @/views/admin/videoModelResolutions。 */
 const videoDefaultModels = VIDEO_MODEL_CODES
 /** 视频模型选择与上游名称独立保存，留空名称由适配器按模型/分辨率路由。 */
-const selectedVideoModels = ref<string[]>([...videoDefaultModels])
+// Keep the initial selection serviceable by one provider; APIMart models remain selectable.
+const initialVideoModels = videoDefaultModels.filter(model => !model.startsWith('minimax-h3'))
+const selectedVideoModels = ref<string[]>([...initialVideoModels])
 const videoUpstreamModels = ref<Record<string, string>>({})
 /**
  * 每个模型在本账号实际支持的分辨率，提交进 extra.video_model_resolutions。
@@ -5290,7 +5298,7 @@ watch(
       form.concurrency = 1
       form.load_factor = null
       videoProvider.value = 'aigod'
-      selectedVideoModels.value = [...videoDefaultModels]
+      selectedVideoModels.value = [...initialVideoModels]
       videoUpstreamModels.value = {}
       selectedVideoResolutions.value = defaultVideoModelResolutions()
       selectedVideoDurations.value = defaultVideoModelDurations()
@@ -5798,7 +5806,7 @@ const resetForm = () => {
   videoPollTimeoutMs.value = videoProviderDefaultsMap.aigod.pollTimeoutMs
   videoRequestTimeoutMs.value = videoProviderDefaultsMap.aigod.requestTimeoutMs
   videoConnectTimeoutMs.value = videoProviderDefaultsMap.aigod.connectTimeoutMs
-  selectedVideoModels.value = [...videoDefaultModels]
+  selectedVideoModels.value = [...initialVideoModels]
   videoUpstreamModels.value = {}
   selectedVideoCapabilities.value = parseVideoModelCapabilities(undefined)
   selectedVideoResolutions.value = defaultVideoModelResolutions()

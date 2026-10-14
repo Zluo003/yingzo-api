@@ -602,6 +602,7 @@ func (h *AgentHandler) calculateGenerationQuote(ctx context.Context, apiKey *ser
 		quote.Details = map[string]any{
 			"count": input.Count, "resolution": estimate.Resolution, "ability_code": estimate.AbilityCode,
 			"generated_seconds": estimate.GeneratedSeconds, "reference_video_seconds": estimate.ReferenceVideoSeconds,
+			"input_images": estimate.InputImages, "free_input_images": estimate.FreeInputImages, "billable_input_images": estimate.BillableInputImages, "credits_per_input_image": estimate.CreditsPerInputImage, "input_image_cost": estimate.InputImageCost,
 			"billable_seconds": estimate.BillableSeconds, "reference_video_multiplier": estimate.ReferenceVideoMultiplier,
 		}
 		quote.RequestHash = hashJSON(map[string]any{

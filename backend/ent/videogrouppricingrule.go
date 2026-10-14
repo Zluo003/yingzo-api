@@ -28,6 +28,10 @@ type VideoGroupPricingRule struct {
 	CreditsPerSecond float64 `json:"credits_per_second,omitempty"`
 	// ReferenceVideoMultiplier holds the value of the "reference_video_multiplier" field.
 	ReferenceVideoMultiplier float64 `json:"reference_video_multiplier,omitempty"`
+	// FreeInputImages holds the value of the "free_input_images" field.
+	FreeInputImages *int `json:"free_input_images,omitempty"`
+	// CreditsPerInputImage holds the value of the "credits_per_input_image" field.
+	CreditsPerInputImage float64 `json:"credits_per_input_image,omitempty"`
 	// Enabled holds the value of the "enabled" field.
 	Enabled bool `json:"enabled,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
@@ -67,9 +71,9 @@ func (*VideoGroupPricingRule) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case videogrouppricingrule.FieldEnabled:
 			values[i] = new(sql.NullBool)
-		case videogrouppricingrule.FieldCreditsPerSecond, videogrouppricingrule.FieldReferenceVideoMultiplier:
+		case videogrouppricingrule.FieldCreditsPerSecond, videogrouppricingrule.FieldReferenceVideoMultiplier, videogrouppricingrule.FieldCreditsPerInputImage:
 			values[i] = new(sql.NullFloat64)
-		case videogrouppricingrule.FieldID, videogrouppricingrule.FieldGroupID:
+		case videogrouppricingrule.FieldID, videogrouppricingrule.FieldGroupID, videogrouppricingrule.FieldFreeInputImages:
 			values[i] = new(sql.NullInt64)
 		case videogrouppricingrule.FieldModelCode, videogrouppricingrule.FieldResolution:
 			values[i] = new(sql.NullString)
@@ -125,6 +129,19 @@ func (_m *VideoGroupPricingRule) assignValues(columns []string, values []any) er
 				return fmt.Errorf("unexpected type %T for field reference_video_multiplier", values[i])
 			} else if value.Valid {
 				_m.ReferenceVideoMultiplier = value.Float64
+			}
+		case videogrouppricingrule.FieldFreeInputImages:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field free_input_images", values[i])
+			} else if value.Valid {
+				_m.FreeInputImages = new(int)
+				*_m.FreeInputImages = int(value.Int64)
+			}
+		case videogrouppricingrule.FieldCreditsPerInputImage:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field credits_per_input_image", values[i])
+			} else if value.Valid {
+				_m.CreditsPerInputImage = value.Float64
 			}
 		case videogrouppricingrule.FieldEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -199,6 +216,14 @@ func (_m *VideoGroupPricingRule) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("reference_video_multiplier=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ReferenceVideoMultiplier))
+	builder.WriteString(", ")
+	if v := _m.FreeInputImages; v != nil {
+		builder.WriteString("free_input_images=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("credits_per_input_image=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CreditsPerInputImage))
 	builder.WriteString(", ")
 	builder.WriteString("enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Enabled))

@@ -58016,6 +58016,10 @@ type VideoGroupPricingRuleMutation struct {
 	addcredits_per_second         *float64
 	reference_video_multiplier    *float64
 	addreference_video_multiplier *float64
+	free_input_images             *int
+	addfree_input_images          *int
+	credits_per_input_image       *float64
+	addcredits_per_input_image    *float64
 	enabled                       *bool
 	created_at                    *time.Time
 	updated_at                    *time.Time
@@ -58345,6 +58349,132 @@ func (m *VideoGroupPricingRuleMutation) ResetReferenceVideoMultiplier() {
 	m.addreference_video_multiplier = nil
 }
 
+// SetFreeInputImages sets the "free_input_images" field.
+func (m *VideoGroupPricingRuleMutation) SetFreeInputImages(i int) {
+	m.free_input_images = &i
+	m.addfree_input_images = nil
+}
+
+// FreeInputImages returns the value of the "free_input_images" field in the mutation.
+func (m *VideoGroupPricingRuleMutation) FreeInputImages() (r int, exists bool) {
+	v := m.free_input_images
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFreeInputImages returns the old "free_input_images" field's value of the VideoGroupPricingRule entity.
+// If the VideoGroupPricingRule object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *VideoGroupPricingRuleMutation) OldFreeInputImages(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFreeInputImages is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFreeInputImages requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFreeInputImages: %w", err)
+	}
+	return oldValue.FreeInputImages, nil
+}
+
+// AddFreeInputImages adds i to the "free_input_images" field.
+func (m *VideoGroupPricingRuleMutation) AddFreeInputImages(i int) {
+	if m.addfree_input_images != nil {
+		*m.addfree_input_images += i
+	} else {
+		m.addfree_input_images = &i
+	}
+}
+
+// AddedFreeInputImages returns the value that was added to the "free_input_images" field in this mutation.
+func (m *VideoGroupPricingRuleMutation) AddedFreeInputImages() (r int, exists bool) {
+	v := m.addfree_input_images
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ClearFreeInputImages clears the value of the "free_input_images" field.
+func (m *VideoGroupPricingRuleMutation) ClearFreeInputImages() {
+	m.free_input_images = nil
+	m.addfree_input_images = nil
+	m.clearedFields[videogrouppricingrule.FieldFreeInputImages] = struct{}{}
+}
+
+// FreeInputImagesCleared returns if the "free_input_images" field was cleared in this mutation.
+func (m *VideoGroupPricingRuleMutation) FreeInputImagesCleared() bool {
+	_, ok := m.clearedFields[videogrouppricingrule.FieldFreeInputImages]
+	return ok
+}
+
+// ResetFreeInputImages resets all changes to the "free_input_images" field.
+func (m *VideoGroupPricingRuleMutation) ResetFreeInputImages() {
+	m.free_input_images = nil
+	m.addfree_input_images = nil
+	delete(m.clearedFields, videogrouppricingrule.FieldFreeInputImages)
+}
+
+// SetCreditsPerInputImage sets the "credits_per_input_image" field.
+func (m *VideoGroupPricingRuleMutation) SetCreditsPerInputImage(f float64) {
+	m.credits_per_input_image = &f
+	m.addcredits_per_input_image = nil
+}
+
+// CreditsPerInputImage returns the value of the "credits_per_input_image" field in the mutation.
+func (m *VideoGroupPricingRuleMutation) CreditsPerInputImage() (r float64, exists bool) {
+	v := m.credits_per_input_image
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreditsPerInputImage returns the old "credits_per_input_image" field's value of the VideoGroupPricingRule entity.
+// If the VideoGroupPricingRule object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *VideoGroupPricingRuleMutation) OldCreditsPerInputImage(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreditsPerInputImage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreditsPerInputImage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreditsPerInputImage: %w", err)
+	}
+	return oldValue.CreditsPerInputImage, nil
+}
+
+// AddCreditsPerInputImage adds f to the "credits_per_input_image" field.
+func (m *VideoGroupPricingRuleMutation) AddCreditsPerInputImage(f float64) {
+	if m.addcredits_per_input_image != nil {
+		*m.addcredits_per_input_image += f
+	} else {
+		m.addcredits_per_input_image = &f
+	}
+}
+
+// AddedCreditsPerInputImage returns the value that was added to the "credits_per_input_image" field in this mutation.
+func (m *VideoGroupPricingRuleMutation) AddedCreditsPerInputImage() (r float64, exists bool) {
+	v := m.addcredits_per_input_image
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCreditsPerInputImage resets all changes to the "credits_per_input_image" field.
+func (m *VideoGroupPricingRuleMutation) ResetCreditsPerInputImage() {
+	m.credits_per_input_image = nil
+	m.addcredits_per_input_image = nil
+}
+
 // SetEnabled sets the "enabled" field.
 func (m *VideoGroupPricingRuleMutation) SetEnabled(b bool) {
 	m.enabled = &b
@@ -58514,7 +58644,7 @@ func (m *VideoGroupPricingRuleMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *VideoGroupPricingRuleMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 10)
 	if m.group != nil {
 		fields = append(fields, videogrouppricingrule.FieldGroupID)
 	}
@@ -58529,6 +58659,12 @@ func (m *VideoGroupPricingRuleMutation) Fields() []string {
 	}
 	if m.reference_video_multiplier != nil {
 		fields = append(fields, videogrouppricingrule.FieldReferenceVideoMultiplier)
+	}
+	if m.free_input_images != nil {
+		fields = append(fields, videogrouppricingrule.FieldFreeInputImages)
+	}
+	if m.credits_per_input_image != nil {
+		fields = append(fields, videogrouppricingrule.FieldCreditsPerInputImage)
 	}
 	if m.enabled != nil {
 		fields = append(fields, videogrouppricingrule.FieldEnabled)
@@ -58557,6 +58693,10 @@ func (m *VideoGroupPricingRuleMutation) Field(name string) (ent.Value, bool) {
 		return m.CreditsPerSecond()
 	case videogrouppricingrule.FieldReferenceVideoMultiplier:
 		return m.ReferenceVideoMultiplier()
+	case videogrouppricingrule.FieldFreeInputImages:
+		return m.FreeInputImages()
+	case videogrouppricingrule.FieldCreditsPerInputImage:
+		return m.CreditsPerInputImage()
 	case videogrouppricingrule.FieldEnabled:
 		return m.Enabled()
 	case videogrouppricingrule.FieldCreatedAt:
@@ -58582,6 +58722,10 @@ func (m *VideoGroupPricingRuleMutation) OldField(ctx context.Context, name strin
 		return m.OldCreditsPerSecond(ctx)
 	case videogrouppricingrule.FieldReferenceVideoMultiplier:
 		return m.OldReferenceVideoMultiplier(ctx)
+	case videogrouppricingrule.FieldFreeInputImages:
+		return m.OldFreeInputImages(ctx)
+	case videogrouppricingrule.FieldCreditsPerInputImage:
+		return m.OldCreditsPerInputImage(ctx)
 	case videogrouppricingrule.FieldEnabled:
 		return m.OldEnabled(ctx)
 	case videogrouppricingrule.FieldCreatedAt:
@@ -58632,6 +58776,20 @@ func (m *VideoGroupPricingRuleMutation) SetField(name string, value ent.Value) e
 		}
 		m.SetReferenceVideoMultiplier(v)
 		return nil
+	case videogrouppricingrule.FieldFreeInputImages:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFreeInputImages(v)
+		return nil
+	case videogrouppricingrule.FieldCreditsPerInputImage:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreditsPerInputImage(v)
+		return nil
 	case videogrouppricingrule.FieldEnabled:
 		v, ok := value.(bool)
 		if !ok {
@@ -58667,6 +58825,12 @@ func (m *VideoGroupPricingRuleMutation) AddedFields() []string {
 	if m.addreference_video_multiplier != nil {
 		fields = append(fields, videogrouppricingrule.FieldReferenceVideoMultiplier)
 	}
+	if m.addfree_input_images != nil {
+		fields = append(fields, videogrouppricingrule.FieldFreeInputImages)
+	}
+	if m.addcredits_per_input_image != nil {
+		fields = append(fields, videogrouppricingrule.FieldCreditsPerInputImage)
+	}
 	return fields
 }
 
@@ -58679,6 +58843,10 @@ func (m *VideoGroupPricingRuleMutation) AddedField(name string) (ent.Value, bool
 		return m.AddedCreditsPerSecond()
 	case videogrouppricingrule.FieldReferenceVideoMultiplier:
 		return m.AddedReferenceVideoMultiplier()
+	case videogrouppricingrule.FieldFreeInputImages:
+		return m.AddedFreeInputImages()
+	case videogrouppricingrule.FieldCreditsPerInputImage:
+		return m.AddedCreditsPerInputImage()
 	}
 	return nil, false
 }
@@ -58702,6 +58870,20 @@ func (m *VideoGroupPricingRuleMutation) AddField(name string, value ent.Value) e
 		}
 		m.AddReferenceVideoMultiplier(v)
 		return nil
+	case videogrouppricingrule.FieldFreeInputImages:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFreeInputImages(v)
+		return nil
+	case videogrouppricingrule.FieldCreditsPerInputImage:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreditsPerInputImage(v)
+		return nil
 	}
 	return fmt.Errorf("unknown VideoGroupPricingRule numeric field %s", name)
 }
@@ -58709,7 +58891,11 @@ func (m *VideoGroupPricingRuleMutation) AddField(name string, value ent.Value) e
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *VideoGroupPricingRuleMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(videogrouppricingrule.FieldFreeInputImages) {
+		fields = append(fields, videogrouppricingrule.FieldFreeInputImages)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -58722,6 +58908,11 @@ func (m *VideoGroupPricingRuleMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *VideoGroupPricingRuleMutation) ClearField(name string) error {
+	switch name {
+	case videogrouppricingrule.FieldFreeInputImages:
+		m.ClearFreeInputImages()
+		return nil
+	}
 	return fmt.Errorf("unknown VideoGroupPricingRule nullable field %s", name)
 }
 
@@ -58743,6 +58934,12 @@ func (m *VideoGroupPricingRuleMutation) ResetField(name string) error {
 		return nil
 	case videogrouppricingrule.FieldReferenceVideoMultiplier:
 		m.ResetReferenceVideoMultiplier()
+		return nil
+	case videogrouppricingrule.FieldFreeInputImages:
+		m.ResetFreeInputImages()
+		return nil
+	case videogrouppricingrule.FieldCreditsPerInputImage:
+		m.ResetCreditsPerInputImage()
 		return nil
 	case videogrouppricingrule.FieldEnabled:
 		m.ResetEnabled()

@@ -212,6 +212,8 @@ func (r *videoGroupPricingRuleRepository) ReplaceForGroup(ctx context.Context, g
 			SetModelCode(rule.ModelCode).
 			SetResolution(rule.Resolution).
 			SetCreditsPerSecond(rule.CreditsPerSecond).
+			SetNillableFreeInputImages(rule.FreeInputImages).
+			SetCreditsPerInputImage(rule.CreditsPerInputImage).
 			SetReferenceVideoMultiplier(refMultiplier).
 			SetEnabled(rule.Enabled).
 			Save(ctx); err != nil {
@@ -284,6 +286,8 @@ func videoPricingRuleEntityToService(m *dbent.VideoGroupPricingRule) *service.Vi
 		ModelCode:                m.ModelCode,
 		Resolution:               m.Resolution,
 		CreditsPerSecond:         m.CreditsPerSecond,
+		FreeInputImages:          m.FreeInputImages,
+		CreditsPerInputImage:     m.CreditsPerInputImage,
 		ReferenceVideoMultiplier: m.ReferenceVideoMultiplier,
 		Enabled:                  m.Enabled,
 		CreatedAt:                m.CreatedAt,

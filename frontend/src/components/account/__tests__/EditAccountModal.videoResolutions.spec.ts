@@ -198,7 +198,7 @@ describe('EditAccountModal video resolutions', () => {
 
   it('loads legacy accounts with no model restriction as an explicit selection of all models', async () => {
     const account = buildVideoAccount()
-    const allModels = Object.keys(account.credentials.model_mapping)
+    const allModels = ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5', 'grok-imagine-video-1.5', 'minimax-h3', 'minimax-h3-max', 'kling-v3-omni']
     delete account.credentials.model_mapping
     const wrapper = mountModal(account)
     await flushPromises()

@@ -19,6 +19,8 @@ describe('video group pricing rules', () => {
       'seedance-2.0-fast',
       'seedance-2.5',
       'grok-imagine-video-1.5',
+      'minimax-h3',
+      'minimax-h3-max',
       'kling-v3-omni'
     ])
   })
@@ -57,6 +59,8 @@ describe('video group pricing rules', () => {
         resolution: '720p',
         credits_per_second: 1,
         reference_video_multiplier: 1,
+        free_input_images: null,
+        credits_per_input_image: 0,
         enabled: true
       }
     ])
@@ -124,4 +128,11 @@ describe('video group pricing rules', () => {
     onVideoPricingModelChange(form, 0)
     expect(form.video_pricing_rules[0].resolution).toBe('480p')
   })
+})
+
+it('round-trips configured image surcharge and explicit zero allowance', () => {
+  const rule = { model_code: 'minimax-h3-max', resolution: '768p', credits_per_second: 0.2, free_input_images: 0, credits_per_input_image: 0.1, enabled: true }
+  expect(serializeVideoPricingRules(createVideoPricingRulesForm([rule]))?.[0]).toMatchObject(rule)
+  expect(serializeVideoPricingRules([createVideoPricingRuleRow({ ...rule, free_input_images: -1 })])).toBeNull()
+  expect(serializeVideoPricingRules([createVideoPricingRuleRow({ ...rule, credits_per_input_image: -1 })])).toBeNull()
 })

@@ -31,6 +31,8 @@ type videoProviderAdapter interface {
 
 func videoProviderAdapterForAccount(account *Account) videoProviderAdapter {
 	switch videoAccountProvider(account) {
+	case videoProviderApimart:
+		return apimartVideoProviderAdapter{}
 	case videoProviderNewtoken:
 		return newtokenVideoProviderAdapter{}
 	case videoProviderMikuapi:
@@ -46,6 +48,8 @@ func videoProviderAdapterForAccount(account *Account) videoProviderAdapter {
 
 func videoProviderAdapterByName(provider string) videoProviderAdapter {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case videoProviderApimart:
+		return apimartVideoProviderAdapter{}
 	case videoProviderNewtoken:
 		return newtokenVideoProviderAdapter{}
 	case videoProviderMikuapi:

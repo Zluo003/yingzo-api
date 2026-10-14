@@ -61,6 +61,34 @@ func (_c *VideoGroupPricingRuleCreate) SetNillableReferenceVideoMultiplier(v *fl
 	return _c
 }
 
+// SetFreeInputImages sets the "free_input_images" field.
+func (_c *VideoGroupPricingRuleCreate) SetFreeInputImages(v int) *VideoGroupPricingRuleCreate {
+	_c.mutation.SetFreeInputImages(v)
+	return _c
+}
+
+// SetNillableFreeInputImages sets the "free_input_images" field if the given value is not nil.
+func (_c *VideoGroupPricingRuleCreate) SetNillableFreeInputImages(v *int) *VideoGroupPricingRuleCreate {
+	if v != nil {
+		_c.SetFreeInputImages(*v)
+	}
+	return _c
+}
+
+// SetCreditsPerInputImage sets the "credits_per_input_image" field.
+func (_c *VideoGroupPricingRuleCreate) SetCreditsPerInputImage(v float64) *VideoGroupPricingRuleCreate {
+	_c.mutation.SetCreditsPerInputImage(v)
+	return _c
+}
+
+// SetNillableCreditsPerInputImage sets the "credits_per_input_image" field if the given value is not nil.
+func (_c *VideoGroupPricingRuleCreate) SetNillableCreditsPerInputImage(v *float64) *VideoGroupPricingRuleCreate {
+	if v != nil {
+		_c.SetCreditsPerInputImage(*v)
+	}
+	return _c
+}
+
 // SetEnabled sets the "enabled" field.
 func (_c *VideoGroupPricingRuleCreate) SetEnabled(v bool) *VideoGroupPricingRuleCreate {
 	_c.mutation.SetEnabled(v)
@@ -147,6 +175,10 @@ func (_c *VideoGroupPricingRuleCreate) defaults() {
 		v := videogrouppricingrule.DefaultReferenceVideoMultiplier
 		_c.mutation.SetReferenceVideoMultiplier(v)
 	}
+	if _, ok := _c.mutation.CreditsPerInputImage(); !ok {
+		v := videogrouppricingrule.DefaultCreditsPerInputImage
+		_c.mutation.SetCreditsPerInputImage(v)
+	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		v := videogrouppricingrule.DefaultEnabled
 		_c.mutation.SetEnabled(v)
@@ -187,6 +219,19 @@ func (_c *VideoGroupPricingRuleCreate) check() error {
 	}
 	if _, ok := _c.mutation.ReferenceVideoMultiplier(); !ok {
 		return &ValidationError{Name: "reference_video_multiplier", err: errors.New(`ent: missing required field "VideoGroupPricingRule.reference_video_multiplier"`)}
+	}
+	if v, ok := _c.mutation.FreeInputImages(); ok {
+		if err := videogrouppricingrule.FreeInputImagesValidator(v); err != nil {
+			return &ValidationError{Name: "free_input_images", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.free_input_images": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CreditsPerInputImage(); !ok {
+		return &ValidationError{Name: "credits_per_input_image", err: errors.New(`ent: missing required field "VideoGroupPricingRule.credits_per_input_image"`)}
+	}
+	if v, ok := _c.mutation.CreditsPerInputImage(); ok {
+		if err := videogrouppricingrule.CreditsPerInputImageValidator(v); err != nil {
+			return &ValidationError{Name: "credits_per_input_image", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.credits_per_input_image": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Enabled(); !ok {
 		return &ValidationError{Name: "enabled", err: errors.New(`ent: missing required field "VideoGroupPricingRule.enabled"`)}
@@ -242,6 +287,14 @@ func (_c *VideoGroupPricingRuleCreate) createSpec() (*VideoGroupPricingRule, *sq
 	if value, ok := _c.mutation.ReferenceVideoMultiplier(); ok {
 		_spec.SetField(videogrouppricingrule.FieldReferenceVideoMultiplier, field.TypeFloat64, value)
 		_node.ReferenceVideoMultiplier = value
+	}
+	if value, ok := _c.mutation.FreeInputImages(); ok {
+		_spec.SetField(videogrouppricingrule.FieldFreeInputImages, field.TypeInt, value)
+		_node.FreeInputImages = &value
+	}
+	if value, ok := _c.mutation.CreditsPerInputImage(); ok {
+		_spec.SetField(videogrouppricingrule.FieldCreditsPerInputImage, field.TypeFloat64, value)
+		_node.CreditsPerInputImage = value
 	}
 	if value, ok := _c.mutation.Enabled(); ok {
 		_spec.SetField(videogrouppricingrule.FieldEnabled, field.TypeBool, value)
@@ -396,6 +449,48 @@ func (u *VideoGroupPricingRuleUpsert) AddReferenceVideoMultiplier(v float64) *Vi
 	return u
 }
 
+// SetFreeInputImages sets the "free_input_images" field.
+func (u *VideoGroupPricingRuleUpsert) SetFreeInputImages(v int) *VideoGroupPricingRuleUpsert {
+	u.Set(videogrouppricingrule.FieldFreeInputImages, v)
+	return u
+}
+
+// UpdateFreeInputImages sets the "free_input_images" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsert) UpdateFreeInputImages() *VideoGroupPricingRuleUpsert {
+	u.SetExcluded(videogrouppricingrule.FieldFreeInputImages)
+	return u
+}
+
+// AddFreeInputImages adds v to the "free_input_images" field.
+func (u *VideoGroupPricingRuleUpsert) AddFreeInputImages(v int) *VideoGroupPricingRuleUpsert {
+	u.Add(videogrouppricingrule.FieldFreeInputImages, v)
+	return u
+}
+
+// ClearFreeInputImages clears the value of the "free_input_images" field.
+func (u *VideoGroupPricingRuleUpsert) ClearFreeInputImages() *VideoGroupPricingRuleUpsert {
+	u.SetNull(videogrouppricingrule.FieldFreeInputImages)
+	return u
+}
+
+// SetCreditsPerInputImage sets the "credits_per_input_image" field.
+func (u *VideoGroupPricingRuleUpsert) SetCreditsPerInputImage(v float64) *VideoGroupPricingRuleUpsert {
+	u.Set(videogrouppricingrule.FieldCreditsPerInputImage, v)
+	return u
+}
+
+// UpdateCreditsPerInputImage sets the "credits_per_input_image" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsert) UpdateCreditsPerInputImage() *VideoGroupPricingRuleUpsert {
+	u.SetExcluded(videogrouppricingrule.FieldCreditsPerInputImage)
+	return u
+}
+
+// AddCreditsPerInputImage adds v to the "credits_per_input_image" field.
+func (u *VideoGroupPricingRuleUpsert) AddCreditsPerInputImage(v float64) *VideoGroupPricingRuleUpsert {
+	u.Add(videogrouppricingrule.FieldCreditsPerInputImage, v)
+	return u
+}
+
 // SetEnabled sets the "enabled" field.
 func (u *VideoGroupPricingRuleUpsert) SetEnabled(v bool) *VideoGroupPricingRuleUpsert {
 	u.Set(videogrouppricingrule.FieldEnabled, v)
@@ -546,6 +641,55 @@ func (u *VideoGroupPricingRuleUpsertOne) AddReferenceVideoMultiplier(v float64) 
 func (u *VideoGroupPricingRuleUpsertOne) UpdateReferenceVideoMultiplier() *VideoGroupPricingRuleUpsertOne {
 	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
 		s.UpdateReferenceVideoMultiplier()
+	})
+}
+
+// SetFreeInputImages sets the "free_input_images" field.
+func (u *VideoGroupPricingRuleUpsertOne) SetFreeInputImages(v int) *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.SetFreeInputImages(v)
+	})
+}
+
+// AddFreeInputImages adds v to the "free_input_images" field.
+func (u *VideoGroupPricingRuleUpsertOne) AddFreeInputImages(v int) *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.AddFreeInputImages(v)
+	})
+}
+
+// UpdateFreeInputImages sets the "free_input_images" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsertOne) UpdateFreeInputImages() *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.UpdateFreeInputImages()
+	})
+}
+
+// ClearFreeInputImages clears the value of the "free_input_images" field.
+func (u *VideoGroupPricingRuleUpsertOne) ClearFreeInputImages() *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.ClearFreeInputImages()
+	})
+}
+
+// SetCreditsPerInputImage sets the "credits_per_input_image" field.
+func (u *VideoGroupPricingRuleUpsertOne) SetCreditsPerInputImage(v float64) *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.SetCreditsPerInputImage(v)
+	})
+}
+
+// AddCreditsPerInputImage adds v to the "credits_per_input_image" field.
+func (u *VideoGroupPricingRuleUpsertOne) AddCreditsPerInputImage(v float64) *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.AddCreditsPerInputImage(v)
+	})
+}
+
+// UpdateCreditsPerInputImage sets the "credits_per_input_image" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsertOne) UpdateCreditsPerInputImage() *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.UpdateCreditsPerInputImage()
 	})
 }
 
@@ -869,6 +1013,55 @@ func (u *VideoGroupPricingRuleUpsertBulk) AddReferenceVideoMultiplier(v float64)
 func (u *VideoGroupPricingRuleUpsertBulk) UpdateReferenceVideoMultiplier() *VideoGroupPricingRuleUpsertBulk {
 	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
 		s.UpdateReferenceVideoMultiplier()
+	})
+}
+
+// SetFreeInputImages sets the "free_input_images" field.
+func (u *VideoGroupPricingRuleUpsertBulk) SetFreeInputImages(v int) *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.SetFreeInputImages(v)
+	})
+}
+
+// AddFreeInputImages adds v to the "free_input_images" field.
+func (u *VideoGroupPricingRuleUpsertBulk) AddFreeInputImages(v int) *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.AddFreeInputImages(v)
+	})
+}
+
+// UpdateFreeInputImages sets the "free_input_images" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsertBulk) UpdateFreeInputImages() *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.UpdateFreeInputImages()
+	})
+}
+
+// ClearFreeInputImages clears the value of the "free_input_images" field.
+func (u *VideoGroupPricingRuleUpsertBulk) ClearFreeInputImages() *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.ClearFreeInputImages()
+	})
+}
+
+// SetCreditsPerInputImage sets the "credits_per_input_image" field.
+func (u *VideoGroupPricingRuleUpsertBulk) SetCreditsPerInputImage(v float64) *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.SetCreditsPerInputImage(v)
+	})
+}
+
+// AddCreditsPerInputImage adds v to the "credits_per_input_image" field.
+func (u *VideoGroupPricingRuleUpsertBulk) AddCreditsPerInputImage(v float64) *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.AddCreditsPerInputImage(v)
+	})
+}
+
+// UpdateCreditsPerInputImage sets the "credits_per_input_image" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsertBulk) UpdateCreditsPerInputImage() *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.UpdateCreditsPerInputImage()
 	})
 }
 

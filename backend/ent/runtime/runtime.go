@@ -2548,16 +2548,26 @@ func init() {
 	videogrouppricingruleDescReferenceVideoMultiplier := videogrouppricingruleFields[4].Descriptor()
 	// videogrouppricingrule.DefaultReferenceVideoMultiplier holds the default value on creation for the reference_video_multiplier field.
 	videogrouppricingrule.DefaultReferenceVideoMultiplier = videogrouppricingruleDescReferenceVideoMultiplier.Default.(float64)
+	// videogrouppricingruleDescFreeInputImages is the schema descriptor for free_input_images field.
+	videogrouppricingruleDescFreeInputImages := videogrouppricingruleFields[5].Descriptor()
+	// videogrouppricingrule.FreeInputImagesValidator is a validator for the "free_input_images" field. It is called by the builders before save.
+	videogrouppricingrule.FreeInputImagesValidator = videogrouppricingruleDescFreeInputImages.Validators[0].(func(int) error)
+	// videogrouppricingruleDescCreditsPerInputImage is the schema descriptor for credits_per_input_image field.
+	videogrouppricingruleDescCreditsPerInputImage := videogrouppricingruleFields[6].Descriptor()
+	// videogrouppricingrule.DefaultCreditsPerInputImage holds the default value on creation for the credits_per_input_image field.
+	videogrouppricingrule.DefaultCreditsPerInputImage = videogrouppricingruleDescCreditsPerInputImage.Default.(float64)
+	// videogrouppricingrule.CreditsPerInputImageValidator is a validator for the "credits_per_input_image" field. It is called by the builders before save.
+	videogrouppricingrule.CreditsPerInputImageValidator = videogrouppricingruleDescCreditsPerInputImage.Validators[0].(func(float64) error)
 	// videogrouppricingruleDescEnabled is the schema descriptor for enabled field.
-	videogrouppricingruleDescEnabled := videogrouppricingruleFields[5].Descriptor()
+	videogrouppricingruleDescEnabled := videogrouppricingruleFields[7].Descriptor()
 	// videogrouppricingrule.DefaultEnabled holds the default value on creation for the enabled field.
 	videogrouppricingrule.DefaultEnabled = videogrouppricingruleDescEnabled.Default.(bool)
 	// videogrouppricingruleDescCreatedAt is the schema descriptor for created_at field.
-	videogrouppricingruleDescCreatedAt := videogrouppricingruleFields[6].Descriptor()
+	videogrouppricingruleDescCreatedAt := videogrouppricingruleFields[8].Descriptor()
 	// videogrouppricingrule.DefaultCreatedAt holds the default value on creation for the created_at field.
 	videogrouppricingrule.DefaultCreatedAt = videogrouppricingruleDescCreatedAt.Default.(func() time.Time)
 	// videogrouppricingruleDescUpdatedAt is the schema descriptor for updated_at field.
-	videogrouppricingruleDescUpdatedAt := videogrouppricingruleFields[7].Descriptor()
+	videogrouppricingruleDescUpdatedAt := videogrouppricingruleFields[9].Descriptor()
 	// videogrouppricingrule.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	videogrouppricingrule.DefaultUpdatedAt = videogrouppricingruleDescUpdatedAt.Default.(func() time.Time)
 	// videogrouppricingrule.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

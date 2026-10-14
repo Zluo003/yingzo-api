@@ -80,6 +80,16 @@ func ReferenceVideoMultiplier(v float64) predicate.VideoGroupPricingRule {
 	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldReferenceVideoMultiplier, v))
 }
 
+// FreeInputImages applies equality check predicate on the "free_input_images" field. It's identical to FreeInputImagesEQ.
+func FreeInputImages(v int) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldFreeInputImages, v))
+}
+
+// CreditsPerInputImage applies equality check predicate on the "credits_per_input_image" field. It's identical to CreditsPerInputImageEQ.
+func CreditsPerInputImage(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldCreditsPerInputImage, v))
+}
+
 // Enabled applies equality check predicate on the "enabled" field. It's identical to EnabledEQ.
 func Enabled(v bool) predicate.VideoGroupPricingRule {
 	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldEnabled, v))
@@ -323,6 +333,96 @@ func ReferenceVideoMultiplierLT(v float64) predicate.VideoGroupPricingRule {
 // ReferenceVideoMultiplierLTE applies the LTE predicate on the "reference_video_multiplier" field.
 func ReferenceVideoMultiplierLTE(v float64) predicate.VideoGroupPricingRule {
 	return predicate.VideoGroupPricingRule(sql.FieldLTE(FieldReferenceVideoMultiplier, v))
+}
+
+// FreeInputImagesEQ applies the EQ predicate on the "free_input_images" field.
+func FreeInputImagesEQ(v int) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldFreeInputImages, v))
+}
+
+// FreeInputImagesNEQ applies the NEQ predicate on the "free_input_images" field.
+func FreeInputImagesNEQ(v int) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNEQ(FieldFreeInputImages, v))
+}
+
+// FreeInputImagesIn applies the In predicate on the "free_input_images" field.
+func FreeInputImagesIn(vs ...int) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldIn(FieldFreeInputImages, vs...))
+}
+
+// FreeInputImagesNotIn applies the NotIn predicate on the "free_input_images" field.
+func FreeInputImagesNotIn(vs ...int) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNotIn(FieldFreeInputImages, vs...))
+}
+
+// FreeInputImagesGT applies the GT predicate on the "free_input_images" field.
+func FreeInputImagesGT(v int) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldGT(FieldFreeInputImages, v))
+}
+
+// FreeInputImagesGTE applies the GTE predicate on the "free_input_images" field.
+func FreeInputImagesGTE(v int) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldGTE(FieldFreeInputImages, v))
+}
+
+// FreeInputImagesLT applies the LT predicate on the "free_input_images" field.
+func FreeInputImagesLT(v int) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldLT(FieldFreeInputImages, v))
+}
+
+// FreeInputImagesLTE applies the LTE predicate on the "free_input_images" field.
+func FreeInputImagesLTE(v int) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldLTE(FieldFreeInputImages, v))
+}
+
+// FreeInputImagesIsNil applies the IsNil predicate on the "free_input_images" field.
+func FreeInputImagesIsNil() predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldIsNull(FieldFreeInputImages))
+}
+
+// FreeInputImagesNotNil applies the NotNil predicate on the "free_input_images" field.
+func FreeInputImagesNotNil() predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNotNull(FieldFreeInputImages))
+}
+
+// CreditsPerInputImageEQ applies the EQ predicate on the "credits_per_input_image" field.
+func CreditsPerInputImageEQ(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldCreditsPerInputImage, v))
+}
+
+// CreditsPerInputImageNEQ applies the NEQ predicate on the "credits_per_input_image" field.
+func CreditsPerInputImageNEQ(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNEQ(FieldCreditsPerInputImage, v))
+}
+
+// CreditsPerInputImageIn applies the In predicate on the "credits_per_input_image" field.
+func CreditsPerInputImageIn(vs ...float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldIn(FieldCreditsPerInputImage, vs...))
+}
+
+// CreditsPerInputImageNotIn applies the NotIn predicate on the "credits_per_input_image" field.
+func CreditsPerInputImageNotIn(vs ...float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNotIn(FieldCreditsPerInputImage, vs...))
+}
+
+// CreditsPerInputImageGT applies the GT predicate on the "credits_per_input_image" field.
+func CreditsPerInputImageGT(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldGT(FieldCreditsPerInputImage, v))
+}
+
+// CreditsPerInputImageGTE applies the GTE predicate on the "credits_per_input_image" field.
+func CreditsPerInputImageGTE(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldGTE(FieldCreditsPerInputImage, v))
+}
+
+// CreditsPerInputImageLT applies the LT predicate on the "credits_per_input_image" field.
+func CreditsPerInputImageLT(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldLT(FieldCreditsPerInputImage, v))
+}
+
+// CreditsPerInputImageLTE applies the LTE predicate on the "credits_per_input_image" field.
+func CreditsPerInputImageLTE(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldLTE(FieldCreditsPerInputImage, v))
 }
 
 // EnabledEQ applies the EQ predicate on the "enabled" field.

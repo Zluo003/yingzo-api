@@ -16,6 +16,8 @@ export const VIDEO_PRICING_MODEL_RESOLUTIONS: {
   { model: 'seedance-2.0-fast', resolutions: ['480p', '720p'] },
   { model: 'seedance-2.5', resolutions: ['480p', '720p', '1080p'] },
   { model: 'grok-imagine-video-1.5', resolutions: ['480p', '720p', '1080p'] },
+  { model: 'minimax-h3', resolutions: ['768p', '2K'] },
+  { model: 'minimax-h3-max', resolutions: ['480p', '768p', '1080p'] },
   { model: 'kling-v3-omni', resolutions: ['720p', '1080p', '4K'] }
 ]
 
@@ -32,6 +34,8 @@ export function videoPricingResolutions(model: string): string[] {
 
 /** 表单行：价格允许为空字符串以支持清空输入框。 */
 export interface VideoPricingRuleRow {
+  free_input_images?: number | string | null
+  credits_per_input_image?: number | string | null
   model_code: string
   resolution: string
   credits_per_second: number | string | null
@@ -43,6 +47,8 @@ export function createVideoPricingRuleRow(
 ): VideoPricingRuleRow {
   const model = overrides.model_code ?? VIDEO_PRICING_MODELS[0]
   return {
+    free_input_images: overrides.free_input_images ?? null,
+    credits_per_input_image: overrides.credits_per_input_image ?? 0,
     model_code: model,
     resolution: overrides.resolution ?? videoPricingResolutions(model)[0] ?? '720p',
     credits_per_second: overrides.credits_per_second ?? null,
@@ -57,6 +63,8 @@ export function createVideoPricingRulesForm(
   if (!rules || rules.length === 0) return []
   return rules.map((rule) =>
     createVideoPricingRuleRow({
+      free_input_images: rule.free_input_images,
+      credits_per_input_image: rule.credits_per_input_image,
       model_code: rule.model_code,
       resolution: rule.resolution,
       credits_per_second: rule.credits_per_second,
@@ -90,7 +98,12 @@ export function serializeVideoPricingRules(
     }
     const price = Number(rawPrice)
     if (!Number.isFinite(price) || price < 0) return null
+    const imagePrice = Number(row.credits_per_input_image ?? 0)
+    const freeImages = row.free_input_images === null || row.free_input_images === undefined || row.free_input_images === "" ? null : Number(row.free_input_images)
+    if (!Number.isFinite(imagePrice) || imagePrice < 0 || (freeImages !== null && (!Number.isInteger(freeImages) || freeImages < 0))) return null
     out.push({
+      free_input_images: freeImages,
+      credits_per_input_image: imagePrice,
       model_code: model,
       resolution,
       credits_per_second: price,

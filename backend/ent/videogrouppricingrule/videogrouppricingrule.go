@@ -24,6 +24,10 @@ const (
 	FieldCreditsPerSecond = "credits_per_second"
 	// FieldReferenceVideoMultiplier holds the string denoting the reference_video_multiplier field in the database.
 	FieldReferenceVideoMultiplier = "reference_video_multiplier"
+	// FieldFreeInputImages holds the string denoting the free_input_images field in the database.
+	FieldFreeInputImages = "free_input_images"
+	// FieldCreditsPerInputImage holds the string denoting the credits_per_input_image field in the database.
+	FieldCreditsPerInputImage = "credits_per_input_image"
 	// FieldEnabled holds the string denoting the enabled field in the database.
 	FieldEnabled = "enabled"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
@@ -51,6 +55,8 @@ var Columns = []string{
 	FieldResolution,
 	FieldCreditsPerSecond,
 	FieldReferenceVideoMultiplier,
+	FieldFreeInputImages,
+	FieldCreditsPerInputImage,
 	FieldEnabled,
 	FieldCreatedAt,
 	FieldUpdatedAt,
@@ -73,6 +79,12 @@ var (
 	ResolutionValidator func(string) error
 	// DefaultReferenceVideoMultiplier holds the default value on creation for the "reference_video_multiplier" field.
 	DefaultReferenceVideoMultiplier float64
+	// FreeInputImagesValidator is a validator for the "free_input_images" field. It is called by the builders before save.
+	FreeInputImagesValidator func(int) error
+	// DefaultCreditsPerInputImage holds the default value on creation for the "credits_per_input_image" field.
+	DefaultCreditsPerInputImage float64
+	// CreditsPerInputImageValidator is a validator for the "credits_per_input_image" field. It is called by the builders before save.
+	CreditsPerInputImageValidator func(float64) error
 	// DefaultEnabled holds the default value on creation for the "enabled" field.
 	DefaultEnabled bool
 	// DefaultCreatedAt holds the default value on creation for the "created_at" field.
@@ -114,6 +126,16 @@ func ByCreditsPerSecond(opts ...sql.OrderTermOption) OrderOption {
 // ByReferenceVideoMultiplier orders the results by the reference_video_multiplier field.
 func ByReferenceVideoMultiplier(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldReferenceVideoMultiplier, opts...).ToFunc()
+}
+
+// ByFreeInputImages orders the results by the free_input_images field.
+func ByFreeInputImages(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFreeInputImages, opts...).ToFunc()
+}
+
+// ByCreditsPerInputImage orders the results by the credits_per_input_image field.
+func ByCreditsPerInputImage(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCreditsPerInputImage, opts...).ToFunc()
 }
 
 // ByEnabled orders the results by the enabled field.

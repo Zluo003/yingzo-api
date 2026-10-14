@@ -1198,7 +1198,7 @@
           <div
             v-for="(rule, index) in createForm.video_pricing_rules"
             :key="`video-rule-${index}`"
-            class="mb-2 grid grid-cols-1 items-end gap-2 md:grid-cols-[1fr_1fr_1fr_auto_auto]"
+            class="mb-2 grid grid-cols-1 items-end gap-2 md:grid-cols-3"
           >
             <div>
               <label class="input-label">{{ t("admin.groups.videoPricing.model") }}</label>
@@ -1232,6 +1232,14 @@
                 class="input"
                 :placeholder="t('admin.groups.videoPricing.pricePlaceholder')"
               />
+            </div>
+            <div>
+              <label class="input-label">{{ t('admin.groups.videoPricing.freeInputImages') }}</label>
+              <input v-model.number="rule.free_input_images" type="number" min="0" step="1" class="input" :placeholder="rule.model_code === 'minimax-h3' ? '5' : rule.model_code === 'minimax-h3-max' ? '2' : '—'" />
+            </div>
+            <div>
+              <label class="input-label">{{ t('admin.groups.videoPricing.creditsPerInputImage') }}</label>
+              <input v-model.number="rule.credits_per_input_image" type="number" min="0" step="0.0001" class="input" />
             </div>
             <label class="flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
               <input
@@ -2917,7 +2925,7 @@
           <div
             v-for="(rule, index) in editForm.video_pricing_rules"
             :key="`video-rule-${index}`"
-            class="mb-2 grid grid-cols-1 items-end gap-2 md:grid-cols-[1fr_1fr_1fr_auto_auto]"
+            class="mb-2 grid grid-cols-1 items-end gap-2 md:grid-cols-3"
           >
             <div>
               <label class="input-label">{{ t("admin.groups.videoPricing.model") }}</label>
@@ -2951,6 +2959,14 @@
                 class="input"
                 :placeholder="t('admin.groups.videoPricing.pricePlaceholder')"
               />
+            </div>
+            <div>
+              <label class="input-label">{{ t('admin.groups.videoPricing.freeInputImages') }}</label>
+              <input v-model.number="rule.free_input_images" type="number" min="0" step="1" class="input" :placeholder="rule.model_code === 'minimax-h3' ? '5' : rule.model_code === 'minimax-h3-max' ? '2' : '—'" />
+            </div>
+            <div>
+              <label class="input-label">{{ t('admin.groups.videoPricing.creditsPerInputImage') }}</label>
+              <input v-model.number="rule.credits_per_input_image" type="number" min="0" step="0.0001" class="input" />
             </div>
             <label class="flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
               <input

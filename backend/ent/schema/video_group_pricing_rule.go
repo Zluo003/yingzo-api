@@ -33,6 +33,8 @@ func (VideoGroupPricingRule) Fields() []ent.Field {
 		field.Float("reference_video_multiplier").
 			Default(1.0).
 			SchemaType(map[string]string{dialect.Postgres: "decimal(10,4)"}),
+		field.Int("free_input_images").Optional().Nillable().NonNegative(),
+		field.Float("credits_per_input_image").Default(0).Min(0).SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 		field.Bool("enabled").Default(true),
 		field.Time("created_at").
 			Default(time.Now).

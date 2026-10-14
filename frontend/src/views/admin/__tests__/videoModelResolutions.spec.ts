@@ -17,6 +17,8 @@ describe('video model resolutions', () => {
       'seedance-2.0-fast',
       'seedance-2.5',
       'grok-imagine-video-1.5',
+      'minimax-h3',
+      'minimax-h3-max',
       'kling-v3-omni'
     ])
     expect(videoModelResolutions('seedance-2.0')).toEqual([
@@ -53,6 +55,8 @@ describe('video model resolutions', () => {
       'seedance-2.0-fast': ['480p', '720p'],
       'seedance-2.5': ['480p', '720p', '1080p'],
       'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
+      'minimax-h3': ['768p', '2K'],
+      'minimax-h3-max': ['480p', '768p', '1080p'],
       'kling-v3-omni': ['720p', '1080p', '4K']
     })
   })
@@ -130,6 +134,8 @@ describe('video model resolutions', () => {
       // 而不是留空（留空会读成"什么都不支持"，与后端相反）。
       'seedance-2.5': ['480p', '720p', '1080p'],
       'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
+      'minimax-h3': ['768p', '2K'],
+      'minimax-h3-max': ['480p', '768p', '1080p'],
       'kling-v3-omni': ['720p', '1080p', '4K']
     })
   })

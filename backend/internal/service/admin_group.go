@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -1542,6 +1543,9 @@ func normalizeVideoPricingRules(rules []VideoGroupPricingRule) ([]VideoGroupPric
 		if !IsSupportedVideoResolution(model, resolution) {
 			return nil, infraerrors.BadRequest("invalid_video_resolution", "Invalid video resolution")
 		}
+		if rule.CreditsPerInputImage < 0 || math.IsNaN(rule.CreditsPerInputImage) || math.IsInf(rule.CreditsPerInputImage, 0) || (rule.FreeInputImages != nil && *rule.FreeInputImages < 0) {
+			return nil, infraerrors.BadRequest("invalid_video_pricing_rule", "Input image price and free count must be non-negative")
+		}
 		if rule.CreditsPerSecond < 0 {
 			return nil, infraerrors.BadRequest("invalid_video_pricing_rule", "Video price must be non-negative")
 		}
@@ -1558,6 +1562,8 @@ func normalizeVideoPricingRules(rules []VideoGroupPricingRule) ([]VideoGroupPric
 			ModelCode:                model,
 			Resolution:               resolution,
 			CreditsPerSecond:         rule.CreditsPerSecond,
+			FreeInputImages:          rule.FreeInputImages,
+			CreditsPerInputImage:     rule.CreditsPerInputImage,
 			ReferenceVideoMultiplier: referenceMultiplier,
 			Enabled:                  rule.Enabled,
 		})

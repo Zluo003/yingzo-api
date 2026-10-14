@@ -23,6 +23,7 @@ import (
 )
 
 const (
+	videoProviderApimart  = "apimart"
 	videoProviderAigod    = "aigod"
 	videoProviderNewtoken = "newtoken"
 	videoProviderMikuapi  = "mikuapi"
@@ -374,6 +375,18 @@ func (s *VideoService) estimateGenerationCost(
 			return nil, nil, nil, err
 		}
 	}
+	// Agent media prices supply output seconds; MiniMax input fees use the group's video rule.
+	if apiKey.Group.IsAgent() && isMinimaxH3Model(normalized.Model) {
+		if s.pricingRepo == nil {
+			return nil, nil, nil, ErrVideoPricingRuleNotFound
+		}
+		inputRule, inputErr := s.pricingRepo.GetEnabledRule(ctx, apiKey.Group.ID, normalized.Model, normalized.Resolution)
+		if inputErr != nil {
+			return nil, nil, nil, inputErr
+		}
+		rule.FreeInputImages = inputRule.FreeInputImages
+		rule.CreditsPerInputImage = inputRule.CreditsPerInputImage
+	}
 	referenceMultiplier := 1.0
 	billableSecondsPerOutput := normalized.BillableSeconds
 	perOutputCost := float64(billableSecondsPerOutput) * rule.CreditsPerSecond
@@ -381,14 +394,36 @@ func (s *VideoService) estimateGenerationCost(
 	if rateMultiplier <= 0 {
 		rateMultiplier = 1
 	}
-	if apiKey.Group.IsAgent() {
+	if apiKey.Group.IsAgent() && !isMinimaxH3Model(normalized.Model) {
 		referenceMultiplier = 0
 		billableSecondsPerOutput = normalized.GeneratedSeconds
 		perOutputCost = float64(billableSecondsPerOutput) * rule.CreditsPerSecond
 		rateMultiplier = 1
 	}
+	inputImages := inspectVideoContent(normalized.Content).ImageCount
+	freeImages := inputImages
+	if normalized.Model == VideoModelMinimaxH3 {
+		freeImages = 5
+	}
+	if normalized.Model == VideoModelMinimaxH3Max {
+		freeImages = 2
+	}
+	if rule.FreeInputImages != nil {
+		freeImages = *rule.FreeInputImages
+	}
+	billableImages := max(0, inputImages-freeImages)
+	imageCost := float64(billableImages) * rule.CreditsPerInputImage
+	perOutputCost += imageCost
+	if apiKey.Group.IsAgent() {
+		rateMultiplier = 1
+	}
 	totalCost := perOutputCost * float64(count)
 	estimate := &VideoCostEstimate{
+		InputImages:              inputImages,
+		FreeInputImages:          freeImages,
+		BillableInputImages:      billableImages * count,
+		CreditsPerInputImage:     rule.CreditsPerInputImage,
+		InputImageCost:           imageCost * float64(count),
 		Model:                    normalized.Model,
 		Resolution:               normalized.Resolution,
 		AbilityCode:              normalized.AbilityCode,
@@ -575,6 +610,12 @@ func (s *VideoService) createUpstreamTask(ctx context.Context, account *Account,
 	if err := json.Unmarshal(respBody, &payload); err != nil {
 		return nil, &videoUpstreamError{StatusCode: resp.StatusCode, Body: respBody, Err: err}
 	}
+	if videoAccountProvider(account) == videoProviderApimart {
+		payload, err = apimartResponseData(payload, true)
+		if err != nil {
+			return nil, err
+		}
+	}
 	id := videoTaskIDFromPayload(payload)
 	if id == "" {
 		id = videoTaskIDFromLocation(resp.Header.Get("Location"))
@@ -610,6 +651,12 @@ func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, u
 	var payload map[string]any
 	if err := json.Unmarshal(respBody, &payload); err != nil {
 		return nil, &videoUpstreamError{StatusCode: resp.StatusCode, Body: respBody, Err: err}
+	}
+	if videoAccountProvider(account) == videoProviderApimart {
+		payload, err = apimartResponseData(payload, false)
+		if err != nil {
+			return nil, err
+		}
 	}
 	rawStatus := stringFromMap(payload, "status")
 	status := normalizeVideoUpstreamStatus(rawStatus)
@@ -1374,6 +1421,14 @@ func normalizeVideoCreateRequestWithDynamicModel(req *VideoCreateRequest, dynami
 	if !isValidVideoAbility(ability) {
 		return nil, videoBadRequest("invalid_video_ability", "Invalid video ability")
 	}
+	if isMinimaxH3Model(model) && stats.LastFrameCount == 1 && stats.ImageCount == 1 && !stats.HasReference && req.AbilityCode == "" {
+		ability = videoAbilityImageToVideo
+	}
+	if isMinimaxH3Model(model) {
+		if err := validateApimartVideoInput(req, prompt, content, resolution); err != nil {
+			return nil, err
+		}
+	}
 	if err := validateVideoAbilityInput(model, ability, prompt, stats); err != nil {
 		return nil, err
 	}
@@ -1524,7 +1579,7 @@ func validateVideoAbilityInput(model, ability, prompt string, stats videoContent
 			return videoBadRequest("invalid_video_content", "Text-to-video requests cannot include media references")
 		}
 	case videoAbilityImageToVideo:
-		if stats.ImageCount != 1 || stats.FirstFrameCount != 1 {
+		if stats.ImageCount != 1 || (stats.FirstFrameCount != 1 && !(isMinimaxH3Model(model) && stats.LastFrameCount == 1)) {
 			return videoBadRequest("invalid_video_content", "Image-to-video requires exactly one first frame image")
 		}
 		if stats.VideoCount > 0 || stats.AudioCount > 0 {
@@ -1731,7 +1786,7 @@ func isVideoAccountCompatibleForRequest(account *Account, normalized *normalized
 // unsupported request is routed to another upstream instead of failing there.
 func videoProviderNeedsRequestCompatibility(provider string) bool {
 	switch provider {
-	case videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang:
+	case videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang, videoProviderApimart:
 		return true
 	default:
 		return false
@@ -1982,6 +2037,8 @@ func videoAccountAPIPath(account *Account) string {
 func videoAccountProvider(account *Account) string {
 	provider := strings.ToLower(strings.TrimSpace(accountExtraString(account, "video_provider")))
 	switch provider {
+	case videoProviderApimart:
+		return videoProviderApimart
 	case videoProviderNewtoken:
 		return videoProviderNewtoken
 	case videoProviderMikuapi:
@@ -2024,7 +2081,7 @@ func videoAccountDefaultDuration(account *Account, key string) time.Duration {
 		case "connect_timeout_ms":
 			return videoJingyuConnectTimeout
 		}
-	case videoProviderMikuapi:
+	case videoProviderMikuapi, videoProviderApimart:
 		switch key {
 		case "poll_interval_ms":
 			return videoMikuapiPollInterval

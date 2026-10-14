@@ -2094,6 +2094,8 @@ var (
 		{Name: "resolution", Type: field.TypeString, Size: 16},
 		{Name: "credits_per_second", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
 		{Name: "reference_video_multiplier", Type: field.TypeFloat64, Default: 1, SchemaType: map[string]string{"postgres": "decimal(10,4)"}},
+		{Name: "free_input_images", Type: field.TypeInt, Nullable: true},
+		{Name: "credits_per_input_image", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
 		{Name: "enabled", Type: field.TypeBool, Default: true},
 		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
 		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
@@ -2107,7 +2109,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "video_group_pricing_rules_groups_video_pricing_rules",
-				Columns:    []*schema.Column{VideoGroupPricingRulesColumns[8]},
+				Columns:    []*schema.Column{VideoGroupPricingRulesColumns[10]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -2116,7 +2118,7 @@ var (
 			{
 				Name:    "videogrouppricingrule_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{VideoGroupPricingRulesColumns[8]},
+				Columns: []*schema.Column{VideoGroupPricingRulesColumns[10]},
 			},
 			{
 				Name:    "videogrouppricingrule_model_code_resolution",
@@ -2126,7 +2128,7 @@ var (
 			{
 				Name:    "videogrouppricingrule_group_id_model_code_resolution",
 				Unique:  true,
-				Columns: []*schema.Column{VideoGroupPricingRulesColumns[8], VideoGroupPricingRulesColumns[1], VideoGroupPricingRulesColumns[2]},
+				Columns: []*schema.Column{VideoGroupPricingRulesColumns[10], VideoGroupPricingRulesColumns[1], VideoGroupPricingRulesColumns[2]},
 			},
 		},
 	}

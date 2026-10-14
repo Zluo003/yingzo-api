@@ -9,6 +9,8 @@ import (
 )
 
 const (
+	VideoModelMinimaxH3      = "minimax-h3"
+	VideoModelMinimaxH3Max   = "minimax-h3-max"
 	VideoModelSeedance20     = "seedance-2.0"
 	VideoModelSeedance20Fast = "seedance-2.0-fast"
 	VideoModelSeedance25     = "seedance-2.5"
@@ -70,6 +72,8 @@ type videoModelSpec struct {
 // the catalog comes from each account's model_mapping; those fall back to
 // videoDefaultModelSpec.
 var videoModelSpecs = map[string]videoModelSpec{
+	VideoModelMinimaxH3Max: {Resolutions: []string{VideoResolution480P, VideoResolution768P, VideoResolution1080P}, DefaultResolution: VideoResolution768P, MinSeconds: 5, MaxSeconds: 15, MaxRefImages: 9, MaxRefVideos: 3, MaxRefAudios: 3, MaxRefVideoSeconds: 15, MaxRefVideoTotalSeconds: 15, AudioNeedsVisual: true},
+	VideoModelMinimaxH3:    {Resolutions: []string{VideoResolution768P, VideoResolution2K}, DefaultResolution: VideoResolution2K, MinSeconds: 4, MaxSeconds: 15, MaxRefImages: 9, MaxRefVideos: 3, MaxRefAudios: 3, MaxRefVideoSeconds: 15, MaxRefVideoTotalSeconds: 15, AudioNeedsVisual: true},
 	VideoModelSeedance20: {
 		Resolutions:             []string{VideoResolution480P, VideoResolution720P, VideoResolution1080P, VideoResolution4K},
 		DefaultResolution:       VideoResolution720P,
@@ -175,6 +179,8 @@ func SupportedVideoModels() []string {
 		VideoModelSeedance25,
 		VideoModelGrokImagineVideo15,
 		VideoModelKlingV3Omni,
+		VideoModelMinimaxH3,
+		VideoModelMinimaxH3Max,
 	}
 }
 
@@ -236,6 +242,8 @@ var (
 )
 
 type VideoGroupPricingRule struct {
+	FreeInputImages          *int      `json:"free_input_images,omitempty"`
+	CreditsPerInputImage     float64   `json:"credits_per_input_image"`
 	ID                       int64     `json:"id"`
 	GroupID                  int64     `json:"group_id"`
 	ModelCode                string    `json:"model_code"`
@@ -345,6 +353,11 @@ type VideoResponse struct {
 }
 
 type VideoCostEstimate struct {
+	InputImages              int       `json:"input_images"`
+	BillableInputImages      int       `json:"billable_input_images"`
+	FreeInputImages          int       `json:"free_input_images"`
+	CreditsPerInputImage     float64   `json:"credits_per_input_image"`
+	InputImageCost           float64   `json:"input_image_cost"`
 	Model                    string    `json:"model"`
 	Resolution               string    `json:"resolution"`
 	AbilityCode              string    `json:"ability_code"`

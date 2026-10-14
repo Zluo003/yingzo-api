@@ -113,6 +113,54 @@ func (_u *VideoGroupPricingRuleUpdate) AddReferenceVideoMultiplier(v float64) *V
 	return _u
 }
 
+// SetFreeInputImages sets the "free_input_images" field.
+func (_u *VideoGroupPricingRuleUpdate) SetFreeInputImages(v int) *VideoGroupPricingRuleUpdate {
+	_u.mutation.ResetFreeInputImages()
+	_u.mutation.SetFreeInputImages(v)
+	return _u
+}
+
+// SetNillableFreeInputImages sets the "free_input_images" field if the given value is not nil.
+func (_u *VideoGroupPricingRuleUpdate) SetNillableFreeInputImages(v *int) *VideoGroupPricingRuleUpdate {
+	if v != nil {
+		_u.SetFreeInputImages(*v)
+	}
+	return _u
+}
+
+// AddFreeInputImages adds value to the "free_input_images" field.
+func (_u *VideoGroupPricingRuleUpdate) AddFreeInputImages(v int) *VideoGroupPricingRuleUpdate {
+	_u.mutation.AddFreeInputImages(v)
+	return _u
+}
+
+// ClearFreeInputImages clears the value of the "free_input_images" field.
+func (_u *VideoGroupPricingRuleUpdate) ClearFreeInputImages() *VideoGroupPricingRuleUpdate {
+	_u.mutation.ClearFreeInputImages()
+	return _u
+}
+
+// SetCreditsPerInputImage sets the "credits_per_input_image" field.
+func (_u *VideoGroupPricingRuleUpdate) SetCreditsPerInputImage(v float64) *VideoGroupPricingRuleUpdate {
+	_u.mutation.ResetCreditsPerInputImage()
+	_u.mutation.SetCreditsPerInputImage(v)
+	return _u
+}
+
+// SetNillableCreditsPerInputImage sets the "credits_per_input_image" field if the given value is not nil.
+func (_u *VideoGroupPricingRuleUpdate) SetNillableCreditsPerInputImage(v *float64) *VideoGroupPricingRuleUpdate {
+	if v != nil {
+		_u.SetCreditsPerInputImage(*v)
+	}
+	return _u
+}
+
+// AddCreditsPerInputImage adds value to the "credits_per_input_image" field.
+func (_u *VideoGroupPricingRuleUpdate) AddCreditsPerInputImage(v float64) *VideoGroupPricingRuleUpdate {
+	_u.mutation.AddCreditsPerInputImage(v)
+	return _u
+}
+
 // SetEnabled sets the "enabled" field.
 func (_u *VideoGroupPricingRuleUpdate) SetEnabled(v bool) *VideoGroupPricingRuleUpdate {
 	_u.mutation.SetEnabled(v)
@@ -197,6 +245,16 @@ func (_u *VideoGroupPricingRuleUpdate) check() error {
 			return &ValidationError{Name: "resolution", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.resolution": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FreeInputImages(); ok {
+		if err := videogrouppricingrule.FreeInputImagesValidator(v); err != nil {
+			return &ValidationError{Name: "free_input_images", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.free_input_images": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CreditsPerInputImage(); ok {
+		if err := videogrouppricingrule.CreditsPerInputImageValidator(v); err != nil {
+			return &ValidationError{Name: "credits_per_input_image", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.credits_per_input_image": %w`, err)}
+		}
+	}
 	if _u.mutation.GroupCleared() && len(_u.mutation.GroupIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "VideoGroupPricingRule.group"`)
 	}
@@ -232,6 +290,21 @@ func (_u *VideoGroupPricingRuleUpdate) sqlSave(ctx context.Context) (_node int, 
 	}
 	if value, ok := _u.mutation.AddedReferenceVideoMultiplier(); ok {
 		_spec.AddField(videogrouppricingrule.FieldReferenceVideoMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.FreeInputImages(); ok {
+		_spec.SetField(videogrouppricingrule.FieldFreeInputImages, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFreeInputImages(); ok {
+		_spec.AddField(videogrouppricingrule.FieldFreeInputImages, field.TypeInt, value)
+	}
+	if _u.mutation.FreeInputImagesCleared() {
+		_spec.ClearField(videogrouppricingrule.FieldFreeInputImages, field.TypeInt)
+	}
+	if value, ok := _u.mutation.CreditsPerInputImage(); ok {
+		_spec.SetField(videogrouppricingrule.FieldCreditsPerInputImage, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedCreditsPerInputImage(); ok {
+		_spec.AddField(videogrouppricingrule.FieldCreditsPerInputImage, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(videogrouppricingrule.FieldEnabled, field.TypeBool, value)
@@ -372,6 +445,54 @@ func (_u *VideoGroupPricingRuleUpdateOne) AddReferenceVideoMultiplier(v float64)
 	return _u
 }
 
+// SetFreeInputImages sets the "free_input_images" field.
+func (_u *VideoGroupPricingRuleUpdateOne) SetFreeInputImages(v int) *VideoGroupPricingRuleUpdateOne {
+	_u.mutation.ResetFreeInputImages()
+	_u.mutation.SetFreeInputImages(v)
+	return _u
+}
+
+// SetNillableFreeInputImages sets the "free_input_images" field if the given value is not nil.
+func (_u *VideoGroupPricingRuleUpdateOne) SetNillableFreeInputImages(v *int) *VideoGroupPricingRuleUpdateOne {
+	if v != nil {
+		_u.SetFreeInputImages(*v)
+	}
+	return _u
+}
+
+// AddFreeInputImages adds value to the "free_input_images" field.
+func (_u *VideoGroupPricingRuleUpdateOne) AddFreeInputImages(v int) *VideoGroupPricingRuleUpdateOne {
+	_u.mutation.AddFreeInputImages(v)
+	return _u
+}
+
+// ClearFreeInputImages clears the value of the "free_input_images" field.
+func (_u *VideoGroupPricingRuleUpdateOne) ClearFreeInputImages() *VideoGroupPricingRuleUpdateOne {
+	_u.mutation.ClearFreeInputImages()
+	return _u
+}
+
+// SetCreditsPerInputImage sets the "credits_per_input_image" field.
+func (_u *VideoGroupPricingRuleUpdateOne) SetCreditsPerInputImage(v float64) *VideoGroupPricingRuleUpdateOne {
+	_u.mutation.ResetCreditsPerInputImage()
+	_u.mutation.SetCreditsPerInputImage(v)
+	return _u
+}
+
+// SetNillableCreditsPerInputImage sets the "credits_per_input_image" field if the given value is not nil.
+func (_u *VideoGroupPricingRuleUpdateOne) SetNillableCreditsPerInputImage(v *float64) *VideoGroupPricingRuleUpdateOne {
+	if v != nil {
+		_u.SetCreditsPerInputImage(*v)
+	}
+	return _u
+}
+
+// AddCreditsPerInputImage adds value to the "credits_per_input_image" field.
+func (_u *VideoGroupPricingRuleUpdateOne) AddCreditsPerInputImage(v float64) *VideoGroupPricingRuleUpdateOne {
+	_u.mutation.AddCreditsPerInputImage(v)
+	return _u
+}
+
 // SetEnabled sets the "enabled" field.
 func (_u *VideoGroupPricingRuleUpdateOne) SetEnabled(v bool) *VideoGroupPricingRuleUpdateOne {
 	_u.mutation.SetEnabled(v)
@@ -469,6 +590,16 @@ func (_u *VideoGroupPricingRuleUpdateOne) check() error {
 			return &ValidationError{Name: "resolution", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.resolution": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.FreeInputImages(); ok {
+		if err := videogrouppricingrule.FreeInputImagesValidator(v); err != nil {
+			return &ValidationError{Name: "free_input_images", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.free_input_images": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CreditsPerInputImage(); ok {
+		if err := videogrouppricingrule.CreditsPerInputImageValidator(v); err != nil {
+			return &ValidationError{Name: "credits_per_input_image", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.credits_per_input_image": %w`, err)}
+		}
+	}
 	if _u.mutation.GroupCleared() && len(_u.mutation.GroupIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "VideoGroupPricingRule.group"`)
 	}
@@ -521,6 +652,21 @@ func (_u *VideoGroupPricingRuleUpdateOne) sqlSave(ctx context.Context) (_node *V
 	}
 	if value, ok := _u.mutation.AddedReferenceVideoMultiplier(); ok {
 		_spec.AddField(videogrouppricingrule.FieldReferenceVideoMultiplier, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.FreeInputImages(); ok {
+		_spec.SetField(videogrouppricingrule.FieldFreeInputImages, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFreeInputImages(); ok {
+		_spec.AddField(videogrouppricingrule.FieldFreeInputImages, field.TypeInt, value)
+	}
+	if _u.mutation.FreeInputImagesCleared() {
+		_spec.ClearField(videogrouppricingrule.FieldFreeInputImages, field.TypeInt)
+	}
+	if value, ok := _u.mutation.CreditsPerInputImage(); ok {
+		_spec.SetField(videogrouppricingrule.FieldCreditsPerInputImage, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedCreditsPerInputImage(); ok {
+		_spec.AddField(videogrouppricingrule.FieldCreditsPerInputImage, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.Enabled(); ok {
 		_spec.SetField(videogrouppricingrule.FieldEnabled, field.TypeBool, value)
