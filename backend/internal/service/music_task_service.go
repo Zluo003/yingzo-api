@@ -117,9 +117,16 @@ func (s *MusicTaskService) Accept(ctx context.Context, key *APIKey, sub *UserSub
 	if key.Group.ModelAllowlistEnabled() && !key.Group.ModelAllowlist.Allows(SunoModel) {
 		return nil, infraerrors.New(403, "model_not_allowed", "suno-v6 is not allowed")
 	}
-	price, _, err := s.resolver.ResolveAgentMediaUnitPrice(ctx, *key.GroupID, PlatformOpenAI, AgentMediaTypeAudio, r.Mode(), SunoModel)
-	if err != nil {
-		return nil, infraerrors.BadRequest("pricing_not_configured", "Configure and enable the requested Suno generation mode price")
+	// uploadTask is the internal upload step of sample/uploadCover/createModel
+	// flows; its cost is bundled into those operation prices, so it never
+	// resolves or charges a price of its own.
+	var price float64
+	if r.Operation != "uploadTask" {
+		var err error
+		price, _, err = s.resolver.ResolveAgentMediaUnitPrice(ctx, *key.GroupID, PlatformOpenAI, AgentMediaTypeAudio, r.Mode(), SunoModel)
+		if err != nil {
+			return nil, infraerrors.BadRequest("pricing_not_configured", "Configure and enable the requested Suno generation mode price")
+		}
 	}
 	accounts, err := s.accounts(ctx, *key.GroupID)
 	if err != nil {

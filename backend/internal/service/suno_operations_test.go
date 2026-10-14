@@ -31,7 +31,12 @@ func TestSunoAllOperations(t *testing.T) {
 			}
 			require.NotContains(t, upstream, "operation")
 			require.NotContains(t, upstream, "payload")
-			require.True(t, IsSunoPriceTier(r.Mode()), r.Mode())
+			if op != "uploadTask" {
+				require.True(t, IsSunoPriceTier(r.Mode()), r.Mode())
+			} else {
+				// uploadTask 是内部上传步骤，不再有对应价格档位。
+				require.False(t, IsSunoPriceTier(r.Mode()), r.Mode())
+			}
 			upstream["unsupported"] = false
 			bad, _ := json.Marshal(upstream)
 			_, err = ParseSunoOperation(op, bad)
@@ -52,7 +57,7 @@ func TestSunoFullGenerationAndValidation(t *testing.T) {
 	}{
 		{`{"prompt":"song","instrumental":false}`, "song", 1},
 		{`{"custom":true,"instrumental":true,"style":"pop","max_mode":true,"audio_weight":0,"variety":"max"}`, "instrumental", 2},
-		{`{"prompt":"song","version":"v6-mini","instrumental":false}`, "song:v6-mini", 1},
+		{`{"prompt":"song","version":"v6","instrumental":false}`, "song", 1},
 		{`{"custom":true,"prompt":"lyrics","custom_model_id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","auto_lyrics":true}`, "song:custom", 1},
 	} {
 		r, err := ParseSunoRequest([]byte(tc.body))
@@ -62,6 +67,8 @@ func TestSunoFullGenerationAndValidation(t *testing.T) {
 	}
 	for _, tc := range []struct{ op, body string }{
 		{"generation", `{"prompt":"x","version":"v5"}`},
+		{"generation", `{"prompt":"x","version":"v6-mini"}`},
+		{"generation", `{"prompt":"x","version":"v6-wild"}`},
 		{"generation", `{"prompt":"x","custom_model_id":"not-uuid"}`},
 		{"generation", `{"prompt":"x","custom_model_id":"a1b2c3d4-e5f6-7890-abcd-ef1234567890","version":"v6"}`},
 		{"crop", `{"task_id":"a","start_s":1,"end_s":0}`},
@@ -176,7 +183,7 @@ func TestSunoResourceAccountAffinity(t *testing.T) {
 func TestSunoRequestedBillingDimensions(t *testing.T) {
 	var fixtures map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal(sunoCases, &fixtures))
-	for operation, tier := range map[string]string{"uploadCover": "upload_cover", "createModel": "create_model", "persona": "persona", "sounds": "sounds", "uploadTask": "upload", "sample": "sample"} {
+	for operation, tier := range map[string]string{"uploadCover": "upload_cover", "createModel": "create_model", "persona": "persona", "sounds": "sounds", "sample": "sample"} {
 		r, err := ParseSunoOperation(operation, fixtures[operation])
 		require.NoError(t, err)
 		require.Equal(t, tier, r.Mode())
@@ -185,4 +192,13 @@ func TestSunoRequestedBillingDimensions(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "request", prices[0].BillingUnit)
 	}
+	// uploadTask keeps its billing-mode identity for usage records but is an
+	// unbilled internal step: no price tier exists for it any more.
+	r, err := ParseSunoOperation("uploadTask", fixtures["uploadTask"])
+	require.NoError(t, err)
+	require.Equal(t, "upload", r.Mode())
+	require.Equal(t, "/v1/music/generations/uploadTask", r.Endpoint())
+	require.NotContains(t, SunoPriceTiers(), "upload")
+	_, err = normalizeSunoPrices(AgentMediaTypeAudio, []AgentModelPrice{{Resolution: "upload", UnitPrice: 1}})
+	require.Error(t, err)
 }

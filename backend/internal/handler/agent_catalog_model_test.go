@@ -149,7 +149,7 @@ func TestAgentCatalogSunoPublishesStringArrayOperations(t *testing.T) {
 	require.Equal(t, true, capabilities["asynchronous"])
 	// 非结构的运营扩展原样保留。
 	require.Equal(t, []string{"song"}, capabilities["supported_modes"])
-	require.Equal(t, []string{"v6", "v6-wild", "v6-mini"}, capabilities["versions"])
+	require.Equal(t, []string{"v6"}, capabilities["versions"])
 }
 
 func TestAgentCatalogMidjourneyOnlyConfiguredOperations(t *testing.T) {

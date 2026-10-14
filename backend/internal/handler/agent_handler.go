@@ -268,7 +268,7 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 			"media_types":         entry.MediaTypes,
 			"platforms":           entry.Platforms,
 			"interfaces":          entry.Interfaces,
-			"versions":            []string{"v6", "v6-wild", "v6-mini"},
+			"versions":            []string{"v6"},
 			"max_mode_multiplier": 2,
 		}
 	}

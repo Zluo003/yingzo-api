@@ -21,7 +21,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+        "description": "公共版本：`v6`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
       },
       "custom_model_id": {
         "type": "string",
@@ -122,7 +122,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+        "description": "公共版本：`v6`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
       },
       "custom_model_id": {
         "type": "string",
@@ -218,7 +218,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+        "description": "公共版本：`v6`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
       },
       "custom_model_id": {
         "type": "string",
@@ -423,7 +423,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+        "description": "公共版本：`v6`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
       },
       "custom_model_id": {
         "type": "string",
@@ -607,7 +607,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+        "description": "公共版本：`v6`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
       },
       "custom_model_id": {
         "type": "string",
@@ -806,7 +806,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`。与 `custom_model_id` 至少提供一个；使用自定义模型时省略本字段。"
+        "description": "公共版本：`v6`。与 `custom_model_id` 至少提供一个；使用自定义模型时省略本字段。"
       },
       "custom_model_id": {
         "type": "string",
@@ -902,7 +902,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+        "description": "公共版本：`v6`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
       },
       "custom_model_id": {
         "type": "string",
@@ -1024,7 +1024,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+        "description": "公共版本：`v6`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
       },
       "custom_model_id": {
         "type": "string",
@@ -1279,7 +1279,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+        "description": "公共版本：`v6`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
       },
       "custom_model_id": {
         "type": "string",
@@ -1360,7 +1360,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
+        "description": "公共版本：`v6`；省略时默认 `v6`。使用 `custom_model_id` 时省略本字段。"
       },
       "custom_model_id": {
         "type": "string",
@@ -1456,7 +1456,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`；省略时默认 `v6`。"
+        "description": "公共版本：`v6`；省略时默认 `v6`。"
       },
       "prompt": {
         "type": "string",
@@ -1559,7 +1559,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`。使用 `custom_model_id` 时省略。"
+        "description": "公共版本：`v6`。使用 `custom_model_id` 时省略。"
       },
       "custom_model_id": {
         "type": "string",
@@ -1680,7 +1680,7 @@
       "version": {
         "type": "string",
         "required": false,
-        "description": "公共版本：`v6` / `v6-wild` / `v6-mini`。使用 `custom_model_id` 时省略。"
+        "description": "公共版本：`v6`。使用 `custom_model_id` 时省略。"
       },
       "custom_model_id": {
         "type": "string",

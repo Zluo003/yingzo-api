@@ -130,7 +130,7 @@ func TestYingzoPlazaMidjourneyOperationPrices(t *testing.T) {
 func TestYingzoPlazaMusicEnabledPrices(t *testing.T) {
 	off := false
 	prices := []AgentModelPrice{}
-	for i, tier := range []string{"upload_cover", "create_model", "persona", "sounds", "upload", "sample", "upload_cover:v6-mini"} {
+	for i, tier := range []string{"upload_cover", "create_model", "persona", "sounds", "sample", "coverSong:custom", "upload_cover:custom"} {
 		prices = append(prices, AgentModelPrice{Resolution: tier, BillingUnit: "request", UnitPrice: float64(i)})
 	}
 	prices = append(prices, AgentModelPrice{Resolution: "song", BillingUnit: "request", UnitPrice: 99, Enabled: &off}, AgentModelPrice{Resolution: "invalid", BillingUnit: "request", UnitPrice: 99})

@@ -59,7 +59,9 @@ func SunoPriceTiers() []string {
 	tiers := []string{"instrumental", "song"}
 	names := []string{}
 	for name := range sunoOperations {
-		if name != "generation" {
+		// generation folds into song/instrumental; uploadTask is bundled into
+		// the prices of sample/uploadCover/createModel and never billed alone.
+		if name != "generation" && name != "uploadTask" {
 			names = append(names, name)
 		}
 	}
@@ -72,9 +74,6 @@ func SunoPriceTiers() []string {
 			op = "generation"
 		}
 		spec := sunoOperations[op]
-		if _, ok := spec.Fields["version"]; ok {
-			tiers = append(tiers, name+":v6-wild", name+":v6-mini")
-		}
 		if _, ok := spec.Fields["custom_model_id"]; ok {
 			tiers = append(tiers, name+":custom")
 		}
@@ -214,7 +213,7 @@ func ParseSunoOperation(operation string, body []byte) (*SunoRequest, error) {
 			f["version"] = "v6"
 		}
 	}
-	enums := map[string]string{"version": "v6|v6-wild|v6-mini", "variety": "off|normal|high|extra|max", "audio_format": "mp3|m4a|wav", "variation_category": "subtle|normal|high", "lyrics_model": "classic|remi", "type": "one-shot|loop"}
+	enums := map[string]string{"version": "v6", "variety": "off|normal|high|extra|max", "audio_format": "mp3|m4a|wav", "variation_category": "subtle|normal|high", "lyrics_model": "classic|remi", "type": "one-shot|loop"}
 	for field, choices := range enums {
 		if v, ok := f[field].(string); ok && !strings.Contains("|"+choices+"|", "|"+v+"|") {
 			return nil, fmt.Errorf("invalid %s", field)

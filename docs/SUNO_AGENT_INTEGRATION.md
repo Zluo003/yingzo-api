@@ -9,7 +9,7 @@ Suno 音乐生成使用 Yingzo 地址和 **Yingzo API Key**。该 Key 必须绑�
 3. 开启独立的「音乐生成」开关。默认关闭；配置账号和价格完成之前无法生成。
 4. 账号管理 → 添加音乐模型 → **Suno v6 · APIMart**：填写名称、备注、API Key、Base URL、并发、优先级和代理。Base URL 默认 `https://api.apimart.ai`，兼容末尾 `/v1`，只允许 HTTPS origin 或 `/v1`。绑定系统 Yingzo Agent 分组。编辑时 API Key 留空保留原值。
 5. 账号测试只发送只读连接与鉴权请求。提示连接正常不等于实际生成成功，也不会产生音乐生成费用。
-6. Yingzo Agent → 音乐计费：发现 `suno-v6` 后，配置各操作和版本价格与启用状态（基础生成保留 `instrumental` / `song`），再启用模型并保存。所有档位单位均为 **credit / 次**。新发现模型默认停用，不填充售价。缺失或停用价格拒绝创建；明确配置为 `0` 并启用表示免费。
+6. Yingzo Agent → 音乐计费：发现 `suno-v6` 后，配置各操作价格与启用状态（基础生成保留 `instrumental` / `song`），再启用模型并保存。所有档位单位均为 **credit / 次**。新发现模型默认停用，不填充售价。除 `uploadTask`（免费内部步骤）外，缺失或停用价格拒绝创建；明确配置为 `0` 并启用表示免费。
 
 一次受理任务收取该操作、版本的固定价格；支持的操作开启 `max_mode=true` 时为对应价格的 2 倍，多首音轨不增加收费。Agent 价格为最终单价，不叠加文本、图片或视频倍率。任务受理时在同一数据库事务中落库、预扣余额和相关额度，冻结当时价格；成功结算，失败或超过 30 分钟全额退款。查询免费。后续调价不影响已受理任务。
 
@@ -43,7 +43,7 @@ curl "$YINGZO_BASE_URL/api/v1/agent/pricing" -H "Authorization: Bearer $YINGZO_A
     "streaming": false,
     "asynchronous": true,
     "supported_modes": ["instrumental", "song"],
-    "versions": ["v6", "v6-wild", "v6-mini"],
+    "versions": ["v6"],
     "max_mode_multiplier": 2
   }
 }
@@ -277,7 +277,8 @@ async function readMusic(taskId) {
 | 创建自定义音色模型 | create_model | createModel |
 | 创建歌手 | persona | persona |
 | 音效生成 | sounds | sounds |
-| 上传音频 | upload | uploadTask |
 | 样本转歌曲 | sample | sample |
 
-支持版本选择的操作继续按版本后缀区分，例如 upload_cover:v6-mini；支持 Max 的操作仍按对应单次价格乘 2。创建自定义音色模型与后续使用模型生成分别计费。
+`uploadTask`（上传音频）不单独计费、也不设价格档位：它是 `sample` / `uploadCover` / `createModel` 等流程的内部步骤，费用已含在对应操作价格中；网关按 0 元受理，价格快照中不会出现 `upload` 规则。
+
+公共版本仅 `v6`，无版本后缀档位；使用自定义模型生成的操作按 `:custom` 后缀区分（如 `upload_cover:custom`），支持 Max 的操作仍按对应单次价格乘 2。创建自定义音色模型与后续使用模型生成分别计费。
