@@ -543,7 +543,6 @@ export type VideoModelPrices = Record<string, Record<string, number>>
  */
 export interface VideoGroupPricingRule {
   free_input_images?: number | null
-  credits_per_input_image?: number
   id?: number
   group_id?: number
   model_code: string

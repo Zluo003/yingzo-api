@@ -67,6 +67,11 @@ export default {
   },
   admin: {
     yingzoAgent: {
+      freeInputImages: '免费参考图片数',
+      extraImages: '超额图片',
+      resolutionImagePrice: '按所选分辨率单价/张',
+      invalidInputImagePricing: '免费图片数须为非负整数。',
+      inputImagePricingHint: 'MiniMax H3 默认前 5 张图片免费，H3 Max 默认前 2 张免费；免费数留空使用默认，0 表示全部收费。超额图片直接按所选分辨率的单价计费，首帧、尾帧和参考图均计入张数。',
       title: 'Yingzo Agent',
       description:
         '系统内置的多模型聚合分组：把账号归属到该分组即可让 Yingzo Agent 调用这些账号提供的模型，再按文本/图片/视频分别配置计价。该分组不可删除。',
@@ -126,7 +131,7 @@ export default {
         },
         video: {
           title: '视频模型',
-          hint: '视频按「生成秒数 × 每秒单价」计费：为每个模型填写各分辨率的每秒单价；参考视频秒数不计费。价格档位即能力开关：配置了才对下游下发，留空的分辨率不启用、不下发。',
+          hint: '视频按分辨率配置每秒单价。MiniMax H3 / H3 Max 按「（生成秒数 + 参考视频秒数）× 每秒单价 + 超额图片费」计费；其他模型沿用生成秒数计费。价格档位即能力开关：配置了才对下游下发，留空的分辨率不启用、不下发。',
         },
       },
     },
@@ -153,8 +158,8 @@ export default {
         imageGenerationLocked: '图片生成固定开启，不使用语言倍率或独立图片倍率。',
         imagePricingDescription: '按输出分辨率设置最终单张价格，OpenAI 与 Gemini 图片模型共用这三个档位。',
         imagePriceHint: '图片费用 = 对应分辨率单张价格 × 实际生成张数。',
-        videoPricingDescription: '按 Seedance 模型、输出分辨率和实际生成秒数设置最终价格。',
-        videoBillingHint: '视频费用 = 对应每秒价格 × 实际生成秒数 × 生成数量；参考图片、视频和音频素材不计时长。',
+        videoPricingDescription: '按视频模型和输出分辨率设置每秒价格；H3/H3 Max 的超额参考图片直接使用所选分辨率价格。',
+        videoBillingHint: 'H3/H3 Max 视频费用 =（生成秒数 + 参考视频秒数）× 当前分辨率每秒价格 + 超额参考图片数 × 当前分辨率单价；其他视频模型沿用生成秒数计费。',
       },
       agentCatalog: {
         title: 'Agent 模型目录',
@@ -198,7 +203,7 @@ export default {
         model: '模型',
         resolution: '分辨率',
         freeInputImages: '免费输入图片数（留空按模型默认）',
-        creditsPerInputImage: '超额图片价格（元/张）',
+        sameModelFreeImages: '同模型统一配置',
         creditsPerSecond: '每秒价格',
         enabled: '启用',
         referenceBillingHint: '参考视频计费：生成秒数 + 参考视频秒数，reference_video_multiplier 固定按 1.0 保存。',

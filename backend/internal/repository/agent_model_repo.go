@@ -86,7 +86,7 @@ func (r *agentModelRepository) ListModels(ctx context.Context, groupID int64, in
 	query := `
 SELECT id, group_id, platform, model_code, media_type, enabled, available,
        excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at,
-       rate_multiplier
+       rate_multiplier, free_input_images
 FROM agent_group_models
 WHERE group_id = $1`
 	if !includeExcluded {
@@ -121,7 +121,7 @@ func (r *agentModelRepository) GetModelByID(ctx context.Context, groupID, modelI
 	row := r.db.QueryRowContext(ctx, `
 SELECT id, group_id, platform, model_code, media_type, enabled, available,
        excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at,
-       rate_multiplier
+       rate_multiplier, free_input_images
 FROM agent_group_models
 WHERE group_id = $1 AND id = $2
 `, groupID, modelID)
@@ -141,7 +141,7 @@ func (r *agentModelRepository) GetEnabledModel(ctx context.Context, groupID int6
 	row := r.db.QueryRowContext(ctx, `
 SELECT id, group_id, platform, model_code, media_type, enabled, available,
        excluded, excluded_at, discovered_at, last_seen_at, created_at, updated_at,
-       rate_multiplier
+       rate_multiplier, free_input_images
 FROM agent_group_models
 WHERE group_id = $1
   AND (platform = $2 OR ($2 = 'video' AND platform = 'seedance'))
@@ -160,7 +160,7 @@ WHERE group_id = $1
 	return model, nil
 }
 
-func (r *agentModelRepository) UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, prices []service.AgentModelPrice) error {
+func (r *agentModelRepository) UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, freeInputImages *int, prices []service.AgentModelPrice) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -169,9 +169,9 @@ func (r *agentModelRepository) UpdateModelConfig(ctx context.Context, groupID, m
 
 	result, err := tx.ExecContext(ctx, `
 UPDATE agent_group_models
-SET media_type = $3, enabled = $4, rate_multiplier = $5, updated_at = NOW()
+SET media_type = $3, enabled = $4, rate_multiplier = $5, free_input_images = $6, updated_at = NOW()
 WHERE group_id = $1 AND id = $2 AND excluded = FALSE
-`, groupID, modelID, mediaType, enabled, rateMultiplier)
+`, groupID, modelID, mediaType, enabled, rateMultiplier, freeInputImages)
 	if err != nil {
 		return err
 	}
@@ -242,6 +242,7 @@ func scanAgentGroupModel(scanner agentModelScanner) (*service.AgentGroupModel, e
 	var model service.AgentGroupModel
 	var excludedAt sql.NullTime
 	var rateMultiplier sql.NullFloat64
+	var freeImages sql.NullInt64
 	if err := scanner.Scan(
 		&model.ID,
 		&model.GroupID,
@@ -257,6 +258,7 @@ func scanAgentGroupModel(scanner agentModelScanner) (*service.AgentGroupModel, e
 		&model.CreatedAt,
 		&model.UpdatedAt,
 		&rateMultiplier,
+		&freeImages,
 	); err != nil {
 		return nil, err
 	}
@@ -266,6 +268,10 @@ func scanAgentGroupModel(scanner agentModelScanner) (*service.AgentGroupModel, e
 	if rateMultiplier.Valid {
 		rate := rateMultiplier.Float64
 		model.RateMultiplier = &rate
+	}
+	if freeImages.Valid {
+		value := int(freeImages.Int64)
+		model.FreeInputImages = &value
 	}
 	model.Prices = []service.AgentModelPrice{}
 	return &model, nil

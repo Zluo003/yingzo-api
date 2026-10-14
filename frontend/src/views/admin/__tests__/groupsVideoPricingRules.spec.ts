@@ -8,6 +8,7 @@ import {
   hasDuplicateVideoPricingRule,
   onVideoPricingModelChange,
   removeVideoPricingRule,
+  setVideoModelFreeImages,
   serializeVideoPricingRules,
   videoPricingResolutions
 } from '../groupsVideoPricingRules'
@@ -60,7 +61,6 @@ describe('video group pricing rules', () => {
         credits_per_second: 1,
         reference_video_multiplier: 1,
         free_input_images: null,
-        credits_per_input_image: 0,
         enabled: true
       }
     ])
@@ -130,9 +130,24 @@ describe('video group pricing rules', () => {
   })
 })
 
-it('round-trips configured image surcharge and explicit zero allowance', () => {
-  const rule = { model_code: 'minimax-h3-max', resolution: '768p', credits_per_second: 0.2, free_input_images: 0, credits_per_input_image: 0.1, enabled: true }
+it('round-trips one allowance per MiniMax model', () => {
+  const rule = { model_code: 'minimax-h3-max', resolution: '768p', credits_per_second: 0.2, free_input_images: 0, enabled: true }
   expect(serializeVideoPricingRules(createVideoPricingRulesForm([rule]))?.[0]).toMatchObject(rule)
   expect(serializeVideoPricingRules([createVideoPricingRuleRow({ ...rule, free_input_images: -1 })])).toBeNull()
-  expect(serializeVideoPricingRules([createVideoPricingRuleRow({ ...rule, credits_per_input_image: -1 })])).toBeNull()
+  expect(serializeVideoPricingRules([
+    createVideoPricingRuleRow(rule),
+    createVideoPricingRuleRow({ ...rule, resolution: '1080p', free_input_images: 1 })
+  ])).toBeNull()
+})
+
+it('copies a model allowance to all its resolution rows', () => {
+  const form = {
+    video_pricing_rules: [
+      createVideoPricingRuleRow({ model_code: 'minimax-h3', resolution: '768p', credits_per_second: 0.2 }),
+      createVideoPricingRuleRow({ model_code: 'minimax-h3', resolution: '2K', credits_per_second: 0.4 }),
+    ],
+  }
+  setVideoModelFreeImages(form, 'minimax-h3', 3)
+  expect(form.video_pricing_rules.map((row) => row.free_input_images)).toEqual([3, 3])
+  expect(serializeVideoPricingRules(form.video_pricing_rules)?.map((row) => row.free_input_images)).toEqual([3, 3])
 })

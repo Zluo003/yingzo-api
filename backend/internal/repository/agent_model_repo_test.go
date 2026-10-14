@@ -45,8 +45,8 @@ func TestAgentModelRepositoryUpdateReplacesPricesInOneTransaction(t *testing.T) 
 	modelID := int64(17)
 
 	mock.ExpectBegin()
-	mock.ExpectExec(`(?s)UPDATE agent_group_models\s+SET media_type = \$3, enabled = \$4, rate_multiplier = \$5, updated_at = NOW\(\)\s+WHERE group_id = \$1 AND id = \$2 AND excluded = FALSE`).
-		WithArgs(groupID, modelID, service.AgentMediaTypeImage, true, nil).
+	mock.ExpectExec(`(?s)UPDATE agent_group_models\s+SET media_type = \$3, enabled = \$4, rate_multiplier = \$5, free_input_images = \$6, updated_at = NOW\(\)\s+WHERE group_id = \$1 AND id = \$2 AND excluded = FALSE`).
+		WithArgs(groupID, modelID, service.AgentMediaTypeImage, true, nil, nil).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(`DELETE FROM agent_model_prices WHERE agent_model_id = \$1`).
 		WithArgs(modelID).
@@ -59,7 +59,7 @@ func TestAgentModelRepositoryUpdateReplacesPricesInOneTransaction(t *testing.T) 
 		WillReturnResult(sqlmock.NewResult(2, 1))
 	mock.ExpectCommit()
 
-	err := repo.UpdateModelConfig(context.Background(), groupID, modelID, service.AgentMediaTypeImage, true, nil, []service.AgentModelPrice{
+	err := repo.UpdateModelConfig(context.Background(), groupID, modelID, service.AgentMediaTypeImage, true, nil, nil, []service.AgentModelPrice{
 		{Resolution: service.ImageBillingSize1K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0},
 		{Resolution: service.ImageBillingSize2K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0.25},
 	})
@@ -91,13 +91,13 @@ func TestAgentModelRepositoryReadsExplicitZeroPrice(t *testing.T) {
 	modelColumns := []string{
 		"id", "group_id", "platform", "model_code", "media_type", "enabled", "available",
 		"excluded", "excluded_at", "discovered_at", "last_seen_at", "created_at", "updated_at",
-		"rate_multiplier",
+		"rate_multiplier", "free_input_images",
 	}
 	mock.ExpectQuery(`(?s)SELECT id, group_id, platform, model_code, media_type, enabled, available,.*FROM agent_group_models.*WHERE group_id = \$1.*model_code = \$3`).
 		WithArgs(groupID, service.PlatformOpenAI, "gpt-image-custom").
 		WillReturnRows(sqlmock.NewRows(modelColumns).AddRow(
 			modelID, groupID, service.PlatformOpenAI, "gpt-image-custom", service.AgentMediaTypeImage,
-			true, true, false, nil, now, now, now, now, nil,
+			true, true, false, nil, now, now, now, now, nil, nil,
 		))
 	mock.ExpectQuery(`(?s)SELECT id, agent_model_id, resolution, billing_unit, unit_price, created_at, updated_at.*FROM agent_model_prices.*WHERE agent_model_id = \$1`).
 		WithArgs(modelID).

@@ -1233,13 +1233,12 @@
                 :placeholder="t('admin.groups.videoPricing.pricePlaceholder')"
               />
             </div>
-            <div>
+            <div v-if="(rule.model_code === 'minimax-h3' || rule.model_code === 'minimax-h3-max') && createForm.video_pricing_rules.findIndex(item => item.model_code === rule.model_code) === index">
               <label class="input-label">{{ t('admin.groups.videoPricing.freeInputImages') }}</label>
-              <input v-model.number="rule.free_input_images" type="number" min="0" step="1" class="input" :placeholder="rule.model_code === 'minimax-h3' ? '5' : rule.model_code === 'minimax-h3-max' ? '2' : '—'" />
+              <input v-model.number="rule.free_input_images" @input="setVideoModelFreeImages(createForm, rule.model_code, rule.free_input_images ?? null)" type="number" min="0" step="1" class="input" :placeholder="rule.model_code === 'minimax-h3' ? '5' : '2'" />
             </div>
-            <div>
-              <label class="input-label">{{ t('admin.groups.videoPricing.creditsPerInputImage') }}</label>
-              <input v-model.number="rule.credits_per_input_image" type="number" min="0" step="0.0001" class="input" />
+            <div v-else-if="rule.model_code === 'minimax-h3' || rule.model_code === 'minimax-h3-max'" class="text-xs text-gray-500">
+              {{ t('admin.groups.videoPricing.sameModelFreeImages') }}
             </div>
             <label class="flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
               <input
@@ -2960,13 +2959,12 @@
                 :placeholder="t('admin.groups.videoPricing.pricePlaceholder')"
               />
             </div>
-            <div>
+            <div v-if="(rule.model_code === 'minimax-h3' || rule.model_code === 'minimax-h3-max') && editForm.video_pricing_rules.findIndex(item => item.model_code === rule.model_code) === index">
               <label class="input-label">{{ t('admin.groups.videoPricing.freeInputImages') }}</label>
-              <input v-model.number="rule.free_input_images" type="number" min="0" step="1" class="input" :placeholder="rule.model_code === 'minimax-h3' ? '5' : rule.model_code === 'minimax-h3-max' ? '2' : '—'" />
+              <input v-model.number="rule.free_input_images" @input="setVideoModelFreeImages(editForm, rule.model_code, rule.free_input_images ?? null)" type="number" min="0" step="1" class="input" :placeholder="rule.model_code === 'minimax-h3' ? '5' : '2'" />
             </div>
-            <div>
-              <label class="input-label">{{ t('admin.groups.videoPricing.creditsPerInputImage') }}</label>
-              <input v-model.number="rule.credits_per_input_image" type="number" min="0" step="0.0001" class="input" />
+            <div v-else-if="rule.model_code === 'minimax-h3' || rule.model_code === 'minimax-h3-max'" class="text-xs text-gray-500">
+              {{ t('admin.groups.videoPricing.sameModelFreeImages') }}
             </div>
             <label class="flex items-center gap-2 pb-2 text-sm text-gray-700 dark:text-gray-300">
               <input
@@ -4556,6 +4554,7 @@ import {
   hasDuplicateVideoPricingRule,
   onVideoPricingModelChange,
   removeVideoPricingRule,
+  setVideoModelFreeImages,
   serializeVideoPricingRules,
   videoPricingResolutions,
 } from "./groupsVideoPricingRules";

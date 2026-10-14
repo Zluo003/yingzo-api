@@ -35,7 +35,6 @@ export function videoPricingResolutions(model: string): string[] {
 /** 表单行：价格允许为空字符串以支持清空输入框。 */
 export interface VideoPricingRuleRow {
   free_input_images?: number | string | null
-  credits_per_input_image?: number | string | null
   model_code: string
   resolution: string
   credits_per_second: number | string | null
@@ -48,7 +47,6 @@ export function createVideoPricingRuleRow(
   const model = overrides.model_code ?? VIDEO_PRICING_MODELS[0]
   return {
     free_input_images: overrides.free_input_images ?? null,
-    credits_per_input_image: overrides.credits_per_input_image ?? 0,
     model_code: model,
     resolution: overrides.resolution ?? videoPricingResolutions(model)[0] ?? '720p',
     credits_per_second: overrides.credits_per_second ?? null,
@@ -64,7 +62,6 @@ export function createVideoPricingRulesForm(
   return rules.map((rule) =>
     createVideoPricingRuleRow({
       free_input_images: rule.free_input_images,
-      credits_per_input_image: rule.credits_per_input_image,
       model_code: rule.model_code,
       resolution: rule.resolution,
       credits_per_second: rule.credits_per_second,
@@ -82,6 +79,7 @@ export function serializeVideoPricingRules(
   rows: VideoPricingRuleRow[]
 ): VideoGroupPricingRule[] | null {
   const seen = new Set<string>()
+  const freeImagesByModel = new Map<string, number | null>()
   const out: VideoGroupPricingRule[] = []
   for (const row of rows) {
     const model = row.model_code?.trim()
@@ -98,12 +96,15 @@ export function serializeVideoPricingRules(
     }
     const price = Number(rawPrice)
     if (!Number.isFinite(price) || price < 0) return null
-    const imagePrice = Number(row.credits_per_input_image ?? 0)
     const freeImages = row.free_input_images === null || row.free_input_images === undefined || row.free_input_images === "" ? null : Number(row.free_input_images)
-    if (!Number.isFinite(imagePrice) || imagePrice < 0 || (freeImages !== null && (!Number.isInteger(freeImages) || freeImages < 0))) return null
+    if (freeImages !== null && (!Number.isInteger(freeImages) || freeImages < 0)) return null
+    if (model === 'minimax-h3' || model === 'minimax-h3-max') {
+      const prior = freeImagesByModel.get(model)
+      if (freeImagesByModel.has(model) && prior !== freeImages) return null
+      freeImagesByModel.set(model, freeImages)
+    }
     out.push({
       free_input_images: freeImages,
-      credits_per_input_image: imagePrice,
       model_code: model,
       resolution,
       credits_per_second: price,
@@ -112,6 +113,16 @@ export function serializeVideoPricingRules(
     })
   }
   return out
+}
+
+export function setVideoModelFreeImages(
+  form: { video_pricing_rules: VideoPricingRuleRow[] },
+  model: string,
+  freeImages: number | string | null
+): void {
+  for (const row of form.video_pricing_rules) {
+    if (row.model_code === model) row.free_input_images = freeImages
+  }
 }
 
 /** 新增一行：默认取第一个模型与其默认分辨率，价格留空由运营填写。 */

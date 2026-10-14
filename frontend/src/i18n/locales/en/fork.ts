@@ -67,6 +67,11 @@ export default {
   },
   admin: {
     yingzoAgent: {
+      freeInputImages: 'Free reference images',
+      extraImages: 'Excess images',
+      resolutionImagePrice: 'Resolution unit price per image',
+      invalidInputImagePricing: 'Free images must be a non-negative integer.',
+      inputImagePricingHint: 'MiniMax H3 includes 5 images, H3 Max includes 2. Blank uses the default; 0 charges every image. Each extra image uses the selected resolution unit price. First/last frames and reference images all count.',
       title: 'Yingzo Agent',
       description:
         'Built-in aggregate group: assign accounts to this group to let Yingzo Agent call the models they provide, then price them per text, image, and video. This group cannot be deleted.',
@@ -126,7 +131,7 @@ export default {
         },
         video: {
           title: 'Video models',
-          hint: 'Video is billed as generated seconds × per-second price: fill in the per-second price for each resolution; reference-video seconds are not billed. A price tier doubles as the capability switch: configured resolutions are advertised downstream; empty ones stay disabled and are never sent.',
+          hint: 'MiniMax H3 / H3 Max bills (generated + reference video seconds) × per-second price plus excess image fees. Other models bill generated seconds. A price tier doubles as the capability switch: configured resolutions are advertised downstream; empty ones stay disabled and are never sent.',
         },
       },
     },
@@ -147,8 +152,8 @@ export default {
         imageGenerationLocked: 'Image generation stays enabled and does not use the language or image multiplier.',
         imagePricingDescription: 'Set the final per-image price by output resolution. OpenAI and Gemini image models share these three tiers.',
         imagePriceHint: 'Image cost = per-image price for the output resolution × actual image count.',
-        videoPricingDescription: 'Set the final price by Seedance model, output resolution, and generated seconds.',
-        videoBillingHint: 'Video cost = per-second price × generated seconds × output count. Reference image, video, and audio duration is not billed.',
+        videoPricingDescription: 'Set the per-second price by video model and output resolution. H3 / H3 Max excess reference images use the selected resolution price.',
+        videoBillingHint: 'H3 / H3 Max cost = (generated + reference video seconds) × the selected resolution price + excess reference images × that resolution price. Other video models bill generated seconds.',
       },
       agentCatalog: {
         title: 'Agent Model Catalog',
@@ -198,7 +203,7 @@ export default {
         model: 'Model',
         resolution: 'Resolution',
         freeInputImages: 'Free input images (blank: model default)',
-        creditsPerInputImage: 'Excess image price (CNY/image)',
+        sameModelFreeImages: 'Shared by this model',
         creditsPerSecond: 'Credits / sec',
         enabled: 'Enabled',
         referenceBillingHint: 'Reference video billing: generated seconds + reference video seconds. reference_video_multiplier is saved as 1.0.',

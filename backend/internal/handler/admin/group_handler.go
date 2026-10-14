@@ -1204,9 +1204,10 @@ func (h *GroupHandler) SyncAgentModels(c *gin.Context) {
 }
 
 type updateAgentModelRequest struct {
-	MediaType string                    `json:"media_type"`
-	Enabled   *bool                     `json:"enabled"`
-	Prices    []service.AgentModelPrice `json:"prices"`
+	FreeInputImages *int                      `json:"free_input_images"`
+	MediaType       string                    `json:"media_type"`
+	Enabled         *bool                     `json:"enabled"`
+	Prices          []service.AgentModelPrice `json:"prices"`
 	// RateMultiplier 仅文本模型使用：源渠道价之上的下游倍率。
 	RateMultiplier *float64 `json:"rate_multiplier"`
 }
@@ -1231,10 +1232,11 @@ func (h *GroupHandler) UpdateAgentModel(c *gin.Context) {
 		enabled = *req.Enabled
 	}
 	cfg, err := h.agentModels.UpdateModel(c.Request.Context(), groupID, modelID, service.AgentModelConfigInput{
-		MediaType:      req.MediaType,
-		Enabled:        enabled,
-		Prices:         req.Prices,
-		RateMultiplier: req.RateMultiplier,
+		FreeInputImages: req.FreeInputImages,
+		MediaType:       req.MediaType,
+		Enabled:         enabled,
+		Prices:          req.Prices,
+		RateMultiplier:  req.RateMultiplier,
 	})
 	if err != nil {
 		response.ErrorFrom(c, err)

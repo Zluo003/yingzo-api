@@ -33,7 +33,7 @@ func (r *agentPlatformModelRepoStub) GetModelByID(context.Context, int64, int64)
 func (r *agentPlatformModelRepoStub) GetEnabledModel(context.Context, int64, string, string) (*service.AgentGroupModel, error) {
 	return nil, sql.ErrNoRows
 }
-func (r *agentPlatformModelRepoStub) UpdateModelConfig(context.Context, int64, int64, string, bool, *float64, []service.AgentModelPrice) error {
+func (r *agentPlatformModelRepoStub) UpdateModelConfig(context.Context, int64, int64, string, bool, *float64, *int, []service.AgentModelPrice) error {
 	return nil
 }
 func (r *agentPlatformModelRepoStub) DeleteModel(context.Context, int64, int64) error {

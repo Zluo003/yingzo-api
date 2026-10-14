@@ -98,28 +98,28 @@ curl "$BASE_URL/v1/videos/$VIDEO_ID" -H "Authorization: Bearer $API_KEY"
 每条输出基础费用：
 
 ```text
-（生成秒数 + 参考视频计费秒数）× 每秒单价
-+ max(0, 输入图片数 − 免费图片数) × 超额图片单价
+（生成秒数 + 参考视频计费秒数）× 当前分辨率每秒单价
++ max(0, 输入图片数 − 免费图片数) × 当前分辨率每秒单价
 ```
 
 参考视频按平台探测时长，沿用每段向上取整后求和规则，不采信下游 duration_seconds。图片包含首帧、尾帧、参考图；H3 默认前 5 张免费，H3 Max 默认前 2 张免费，可由分组覆盖。参考音频免费。普通视频分组再乘分组倍率；Agent 分组使用最终单价，不重复加倍率。
 
-例如 H3 Max：输出 6 秒、参考视频计费 4 秒、5 张参考图，免费 2 张，每秒 0.20 元、超额图片每张 0.10 元，基础费用为 (6+4)×0.20+(5−2)×0.10=2.30 元。
+例如 H3 Max：输出 6 秒、参考视频计费 4 秒、5 张参考图，免费 2 张，当前分辨率单价 0.20 元，基础费用为 (6+4)×0.20+(5−2)×0.20=2.60 元。
 
 图片费用纳入预估和任务总金额，随任务扣费；失败按保存的任务金额退款，不因后续改价重新计算。
 
 ## 运营配置
 
-1. 发布前执行迁移 263_video_input_image_pricing.sql。
+1. 发布前执行迁移 263_video_input_image_pricing.sql 和 264_agent_video_input_image_pricing.sql。
 2. 视频账号选择 APIMart，填写 Key。默认 Base URL：https://api.apimart.ai；API Path：/v1/tasks。此路径是查询集合，适配器将创建转换到 /v1/videos/generations。
 3. 勾选 minimax-h3 / minimax-h3-max，关联分组，配置实际可用分辨率和时长。默认上游名分别是 MiniMax-H3 / MiniMax-H3-Max。
-4. 后台“分组 → 新增/编辑 → 视频计费规则”按模型、分辨率配置每秒价格、免费输入图片数、超额图片价格（元/张）。免费数留空按模型默认，0 表示所有图片收费；图片单价 0 表示不加价。文档未给固定图片单价，需按实际成本和售价填写。
-5. Agent 分组输出单价来自模型目录，H3 系列还需通过分组管理 API 的 video_pricing_rules 提供同模型/分辨率的图片规则，否则拒绝创建以避免漏计；上述配置界面位于普通视频分组。
+4. 后台“分组 → 新增/编辑 → 视频计费规则”按模型、分辨率配置每秒价格；H3/H3 Max 只需在同一模型的一行设置一次免费输入图片数，其他分辨率行自动沿用。超额图片直接使用当前分辨率的每秒单价，不配置独立图片单价。免费数留空按模型默认，0 表示所有图片收费。
+5. Yingzo Agent 页面的视频模型表格中，H3/H3 Max 各有一个“免费参考图片数”配置，分辨率列仍填写输出每秒单价。Agent 请求会直接读取所选分辨率单价计算超额图片费用，无需额外的 video_pricing_rules。
 
 规则示例，价格仅示意：
 
 ```json
-{"model_code":"minimax-h3-max","resolution":"768p","credits_per_second":0.2,"free_input_images":2,"credits_per_input_image":0.1,"reference_video_multiplier":1,"enabled":true}
+{"model_code":"minimax-h3-max","resolution":"768p","credits_per_second":0.2,"free_input_images":2,"reference_video_multiplier":1,"enabled":true}
 ```
 
 上线后应使用实际账号验证额度、模型权限和公网素材。开发验证使用模拟上游，未消耗真实生成额度。

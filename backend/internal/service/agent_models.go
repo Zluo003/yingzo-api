@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -63,20 +64,21 @@ type AgentModelPrice struct {
 }
 
 type AgentGroupModel struct {
-	ID           int64             `json:"id"`
-	GroupID      int64             `json:"group_id"`
-	Platform     string            `json:"platform"`
-	ModelCode    string            `json:"model_code"`
-	MediaType    string            `json:"media_type"`
-	Enabled      bool              `json:"enabled"`
-	Available    bool              `json:"available"`
-	Excluded     bool              `json:"excluded"`
-	ExcludedAt   *time.Time        `json:"excluded_at,omitempty"`
-	DiscoveredAt time.Time         `json:"discovered_at"`
-	LastSeenAt   time.Time         `json:"last_seen_at"`
-	CreatedAt    time.Time         `json:"created_at"`
-	UpdatedAt    time.Time         `json:"updated_at"`
-	Prices       []AgentModelPrice `json:"prices"`
+	FreeInputImages *int              `json:"free_input_images,omitempty"`
+	ID              int64             `json:"id"`
+	GroupID         int64             `json:"group_id"`
+	Platform        string            `json:"platform"`
+	ModelCode       string            `json:"model_code"`
+	MediaType       string            `json:"media_type"`
+	Enabled         bool              `json:"enabled"`
+	Available       bool              `json:"available"`
+	Excluded        bool              `json:"excluded"`
+	ExcludedAt      *time.Time        `json:"excluded_at,omitempty"`
+	DiscoveredAt    time.Time         `json:"discovered_at"`
+	LastSeenAt      time.Time         `json:"last_seen_at"`
+	CreatedAt       time.Time         `json:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at"`
+	Prices          []AgentModelPrice `json:"prices"`
 	// RateMultiplier 是文本模型在源渠道价之上的下游倍率。nil 表示尚未配置，
 	// 此时该文本模型不可被调用（与"启用但没定价"等价）。0 是合法值。
 	RateMultiplier *float64 `json:"rate_multiplier"`
@@ -89,9 +91,10 @@ type AgentModelDiscovery struct {
 }
 
 type AgentModelConfigInput struct {
-	MediaType string            `json:"media_type"`
-	Enabled   bool              `json:"enabled"`
-	Prices    []AgentModelPrice `json:"prices"`
+	FreeInputImages *int              `json:"free_input_images,omitempty"`
+	MediaType       string            `json:"media_type"`
+	Enabled         bool              `json:"enabled"`
+	Prices          []AgentModelPrice `json:"prices"`
 	// RateMultiplier 仅文本模型使用；媒体模型的价格在 Prices 里按分辨率给出。
 	RateMultiplier *float64 `json:"rate_multiplier,omitempty"`
 }
@@ -105,7 +108,7 @@ type AgentModelRepository interface {
 	ListModels(ctx context.Context, groupID int64, includeExcluded bool) ([]AgentGroupModel, error)
 	GetModelByID(ctx context.Context, groupID, modelID int64) (*AgentGroupModel, error)
 	GetEnabledModel(ctx context.Context, groupID int64, platform, modelCode string) (*AgentGroupModel, error)
-	UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, prices []AgentModelPrice) error
+	UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, freeInputImages *int, prices []AgentModelPrice) error
 	DeleteModel(ctx context.Context, groupID, modelID int64) error
 }
 
@@ -319,7 +322,10 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 	if input.Enabled && mediaType != AgentMediaTypeText && !hasEnabledAgentModelPrice(prices) {
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "an enabled media model requires at least one configured and enabled price")
 	}
-	if err := s.modelRepo.UpdateModelConfig(ctx, groupID, model.ID, mediaType, input.Enabled, rate, prices); err != nil {
+	if input.FreeInputImages != nil && (mediaType != AgentMediaTypeVideo || !isMinimaxH3Model(model.ModelCode) || *input.FreeInputImages < 0) {
+		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "free_input_images requires a non-negative integer on MiniMax H3 video models")
+	}
+	if err := s.modelRepo.UpdateModelConfig(ctx, groupID, model.ID, mediaType, input.Enabled, rate, input.FreeInputImages, prices); err != nil {
 		return nil, fmt.Errorf("update Agent model: %w", err)
 	}
 	s.invalidateModelPlatforms(groupID)
@@ -447,16 +453,24 @@ func (s *AgentModelCatalogService) EnsureAgentImageModelPriced(ctx context.Conte
 	return false, nil
 }
 
-func (s *AgentModelCatalogService) ResolveMediaUnitPrice(
+func (s *AgentModelCatalogService) ResolveMediaUnitPrice(ctx context.Context, groupID int64, platform, mediaType, resolution string, models ...string) (float64, string, error) {
+	price, model, err := s.ResolveMediaPrice(ctx, groupID, platform, mediaType, resolution, models...)
+	if err != nil {
+		return 0, "", err
+	}
+	return price.UnitPrice, model.ModelCode, nil
+}
+
+func (s *AgentModelCatalogService) ResolveMediaPrice(
 	ctx context.Context,
 	groupID int64,
 	platform string,
 	mediaType string,
 	resolution string,
 	models ...string,
-) (float64, string, error) {
+) (*AgentModelPrice, *AgentGroupModel, error) {
 	if s == nil || s.modelRepo == nil || s.accountRepo == nil {
-		return 0, "", ErrAgentModelCatalogUnavailable
+		return nil, nil, ErrAgentModelCatalogUnavailable
 	}
 	platform = normalizeAgentPlatform(platform)
 	var err error
@@ -464,11 +478,11 @@ func (s *AgentModelCatalogService) ResolveMediaUnitPrice(
 		resolution, err = normalizeAgentPriceResolution(mediaType, resolution)
 	}
 	if err != nil {
-		return 0, "", err
+		return nil, nil, err
 	}
 	accounts, err := s.listCatalogAccounts(ctx, groupID)
 	if err != nil {
-		return 0, "", fmt.Errorf("%w: %v", ErrAgentModelCatalogUnavailable, err)
+		return nil, nil, fmt.Errorf("%w: %v", ErrAgentModelCatalogUnavailable, err)
 	}
 	current := agentDiscoverySet(discoverAgentModels(accounts))
 	for _, modelCode := range compactAgentModelCandidates(models) {
@@ -484,14 +498,14 @@ func (s *AgentModelCatalogService) ResolveMediaUnitPrice(
 		}
 		for _, price := range model.Prices {
 			if price.Resolution == resolution && price.BillingUnit == billingUnitForAgentModel(modelCode, mediaType) && price.UnitPrice >= 0 && agentModelPriceEnabled(price) {
-				return price.UnitPrice, model.ModelCode, nil
+				return &price, model, nil
 			}
 		}
 	}
 	if mediaType == AgentMediaTypeImage {
-		return 0, "", fmt.Errorf("%w for model %s resolution %s", ErrAgentImagePricingUnavailable, firstAgentModelCandidate(models), resolution)
+		return nil, nil, fmt.Errorf("%w for model %s resolution %s", ErrAgentImagePricingUnavailable, firstAgentModelCandidate(models), resolution)
 	}
-	return 0, "", fmt.Errorf("%w for model %s resolution %s", ErrVideoPricingRuleNotFound, firstAgentModelCandidate(models), resolution)
+	return nil, nil, fmt.Errorf("%w for model %s resolution %s", ErrVideoPricingRuleNotFound, firstAgentModelCandidate(models), resolution)
 }
 
 // ResolveModelPlatform 返回分组内提供该模型的平台，供请求入口选择账号平台使用。
@@ -590,7 +604,7 @@ func normalizeAgentModelPrices(mediaType string, prices []AgentModelPrice) ([]Ag
 		if err != nil {
 			return nil, err
 		}
-		if price.UnitPrice < 0 {
+		if price.UnitPrice < 0 || math.IsNaN(price.UnitPrice) || math.IsInf(price.UnitPrice, 0) {
 			return nil, fmt.Errorf("unit price for %s must be non-negative", resolution)
 		}
 		if _, exists := seen[resolution]; exists {

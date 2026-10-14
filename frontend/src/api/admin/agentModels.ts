@@ -26,6 +26,7 @@ export interface AgentModelPrice {
 }
 
 export interface AgentGroupModel {
+  free_input_images?: number | null
   id: number
   group_id: number
   platform: string
@@ -50,6 +51,7 @@ export interface AgentModelCatalogConfig {
 }
 
 export interface UpdateAgentModelPayload {
+  free_input_images?: number | null
   media_type: AgentMediaType
   enabled: boolean
   /** 仅文本模型：源渠道价之上的下游倍率。 */

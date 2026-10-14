@@ -122,7 +122,7 @@ func TestApimartInputImagePricing(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 16, estimate.BillableSeconds)
 		require.Equal(t, (tc.images-tc.free)*2, estimate.BillableInputImages)
-		expected := (8*0.2 + float64(tc.images-tc.free)*0.1) * 2
+		expected := (8*0.2 + float64(tc.images-tc.free)*0.2) * 2
 		require.InDelta(t, expected, estimate.TotalCost, 1e-9)
 		require.InDelta(t, expected*2, estimate.ActualCost, 1e-9)
 		zero := 0
@@ -131,4 +131,34 @@ func TestApimartInputImagePricing(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, tc.images, estimate.BillableInputImages)
 	}
+}
+
+func TestApimartAgentPricingUsesModelAllowanceAndResolutionPrice(t *testing.T) {
+	groupID := int64(9)
+	catalog, _ := configuredAgentCatalogForEstimateTest(t, groupID, PlatformVideo, VideoModelMinimaxH3, AgentMediaTypeVideo, VideoResolution768P, 0.2)
+	config, err := catalog.GetConfig(context.Background(), groupID)
+	require.NoError(t, err)
+	free := 0
+	_, err = catalog.UpdateModel(context.Background(), groupID, config.Models[0].ID, AgentModelConfigInput{
+		MediaType:       AgentMediaTypeVideo,
+		Enabled:         true,
+		FreeInputImages: &free,
+		Prices:          []AgentModelPrice{{Resolution: VideoResolution768P, UnitPrice: 0.2}},
+	})
+	require.NoError(t, err)
+
+	request := &VideoCreateRequest{Model: VideoModelMinimaxH3, Resolution: VideoResolution768P, Prompt: "test", Duration: 5}
+	for i := 0; i < 2; i++ {
+		request.Content = append(request.Content, VideoContent{Type: "image_url", Role: "reference_image", ImageURL: &VideoContentURL{URL: "https://cdn.example/ref.png"}})
+	}
+	seconds := 3.0
+	request.Content = append(request.Content, VideoContent{Type: "video_url", Role: "reference_video", VideoURL: &VideoContentURL{URL: "https://cdn.example/ref.mp4"}, DurationSeconds: &seconds})
+
+	service := &VideoService{agentModels: catalog}
+	estimate, err := service.EstimateGenerationCost(context.Background(), &APIKey{Group: &Group{ID: groupID, Kind: "agent", SystemCode: "yingzo", RateMultiplier: 99}}, request, 1)
+	require.NoError(t, err)
+	require.Equal(t, 0, estimate.FreeInputImages)
+	require.Equal(t, 2, estimate.BillableInputImages)
+	// (5 generated + 3 reference) * 0.2 + 2 images * 0.2.
+	require.InDelta(t, 2.0, estimate.ActualCost, 1e-9)
 }

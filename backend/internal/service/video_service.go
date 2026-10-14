@@ -348,7 +348,7 @@ func (s *VideoService) estimateGenerationCost(
 		if s.agentModels == nil {
 			return nil, nil, nil, videoBadRequest("video_pricing_rule_not_found", "Video pricing rule is not configured")
 		}
-		unitPrice, modelCode, priceErr := s.agentModels.ResolveMediaUnitPrice(
+		price, agentModel, priceErr := s.agentModels.ResolveMediaPrice(
 			ctx,
 			apiKey.Group.ID,
 			PlatformVideo,
@@ -360,11 +360,14 @@ func (s *VideoService) estimateGenerationCost(
 			return nil, nil, nil, videoBadRequest("video_pricing_rule_not_found", "Video pricing rule is not configured")
 		}
 		rule = &VideoGroupPricingRule{
-			GroupID:          apiKey.Group.ID,
-			ModelCode:        modelCode,
-			Resolution:       normalized.Resolution,
-			CreditsPerSecond: unitPrice,
-			Enabled:          true,
+			GroupID:              apiKey.Group.ID,
+			ModelCode:            agentModel.ModelCode,
+			Resolution:           normalized.Resolution,
+			CreditsPerSecond:     price.UnitPrice,
+			FreeInputImages:      agentModel.FreeInputImages,
+			CreditsPerInputImage: price.UnitPrice,
+			UpdatedAt:            price.UpdatedAt,
+			Enabled:              true,
 		}
 	} else {
 		rule, err = s.pricingRepo.GetEnabledRule(ctx, apiKey.Group.ID, normalized.Model, normalized.Resolution)
@@ -374,18 +377,6 @@ func (s *VideoService) estimateGenerationCost(
 			}
 			return nil, nil, nil, err
 		}
-	}
-	// Agent media prices supply output seconds; MiniMax input fees use the group's video rule.
-	if apiKey.Group.IsAgent() && isMinimaxH3Model(normalized.Model) {
-		if s.pricingRepo == nil {
-			return nil, nil, nil, ErrVideoPricingRuleNotFound
-		}
-		inputRule, inputErr := s.pricingRepo.GetEnabledRule(ctx, apiKey.Group.ID, normalized.Model, normalized.Resolution)
-		if inputErr != nil {
-			return nil, nil, nil, inputErr
-		}
-		rule.FreeInputImages = inputRule.FreeInputImages
-		rule.CreditsPerInputImage = inputRule.CreditsPerInputImage
 	}
 	referenceMultiplier := 1.0
 	billableSecondsPerOutput := normalized.BillableSeconds
@@ -410,6 +401,12 @@ func (s *VideoService) estimateGenerationCost(
 	}
 	if rule.FreeInputImages != nil {
 		freeImages = *rule.FreeInputImages
+	}
+	if isMinimaxH3Model(normalized.Model) {
+		// MiniMax input images use the selected output resolution's unit price.
+		// Keep the legacy column on the pricing rule for migration compatibility,
+		// but never let it create a second, independent price for H3 models.
+		rule.CreditsPerInputImage = rule.CreditsPerSecond
 	}
 	billableImages := max(0, inputImages-freeImages)
 	imageCost := float64(billableImages) * rule.CreditsPerInputImage

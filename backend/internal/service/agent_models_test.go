@@ -169,11 +169,12 @@ func (r *agentModelMemoryRepo) GetEnabledModel(_ context.Context, groupID int64,
 	return &copy, nil
 }
 
-func (r *agentModelMemoryRepo) UpdateModelConfig(_ context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, prices []AgentModelPrice) error {
+func (r *agentModelMemoryRepo) UpdateModelConfig(_ context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, freeInputImages *int, prices []AgentModelPrice) error {
 	for _, model := range r.models {
 		if model.GroupID == groupID && model.ID == modelID && !model.Excluded {
 			model.MediaType = mediaType
 			model.Enabled = enabled
+			model.FreeInputImages = freeInputImages
 			model.Prices = append([]AgentModelPrice(nil), prices...)
 			if rateMultiplier == nil {
 				model.RateMultiplier = nil

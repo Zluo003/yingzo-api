@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -1534,6 +1533,7 @@ func (s *adminServiceImpl) hydrateVideoPricingRule(ctx context.Context, group *G
 func normalizeVideoPricingRules(rules []VideoGroupPricingRule) ([]VideoGroupPricingRule, error) {
 	out := make([]VideoGroupPricingRule, 0, len(rules))
 	seen := make(map[string]struct{}, len(rules))
+	freeImagesByModel := make(map[string]*int)
 	for _, rule := range rules {
 		model := strings.TrimSpace(rule.ModelCode)
 		if !IsSupportedVideoModel(model) {
@@ -1543,11 +1543,23 @@ func normalizeVideoPricingRules(rules []VideoGroupPricingRule) ([]VideoGroupPric
 		if !IsSupportedVideoResolution(model, resolution) {
 			return nil, infraerrors.BadRequest("invalid_video_resolution", "Invalid video resolution")
 		}
-		if rule.CreditsPerInputImage < 0 || math.IsNaN(rule.CreditsPerInputImage) || math.IsInf(rule.CreditsPerInputImage, 0) || (rule.FreeInputImages != nil && *rule.FreeInputImages < 0) {
-			return nil, infraerrors.BadRequest("invalid_video_pricing_rule", "Input image price and free count must be non-negative")
-		}
 		if rule.CreditsPerSecond < 0 {
 			return nil, infraerrors.BadRequest("invalid_video_pricing_rule", "Video price must be non-negative")
+		}
+		if rule.FreeInputImages != nil && *rule.FreeInputImages < 0 {
+			return nil, infraerrors.BadRequest("invalid_video_pricing_rule", "Free input image count must be non-negative")
+		}
+		if model == VideoModelMinimaxH3 || model == VideoModelMinimaxH3Max {
+			if previous, exists := freeImagesByModel[model]; exists {
+				if (previous == nil) != (rule.FreeInputImages == nil) || (previous != nil && *previous != *rule.FreeInputImages) {
+					return nil, infraerrors.BadRequest("invalid_video_pricing_rule", "MiniMax free input image count must be consistent across resolutions")
+				}
+			} else if rule.FreeInputImages != nil {
+				value := *rule.FreeInputImages
+				freeImagesByModel[model] = &value
+			} else {
+				freeImagesByModel[model] = nil
+			}
 		}
 		referenceMultiplier := rule.ReferenceVideoMultiplier
 		if referenceMultiplier <= 0 {
@@ -1558,12 +1570,16 @@ func normalizeVideoPricingRules(rules []VideoGroupPricingRule) ([]VideoGroupPric
 			return nil, infraerrors.BadRequest("duplicate_video_pricing_rule", "Duplicate video pricing rule")
 		}
 		seen[key] = struct{}{}
+		inputImagePrice := rule.CreditsPerInputImage
+		if model == VideoModelMinimaxH3 || model == VideoModelMinimaxH3Max {
+			inputImagePrice = rule.CreditsPerSecond
+		}
 		out = append(out, VideoGroupPricingRule{
 			ModelCode:                model,
 			Resolution:               resolution,
 			CreditsPerSecond:         rule.CreditsPerSecond,
 			FreeInputImages:          rule.FreeInputImages,
-			CreditsPerInputImage:     rule.CreditsPerInputImage,
+			CreditsPerInputImage:     inputImagePrice,
 			ReferenceVideoMultiplier: referenceMultiplier,
 			Enabled:                  rule.Enabled,
 		})
