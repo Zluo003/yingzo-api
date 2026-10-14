@@ -39,14 +39,17 @@ curl "$YINGZO_BASE_URL/api/v1/agent/pricing" -H "Authorization: Bearer $YINGZO_A
   "capabilities": {
     "input_modalities": ["text", "audio"],
     "output_modalities": ["audio", "text", "video"],
+    "operations": ["audio.generate"],
     "streaming": false,
     "asynchronous": true,
-    "supported_modes": ["instrumental", "song"]
+    "supported_modes": ["instrumental", "song"],
+    "versions": ["v6", "v6-wild", "v6-mini"],
+    "max_mode_multiplier": 2
   }
 }
 ```
 
-按 `supported_modes` 控制对应价格档位入口；`capabilities.operations` 提供操作路径及参数类型/必填说明，`versions` 给出公共版本，`max_mode_multiplier=2`。只有启用价格的模式会下发，目录不保证每次提交时账号仍有容量。
+`capabilities.operations` 是与其它模型一致的字符串数组路由词表（`audio.generate`），不携带各操作的 API 字段规格；每个操作的参数校验由网关在请求时执行。按 `supported_modes` 控制对应价格档位入口，`versions` 给出公共版本，`max_mode_multiplier=2`。只有启用价格的模式会下发，目录不保证每次提交时账号仍有容量。
 
 价格快照读取 `rules` 中 `model=suno-v6`、`platform=openai`、`media_type=audio` 的规则。模式沿用字段名 `resolution`，界面应显示「生成模式」，不是音频分辨率。示意规则如下，数值不代表默认售价：
 

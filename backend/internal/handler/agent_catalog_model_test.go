@@ -123,6 +123,35 @@ func capabilitiesOf(t *testing.T, model gin.H) gin.H {
 	return capabilities
 }
 
+// 桌面内核把 operations 当字符串数组路由词表解析；一旦发布成其它类型
+// （如操作 API 文档表），内核会拒绝整个目录，用户无法保存任何连接。
+func TestAgentCatalogSunoPublishesStringArrayOperations(t *testing.T) {
+	model := agentCatalogModel(service.AgentModelCatalogEntry{
+		ID:         service.SunoModel,
+		MediaTypes: []string{service.AgentMediaTypeAudio},
+		Platforms:  []string{service.PlatformOpenAI},
+		Interfaces: []string{service.AgentInterfaceMusic},
+	}, &service.AgentModelCatalogConfig{Models: []service.AgentGroupModel{{
+		ModelCode: service.SunoModel,
+		MediaType: service.AgentMediaTypeAudio,
+		Enabled:   true,
+		Available: true,
+		Prices:    []service.AgentModelPrice{{Resolution: "song"}},
+	}}})
+
+	capabilities := capabilitiesOf(t, model)
+	require.Equal(t, []string{"audio.generate"}, capabilities["operations"])
+	// 结构字段必须在 capabilities 里自洽，不能只留在条目顶层。
+	require.Equal(t, []string{service.AgentMediaTypeAudio}, capabilities["media_types"])
+	require.Equal(t, []string{service.PlatformOpenAI}, capabilities["platforms"])
+	require.Equal(t, []string{service.AgentInterfaceMusic}, capabilities["interfaces"])
+	require.Equal(t, false, capabilities["streaming"])
+	require.Equal(t, true, capabilities["asynchronous"])
+	// 非结构的运营扩展原样保留。
+	require.Equal(t, []string{"song"}, capabilities["supported_modes"])
+	require.Equal(t, []string{"v6", "v6-wild", "v6-mini"}, capabilities["versions"])
+}
+
 func TestAgentCatalogMidjourneyOnlyConfiguredOperations(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		model := agentCatalogModel(service.AgentModelCatalogEntry{ID: service.MidjourneyModel, MediaTypes: []string{service.AgentMediaTypeImage}, Platforms: []string{service.PlatformOpenAI}, Interfaces: []string{service.AgentInterfaceMidjourney}}, &service.AgentModelCatalogConfig{Models: []service.AgentGroupModel{{ModelCode: service.MidjourneyModel, MediaType: service.AgentMediaTypeImage, Enabled: true, Available: true, Prices: []service.AgentModelPrice{{Resolution: "generation", Enabled: &enabled}, {Resolution: "upscale"}, {Resolution: "imagine_turbo"}}}}})

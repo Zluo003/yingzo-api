@@ -254,7 +254,23 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 	capabilities["streaming"] = streaming
 	capabilities["asynchronous"] = asynchronous
 	if entry.ID == service.SunoModel {
-		capabilities = gin.H{"input_modalities": []string{"text", "audio"}, "output_modalities": []string{"audio", "text", "video"}, "streaming": false, "asynchronous": true, "supported_modes": configuredAgentModelResolutions(entry, config, service.AgentMediaTypeAudio), "operations": service.SunoOperations(), "versions": []string{"v6", "v6-wild", "v6-mini"}, "max_mode_multiplier": 2}
+		// operations 是桌面内核的路由词表，必须是字符串数组；每个操作的
+		// API 字段规格属于计费元数据，发布进目录会让内核校验拒绝整个目录，
+		// 用户无法保存连接。结构字段与其它模型一样从 entry 透传，保持
+		// 目录条目自洽。
+		capabilities = gin.H{
+			"input_modalities":    []string{"text", "audio"},
+			"output_modalities":   []string{"audio", "text", "video"},
+			"streaming":           false,
+			"asynchronous":        true,
+			"supported_modes":     configuredAgentModelResolutions(entry, config, service.AgentMediaTypeAudio),
+			"operations":          []string{"audio.generate"},
+			"media_types":         entry.MediaTypes,
+			"platforms":           entry.Platforms,
+			"interfaces":          entry.Interfaces,
+			"versions":            []string{"v6", "v6-wild", "v6-mini"},
+			"max_mode_multiplier": 2,
+		}
 	}
 	if entry.ID == service.MidjourneyModel {
 		// The desktop only needs generation speed choices for Midjourney.
