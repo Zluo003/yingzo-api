@@ -344,6 +344,7 @@ func (s *VideoService) estimateGenerationCost(
 		return nil, nil, nil, err
 	}
 	var rule *VideoGroupPricingRule
+	var agentInputImagePrice *float64
 	if apiKey.Group.IsAgent() {
 		if s.agentModels == nil {
 			return nil, nil, nil, videoBadRequest("video_pricing_rule_not_found", "Video pricing rule is not configured")
@@ -359,6 +360,7 @@ func (s *VideoService) estimateGenerationCost(
 		if priceErr != nil {
 			return nil, nil, nil, videoBadRequest("video_pricing_rule_not_found", "Video pricing rule is not configured")
 		}
+		agentInputImagePrice = agentModel.InputImageUnitPrice
 		rule = &VideoGroupPricingRule{
 			GroupID:              apiKey.Group.ID,
 			ModelCode:            agentModel.ModelCode,
@@ -403,10 +405,15 @@ func (s *VideoService) estimateGenerationCost(
 		freeImages = *rule.FreeInputImages
 	}
 	if isMinimaxH3Model(normalized.Model) {
-		// MiniMax input images use the selected output resolution's unit price.
-		// Keep the legacy column on the pricing rule for migration compatibility,
-		// but never let it create a second, independent price for H3 models.
-		rule.CreditsPerInputImage = rule.CreditsPerSecond
+		// Overage input images bill at the model-wide unit price when the admin
+		// configured one; otherwise they fall back to the selected resolution's
+		// unit price. The legacy rule column stays for migration compatibility
+		// but never creates a second, independent price for H3 models.
+		if agentInputImagePrice != nil {
+			rule.CreditsPerInputImage = *agentInputImagePrice
+		} else {
+			rule.CreditsPerInputImage = rule.CreditsPerSecond
+		}
 	}
 	billableImages := max(0, inputImages-freeImages)
 	imageCost := float64(billableImages) * rule.CreditsPerInputImage

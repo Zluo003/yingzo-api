@@ -59,7 +59,7 @@ func TestAgentModelRepositoryUpdateReplacesPricesInOneTransaction(t *testing.T) 
 		WillReturnResult(sqlmock.NewResult(2, 1))
 	mock.ExpectCommit()
 
-	err := repo.UpdateModelConfig(context.Background(), groupID, modelID, service.AgentMediaTypeImage, true, nil, nil, []service.AgentModelPrice{
+	err := repo.UpdateModelConfig(context.Background(), groupID, modelID, service.AgentMediaTypeImage, true, nil, nil, nil, []service.AgentModelPrice{
 		{Resolution: service.ImageBillingSize1K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0},
 		{Resolution: service.ImageBillingSize2K, BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0.25},
 	})

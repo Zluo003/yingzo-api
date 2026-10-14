@@ -69,9 +69,10 @@ export default {
     yingzoAgent: {
       freeInputImages: 'Free reference images',
       extraImages: 'Excess images',
-      resolutionImagePrice: 'Resolution unit price per image',
-      invalidInputImagePricing: 'Free images must be a non-negative integer.',
-      inputImagePricingHint: 'MiniMax H3 includes 5 images, H3 Max includes 2. Blank uses the default; 0 charges every image. Each extra image uses the selected resolution unit price. First/last frames and reference images all count.',
+      inputImageUnitPrice: 'Excess image unit price (per image)',
+      inputImagePricePlaceholder: 'Resolution price',
+      invalidInputImagePricing: 'Free images must be a non-negative integer; the excess image unit price must be a non-negative number.',
+      inputImagePricingHint: 'MiniMax H3 includes 5 images, H3 Max includes 2. Blank uses the default; 0 charges every image. Each extra image bills at the excess image unit price, or at the selected resolution unit price when left blank. First/last frames and reference images all count.',
       title: 'Yingzo Agent',
       description:
         'Built-in aggregate group: assign accounts to this group to let Yingzo Agent call the models they provide, then price them per text, image, and video. This group cannot be deleted.',

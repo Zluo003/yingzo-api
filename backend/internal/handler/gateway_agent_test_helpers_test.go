@@ -34,7 +34,7 @@ func (r *gatewayAgentModelRepoStub) GetEnabledModel(_ context.Context, groupID i
 	}
 	return nil, sql.ErrNoRows
 }
-func (r *gatewayAgentModelRepoStub) UpdateModelConfig(context.Context, int64, int64, string, bool, *float64, *int, []service.AgentModelPrice) error {
+func (r *gatewayAgentModelRepoStub) UpdateModelConfig(context.Context, int64, int64, string, bool, *float64, *int, *float64, []service.AgentModelPrice) error {
 	return nil
 }
 func (r *gatewayAgentModelRepoStub) DeleteModel(context.Context, int64, int64) error {

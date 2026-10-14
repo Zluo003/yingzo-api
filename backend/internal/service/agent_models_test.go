@@ -169,12 +169,13 @@ func (r *agentModelMemoryRepo) GetEnabledModel(_ context.Context, groupID int64,
 	return &copy, nil
 }
 
-func (r *agentModelMemoryRepo) UpdateModelConfig(_ context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, freeInputImages *int, prices []AgentModelPrice) error {
+func (r *agentModelMemoryRepo) UpdateModelConfig(_ context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, freeInputImages *int, inputImageUnitPrice *float64, prices []AgentModelPrice) error {
 	for _, model := range r.models {
 		if model.GroupID == groupID && model.ID == modelID && !model.Excluded {
 			model.MediaType = mediaType
 			model.Enabled = enabled
 			model.FreeInputImages = freeInputImages
+			model.InputImageUnitPrice = inputImageUnitPrice
 			model.Prices = append([]AgentModelPrice(nil), prices...)
 			if rateMultiplier == nil {
 				model.RateMultiplier = nil
@@ -978,4 +979,63 @@ func TestListAvailableHealSkipsWhenNoCatalogAccounts(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, catalog)
 	require.Len(t, models.models, 1)
+}
+
+func TestAgentModelInputImageUnitPriceAppliesToMiniMaxOnly(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
+		Platform: PlatformVideo,
+		Credentials: map[string]any{"model_mapping": map[string]any{
+			VideoModelMinimaxH3:  "apimart-minimax-h3",
+			VideoModelSeedance20: "seedance-upstream",
+		}},
+	}}}
+	catalogService, models := newAgentCatalogForTest(accounts)
+	_, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	enableAllAgentModelsForTest(models)
+
+	config, err := catalogService.GetConfig(context.Background(), 9)
+	require.NoError(t, err)
+	byCode := map[string]AgentGroupModel{}
+	for _, entry := range config.Models {
+		byCode[entry.ModelCode] = entry
+	}
+
+	price := 0.05
+	free := 5
+	_, err = catalogService.UpdateModel(context.Background(), 9, byCode[VideoModelMinimaxH3].ID, AgentModelConfigInput{
+		MediaType:           AgentMediaTypeVideo,
+		Enabled:             true,
+		Prices:              []AgentModelPrice{{Resolution: VideoResolution768P, UnitPrice: 0.2}},
+		FreeInputImages:     &free,
+		InputImageUnitPrice: &price,
+	})
+	require.NoError(t, err)
+	config, err = catalogService.GetConfig(context.Background(), 9)
+	require.NoError(t, err)
+	for _, entry := range config.Models {
+		if entry.ModelCode != VideoModelMinimaxH3 {
+			continue
+		}
+		require.NotNil(t, entry.InputImageUnitPrice)
+		require.InDelta(t, 0.05, *entry.InputImageUnitPrice, 1e-9)
+	}
+
+	negative := -0.5
+	_, err = catalogService.UpdateModel(context.Background(), 9, byCode[VideoModelMinimaxH3].ID, AgentModelConfigInput{
+		MediaType:           AgentMediaTypeVideo,
+		Enabled:             true,
+		Prices:              []AgentModelPrice{{Resolution: VideoResolution768P, UnitPrice: 0.2}},
+		InputImageUnitPrice: &negative,
+	})
+	require.ErrorContains(t, err, "input_image_unit_price")
+
+	// 非 MiniMax 视频模型不接受超额图片单价：它们的计费与输入图片无关。
+	_, err = catalogService.UpdateModel(context.Background(), 9, byCode[VideoModelSeedance20].ID, AgentModelConfigInput{
+		MediaType:           AgentMediaTypeVideo,
+		Enabled:             true,
+		Prices:              []AgentModelPrice{{Resolution: VideoResolution1080P, UnitPrice: 0.2}},
+		InputImageUnitPrice: &price,
+	})
+	require.ErrorContains(t, err, "input_image_unit_price")
 }

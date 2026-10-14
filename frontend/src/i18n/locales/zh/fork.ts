@@ -69,9 +69,10 @@ export default {
     yingzoAgent: {
       freeInputImages: '免费参考图片数',
       extraImages: '超额图片',
-      resolutionImagePrice: '按所选分辨率单价/张',
-      invalidInputImagePricing: '免费图片数须为非负整数。',
-      inputImagePricingHint: 'MiniMax H3 默认前 5 张图片免费，H3 Max 默认前 2 张免费；免费数留空使用默认，0 表示全部收费。超额图片直接按所选分辨率的单价计费，首帧、尾帧和参考图均计入张数。',
+      inputImageUnitPrice: '超额图片单价（/张）',
+      inputImagePricePlaceholder: '按分辨率单价',
+      invalidInputImagePricing: '免费图片数须为非负整数，超额图片单价须为非负数字。',
+      inputImagePricingHint: 'MiniMax H3 默认前 5 张图片免费，H3 Max 默认前 2 张免费；免费数留空使用默认，0 表示全部收费。超额图片按「超额图片单价」计费，留空时按所选分辨率的单价计费；首帧、尾帧和参考图均计入张数。',
       title: 'Yingzo Agent',
       description:
         '系统内置的多模型聚合分组：把账号归属到该分组即可让 Yingzo Agent 调用这些账号提供的模型，再按文本/图片/视频分别配置计价。该分组不可删除。',

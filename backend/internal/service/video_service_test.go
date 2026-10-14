@@ -1825,3 +1825,59 @@ func (r *videoUsageBillingRepoStub) CaptureBatchImageBalance(ctx context.Context
 func (r *videoUsageBillingRepoStub) ReleaseBatchImageBalance(ctx context.Context, cmd *BatchImageBalanceHoldCommand) (*BatchImageBalanceHoldResult, error) {
 	return &BatchImageBalanceHoldResult{}, nil
 }
+
+func TestVideoAgentEstimateBillsMiniMaxOverageImagesAtConfiguredUnitPrice(t *testing.T) {
+	images := func() []VideoContent {
+		content := make([]VideoContent, 0, 7)
+		for i := 0; i < 7; i++ {
+			content = append(content, VideoContent{Type: "image_url", Role: "reference_image", ImageURL: &VideoContentURL{URL: fmt.Sprintf("https://cdn.example.com/%d.png", i)}})
+		}
+		return content
+	}
+	newAgentCatalog := func(inputImageUnitPrice *float64) *AgentModelCatalogService {
+		accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
+			Platform: PlatformVideo,
+			Credentials: map[string]any{"model_mapping": map[string]any{
+				VideoModelMinimaxH3: "apimart-minimax-h3",
+			}},
+		}}}
+		catalogService, models := newAgentCatalogForTest(accounts)
+		_, err := catalogService.Sync(context.Background(), 9)
+		require.NoError(t, err)
+		enableAllAgentModelsForTest(models)
+		config, err := catalogService.GetConfig(context.Background(), 9)
+		require.NoError(t, err)
+		free := 5
+		_, err = catalogService.UpdateModel(context.Background(), 9, config.Models[0].ID, AgentModelConfigInput{
+			MediaType:           AgentMediaTypeVideo,
+			Enabled:             true,
+			Prices:              []AgentModelPrice{{Resolution: VideoResolution768P, UnitPrice: 0.2}},
+			FreeInputImages:     &free,
+			InputImageUnitPrice: inputImageUnitPrice,
+		})
+		require.NoError(t, err)
+		return catalogService
+	}
+
+	request := &VideoCreateRequest{Model: VideoModelMinimaxH3, Prompt: "move", Duration: 5, Resolution: VideoResolution768P, Content: images()}
+
+	// 配置了超额图片单价：7 张图、前 5 张免费，超额 2 张按 0.05 计。
+	price := 0.05
+	videoService := NewVideoService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &config.Config{})
+	videoService.SetAgentModelCatalog(newAgentCatalog(&price))
+	apiKey := &APIKey{Group: &Group{ID: 9, Platform: PlatformVideo, Kind: "agent", SystemCode: "yingzo"}}
+	_, _, estimate, err := videoService.estimateGenerationCost(context.Background(), apiKey, request, 1)
+	require.NoError(t, err)
+	require.Equal(t, 7, estimate.InputImages)
+	require.Equal(t, 5, estimate.FreeInputImages)
+	require.InDelta(t, 0.05, estimate.CreditsPerInputImage, 1e-9)
+	require.InDelta(t, 0.1, estimate.InputImageCost, 1e-9)
+
+	// 未配置：沿用所选分辨率档位单价 0.2。
+	videoService = NewVideoService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, &config.Config{})
+	videoService.SetAgentModelCatalog(newAgentCatalog(nil))
+	_, _, estimate, err = videoService.estimateGenerationCost(context.Background(), apiKey, request, 1)
+	require.NoError(t, err)
+	require.InDelta(t, 0.2, estimate.CreditsPerInputImage, 1e-9)
+	require.InDelta(t, 0.4, estimate.InputImageCost, 1e-9)
+}

@@ -64,21 +64,24 @@ type AgentModelPrice struct {
 }
 
 type AgentGroupModel struct {
-	FreeInputImages *int              `json:"free_input_images,omitempty"`
-	ID              int64             `json:"id"`
-	GroupID         int64             `json:"group_id"`
-	Platform        string            `json:"platform"`
-	ModelCode       string            `json:"model_code"`
-	MediaType       string            `json:"media_type"`
-	Enabled         bool              `json:"enabled"`
-	Available       bool              `json:"available"`
-	Excluded        bool              `json:"excluded"`
-	ExcludedAt      *time.Time        `json:"excluded_at,omitempty"`
-	DiscoveredAt    time.Time         `json:"discovered_at"`
-	LastSeenAt      time.Time         `json:"last_seen_at"`
-	CreatedAt       time.Time         `json:"created_at"`
-	UpdatedAt       time.Time         `json:"updated_at"`
-	Prices          []AgentModelPrice `json:"prices"`
+	FreeInputImages *int `json:"free_input_images,omitempty"`
+	// InputImageUnitPrice 是 MiniMax H3 超额输入图片的每张单价。nil 表示未配置，
+	// 此时超额图片沿用所选分辨率档位的单价计费。0 是合法值（超额图片免费）。
+	InputImageUnitPrice *float64          `json:"input_image_unit_price,omitempty"`
+	ID                  int64             `json:"id"`
+	GroupID             int64             `json:"group_id"`
+	Platform            string            `json:"platform"`
+	ModelCode           string            `json:"model_code"`
+	MediaType           string            `json:"media_type"`
+	Enabled             bool              `json:"enabled"`
+	Available           bool              `json:"available"`
+	Excluded            bool              `json:"excluded"`
+	ExcludedAt          *time.Time        `json:"excluded_at,omitempty"`
+	DiscoveredAt        time.Time         `json:"discovered_at"`
+	LastSeenAt          time.Time         `json:"last_seen_at"`
+	CreatedAt           time.Time         `json:"created_at"`
+	UpdatedAt           time.Time         `json:"updated_at"`
+	Prices              []AgentModelPrice `json:"prices"`
 	// RateMultiplier 是文本模型在源渠道价之上的下游倍率。nil 表示尚未配置，
 	// 此时该文本模型不可被调用（与"启用但没定价"等价）。0 是合法值。
 	RateMultiplier *float64 `json:"rate_multiplier"`
@@ -91,10 +94,11 @@ type AgentModelDiscovery struct {
 }
 
 type AgentModelConfigInput struct {
-	FreeInputImages *int              `json:"free_input_images,omitempty"`
-	MediaType       string            `json:"media_type"`
-	Enabled         bool              `json:"enabled"`
-	Prices          []AgentModelPrice `json:"prices"`
+	FreeInputImages     *int              `json:"free_input_images,omitempty"`
+	InputImageUnitPrice *float64          `json:"input_image_unit_price,omitempty"`
+	MediaType           string            `json:"media_type"`
+	Enabled             bool              `json:"enabled"`
+	Prices              []AgentModelPrice `json:"prices"`
 	// RateMultiplier 仅文本模型使用；媒体模型的价格在 Prices 里按分辨率给出。
 	RateMultiplier *float64 `json:"rate_multiplier,omitempty"`
 }
@@ -108,7 +112,7 @@ type AgentModelRepository interface {
 	ListModels(ctx context.Context, groupID int64, includeExcluded bool) ([]AgentGroupModel, error)
 	GetModelByID(ctx context.Context, groupID, modelID int64) (*AgentGroupModel, error)
 	GetEnabledModel(ctx context.Context, groupID int64, platform, modelCode string) (*AgentGroupModel, error)
-	UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, freeInputImages *int, prices []AgentModelPrice) error
+	UpdateModelConfig(ctx context.Context, groupID, modelID int64, mediaType string, enabled bool, rateMultiplier *float64, freeInputImages *int, inputImageUnitPrice *float64, prices []AgentModelPrice) error
 	DeleteModel(ctx context.Context, groupID, modelID int64) error
 }
 
@@ -325,7 +329,10 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 	if input.FreeInputImages != nil && (mediaType != AgentMediaTypeVideo || !isMinimaxH3Model(model.ModelCode) || *input.FreeInputImages < 0) {
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "free_input_images requires a non-negative integer on MiniMax H3 video models")
 	}
-	if err := s.modelRepo.UpdateModelConfig(ctx, groupID, model.ID, mediaType, input.Enabled, rate, input.FreeInputImages, prices); err != nil {
+	if input.InputImageUnitPrice != nil && (mediaType != AgentMediaTypeVideo || !isMinimaxH3Model(model.ModelCode) || *input.InputImageUnitPrice < 0) {
+		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "input_image_unit_price requires a non-negative number on MiniMax H3 video models")
+	}
+	if err := s.modelRepo.UpdateModelConfig(ctx, groupID, model.ID, mediaType, input.Enabled, rate, input.FreeInputImages, input.InputImageUnitPrice, prices); err != nil {
 		return nil, fmt.Errorf("update Agent model: %w", err)
 	}
 	s.invalidateModelPlatforms(groupID)

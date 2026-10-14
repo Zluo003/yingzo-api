@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 
 import YingzoAgentView from '../YingzoAgentView.vue'
-import type { AgentGroupModel } from '@/api/admin/agentModels'
+import type { AgentGroupModel, UpdateAgentModelPayload } from '@/api/admin/agentModels'
 import type { AdminGroup } from '@/types'
 
 const { getAllGroups, getAgentModels, syncAgentModels, updateAgentModel, deleteAgentModel } =
@@ -151,7 +151,7 @@ describe('admin YingzoAgentView', () => {
   })
 
   it('saves all six requested music billing dimensions independently', async () => {
-    const tiers = ['upload_cover', 'create_model', 'persona', 'sounds', 'upload', 'sample']
+    const tiers = ['upload_cover', 'create_model', 'persona', 'sounds', 'sample', 'coverSong']
     getAgentModels.mockResolvedValue({ models: [model({ id: 9, model_code: 'suno-v6', media_type: 'audio', prices: tiers.map(resolution => ({ resolution, unit_price: 1, billing_unit: 'request' })) })] })
     const wrapper = await mountView()
     await wrapper.get('[data-testid="yingzo-agent-tab-audio"]').trigger('click')
@@ -183,7 +183,48 @@ describe('admin YingzoAgentView', () => {
       enabled: true,
       prices: [{ resolution: '768p', unit_price: 0.2 }],
       free_input_images: 3,
+      input_image_unit_price: null,
     })
+  })
+
+  it('saves a minimax excess image unit price and reports it back', async () => {
+    // 超额图片单价为空表示沿用所选分辨率单价；配置后按模型级单价计费。
+    getAgentModels.mockResolvedValue({
+      models: [model({
+        id: 5, model_code: 'minimax-h3', platform: 'video', media_type: 'video',
+        free_input_images: 5, input_image_unit_price: 0.05,
+        prices: [{ resolution: '768p', billing_unit: 'second', unit_price: 0.2 }],
+      })],
+    })
+    // 保存后视图会用响应重建目录：回显 payload 里的单价，模拟服务端真实回包。
+    updateAgentModel.mockImplementation((_groupId: number, _modelId: number, payload: UpdateAgentModelPayload) =>
+      Promise.resolve({
+        models: [model({
+          id: 5, model_code: 'minimax-h3', platform: 'video', media_type: 'video',
+          free_input_images: 5, input_image_unit_price: payload.input_image_unit_price ?? null,
+          prices: [{ resolution: '768p', billing_unit: 'second', unit_price: 0.2 }],
+        })],
+      }))
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="yingzo-agent-tab-video"]').trigger('click')
+    expect(inputValue(wrapper, 'yingzo-agent-input-image-price-5')).toBe('0.05')
+
+    await wrapper.get('[data-testid="yingzo-agent-input-image-price-5"]').setValue('0.08')
+    await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
+    await flushPromises()
+
+    expect(updateAgentModel).toHaveBeenCalledWith(7, 5, expect.objectContaining({
+      free_input_images: 5,
+      input_image_unit_price: 0.08,
+    }))
+
+    updateAgentModel.mockClear()
+    await wrapper.get('[data-testid="yingzo-agent-input-image-price-5"]').setValue('')
+    await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
+    await flushPromises()
+    expect(updateAgentModel).toHaveBeenCalledWith(7, 5, expect.objectContaining({
+      input_image_unit_price: null,
+    }))
   })
 
   it('locates the built-in agent group and loads its catalog', async () => {

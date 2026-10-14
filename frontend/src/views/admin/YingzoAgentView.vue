@@ -287,8 +287,8 @@
                   <input v-if="hasInputImagePricing(model)" v-model="drafts[model.id].freeInputImages" class="input w-24" type="number" min="0" step="1" :placeholder="String(defaultFreeImages(model))" :aria-label="t('admin.yingzoAgent.freeInputImages')" :data-testid="'yingzo-agent-free-images-' + model.id" />
                   <span v-else class="text-gray-400">—</span>
                 </td>
-                <td class="py-2 pr-3 text-xs text-gray-500">
-                  <span v-if="hasInputImagePricing(model)">{{ t('admin.yingzoAgent.resolutionImagePrice') }}</span>
+                <td class="py-2 pr-3">
+                  <input v-if="hasInputImagePricing(model)" v-model="drafts[model.id].inputImageUnitPrice" class="input w-24" type="number" min="0" step="0.001" :placeholder="t('admin.yingzoAgent.inputImagePricePlaceholder')" :aria-label="t('admin.yingzoAgent.inputImageUnitPrice')" :data-testid="'yingzo-agent-input-image-price-' + model.id" />
                   <span v-else class="text-gray-400">—</span>
                 </td>
               </template>
@@ -329,7 +329,7 @@ import type { AdminGroup } from '@/types'
 
 const { t } = useI18n()
 
-import { SUNO_PRICE_TIERS } from '@/components/account/suno'
+import { SUNO_BILLING_TIERS } from '@/components/account/suno'
 const IMAGE_RESOLUTIONS = ['1K', '2K', '4K']
 
 interface ModelDraft {
@@ -341,6 +341,7 @@ interface ModelDraft {
   /** 分辨率独立开关；未出现在接口响应里的档位默认关闭。 */
   resolutionEnabled: Record<string, boolean>
   freeInputImages: string
+  inputImageUnitPrice: string
 }
 
 const loading = ref(false)
@@ -395,7 +396,7 @@ function resolutionColumnsForDraft(model: AgentGroupModel): string[] {
 }
 
 function resolutionColumnsForType(mediaType: AgentMediaType, modelCode: string): string[] {
-  if (mediaType === 'audio') return SUNO_PRICE_TIERS
+  if (mediaType === 'audio') return SUNO_BILLING_TIERS
   if (mediaType === 'image') {
     if (modelCode === MIDJOURNEY_MODEL) return MIDJOURNEY_PRICE_TIERS
     return IMAGE_RESOLUTIONS
@@ -425,6 +426,7 @@ function isDirty(model: AgentGroupModel): boolean {
     return normalizeNumber(draft.rateMultiplier) !== (model.rate_multiplier ?? null)
   }
   if (hasInputImagePricing(model) && normalizeNumber(draft.freeInputImages) !== (model.free_input_images ?? null)) return true
+  if (hasInputImagePricing(model) && normalizeNumber(draft.inputImageUnitPrice) !== (model.input_image_unit_price ?? null)) return true
   const stored = new Map(model.prices.map((price) => [price.resolution, price]))
   for (const resolution of Object.keys(draft.prices)) {
     const storedPrice = stored.get(resolution)
@@ -490,6 +492,7 @@ function buildDrafts(): void {
       prices,
       resolutionEnabled,
       freeInputImages: model.free_input_images == null ? "" : String(model.free_input_images),
+      inputImageUnitPrice: model.input_image_unit_price == null ? "" : String(model.input_image_unit_price),
     }
   }
 }
@@ -592,6 +595,11 @@ async function saveChanges(): Promise<void> {
       if (hasInputImagePricing(model) && ((freeImages !== null && (!Number.isInteger(freeImages) || freeImages < 0)) || (rawFreeImages !== '' && freeImages === null))) {
         throw new Error(t('admin.yingzoAgent.invalidInputImagePricing'))
       }
+      const inputImagePrice = normalizeNumber(draft.inputImageUnitPrice)
+      const rawInputImagePrice = String(draft.inputImageUnitPrice).trim()
+      if (hasInputImagePricing(model) && ((inputImagePrice !== null && inputImagePrice < 0) || (rawInputImagePrice !== '' && inputImagePrice === null))) {
+        throw new Error(t('admin.yingzoAgent.invalidInputImagePricing'))
+      }
       // 提交草稿里的媒体类型：管理员在页面上改过类型时，这一次保存就把它落库。
       const payload =
         draft.mediaType === 'text'
@@ -604,7 +612,9 @@ async function saveChanges(): Promise<void> {
               media_type: draft.mediaType,
               enabled: draft.enabled,
               prices: buildPrices(model),
-              ...(hasInputImagePricing(model) ? { free_input_images: freeImages } : {}),
+              ...(hasInputImagePricing(model)
+                ? { free_input_images: freeImages, input_image_unit_price: inputImagePrice }
+                : {}),
             }
       config = await agentModelsAPI.updateAgentModel(agentGroupId.value, model.id, payload)
     }
