@@ -22,6 +22,11 @@ export function clearAuthKeys() {
   localStorage.removeItem('auth_user')
 }
 
+function expireAuthSession() {
+  clearAuthKeys()
+  window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+}
+
 let refreshInFlight = null
 export function refreshAuthTokens() {
   if (refreshInFlight) return refreshInFlight
@@ -50,13 +55,19 @@ async function doRefreshAuthTokens() {
     }
     // A definitive rejection means the session is gone; transient failures keep
     // the tokens so a later retry can still recover.
-    if (res.status >= 400 && res.status < 500) {
-      clearAuthKeys()
-      window.dispatchEvent(new CustomEvent(AUTH_EXPIRED_EVENT))
+    if ([400, 401, 403].includes(res.status)) {
+      expireAuthSession()
     }
     const err = new Error(raw?.message || '登录已过期，请重新登录')
     err.status = res.status
     throw err
+  }
+  // Logging out while refresh is in flight must not restore the old session.
+  if (localStorage.getItem('refresh_token') !== refreshToken) {
+    const access = localStorage.getItem('auth_token')
+    const refresh = localStorage.getItem('refresh_token')
+    if (access && refresh) return { access_token: access, refresh_token: refresh }
+    throw noSessionError()
   }
   localStorage.setItem('auth_token', data.access_token)
   if (data.expires_in) localStorage.setItem('token_expires_at', String(Date.now() + data.expires_in * 1000))
@@ -84,17 +95,26 @@ async function fetchAPI(path, options) {
 
 export async function request(path, options = {}) {
   let attempt = await fetchAPI(path, options)
+  const sessionRequest = !AUTH_PATHS_NO_REFRESH.some(p => path === p || path.startsWith(`${p}?`))
+  let refreshUnavailable = false
   // Access token expired: refresh silently once, then retry the original request.
   // 比较基准是本次请求实际携带的 token——401 返回时其它并发请求可能已完成续期，
   // 存储里已是新值，此时直接复用新 token 重试即可，不必再触发一次续期。
-  if (attempt.res.status === 401 && !AUTH_PATHS_NO_REFRESH.some(p => path === p || path.startsWith(`${p}?`)) && (attempt.token || localStorage.getItem('refresh_token'))) {
+  if (attempt.res.status === 401 && sessionRequest && (attempt.token || localStorage.getItem('refresh_token'))) {
     if (!attempt.token || localStorage.getItem('auth_token') === attempt.token) {
-      try { await refreshAuthTokens() } catch { /* fall through with the original 401 */ }
+      try { await refreshAuthTokens() } catch (error) {
+        // Preserve a recoverable session after network errors, throttling or 5xx.
+        refreshUnavailable = error.status !== 401 && ![400, 403].includes(error.status)
+      }
     }
     const nextToken = localStorage.getItem('auth_token')
     if (nextToken && nextToken !== attempt.token) {
       attempt = await fetchAPI(path, options)
     }
+  }
+  if (attempt.res.status === 401 && sessionRequest && !refreshUnavailable &&
+    (!localStorage.getItem('auth_token') || localStorage.getItem('auth_token') === attempt.token)) {
+    expireAuthSession()
   }
   const data = attempt.raw?.code !== undefined ? (attempt.raw.code === 0 ? attempt.raw.data : attempt.raw) : attempt.raw
   if (!attempt.res.ok || attempt.raw?.code > 0) {
@@ -102,6 +122,7 @@ export async function request(path, options = {}) {
     err.reason = attempt.raw.reason || ''
     err.metadata = attempt.raw.metadata || null
     err.status = attempt.res.status
+    if (refreshUnavailable) err.sessionUnavailable = true
     throw err
   }
   return data

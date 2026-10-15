@@ -4,7 +4,9 @@ import ModelPlaza from './ModelPlaza.jsx'
 import DownloadPage from './DownloadPage.jsx'
 import UsageDashboard from './UsageDashboard.jsx'
 import Auth from './Auth.jsx'
-import { request, refreshAuthTokens, clearAuthKeys, AUTH_EXPIRED_EVENT } from './lib.js'
+import { request, clearAuthKeys } from './lib.js'
+import { hasAuthTokens, pageFromPath, requiresLogin } from './auth-session.js'
+import { useAuthSession } from './useAuthSession.jsx'
 import { Recharge, PaymentResult, StripePayment, AirwallexPayment } from './recharge.jsx'
 import { AnnouncementBell, AnnouncementPopup, fetchAnnouncements, resetAnnouncements } from './announcements.jsx'
 const nav = [['home','首页'],['download','软件下载'],['keys','API Key 管理'],['models','模型广场'],['usage','使用记录'],['recharge','充值']]
@@ -16,13 +18,71 @@ function Page({title,desc,children}){return <><div className="page-head"><div><p
 function Keys(){const [keys,setKeys]=useState([]);const [loading,setLoading]=useState(true);const [busy,setBusy]=useState(false);const [modal,setModal]=useState(null);const [name,setName]=useState('Yingzo Agent');const [agentGroupId,setAgentGroupId]=useState(null);const [error,setError]=useState('');const [toast,setToast]=useState('');useEffect(()=>{Promise.all([request('/keys?page=1&page_size=10'),request('/groups/available')]).then(([keyData,groupData])=>{setKeys(Array.isArray(keyData)?keyData:(keyData?.items||[]));const groups=Array.isArray(groupData)?groupData:(groupData?.items||[]);const agent=groups.find(g=>g.kind==='agent'&&g.system_code==='yingzo')||groups.find(g=>String(g.name||'').toLowerCase().includes('yingzo agent'));if(agent)setAgentGroupId(agent.id);else setError('未找到 Yingzo Agent 分组，无法创建 Key')}).catch(err=>setError(`无法加载数据：${err.message}`)).finally(()=>setLoading(false))},[]);function openCreate(){setName('Yingzo Agent');setError('');setModal('create')}function openEdit(k){setName(k.name||'Yingzo Agent');setError('');setModal(k)}async function createKey(){const trimmed=name.trim();if(!trimmed)return setError('请输入 Key 名称');if(!agentGroupId)return setError('未找到 Yingzo Agent 分组，无法创建 Key');setBusy(true);try{const result=await request('/keys',{method:'POST',body:JSON.stringify({name:trimmed,group_id:agentGroupId})});setKeys([result.data||result,...keys]);setModal(null)}catch(err){setError(err.message)}finally{setBusy(false)}}async function editKey(){const trimmed=name.trim();if(!trimmed)return setError('请输入 Key 名称');setBusy(true);try{const result=await request(`/keys/${modal.id}`,{method:'PUT',body:JSON.stringify({name:trimmed})});const updated=result.data||result;setKeys(keys.map(k=>k.id===modal.id?{...k,...updated}:k));setModal(null)}catch(err){setError(err.message)}finally{setBusy(false)}}async function deleteKey(){setBusy(true);try{await request(`/keys/${modal.id}`,{method:'DELETE'});setKeys(keys.filter(k=>k.id!==modal.id));setModal(null);setToast('API Key 已删除');setTimeout(()=>setToast(''),2400)}catch(err){setError(err.message)}finally{setBusy(false)}}async function copyKey(k){try{await navigator.clipboard.writeText(k.key);setToast('API Key 已复制');setTimeout(()=>setToast(''),2400)}catch{setToast('复制失败，请检查浏览器权限')}}return <Page title="API Key 管理" desc="为 Yingzo Agent 创作工作区管理访问凭证。"><div className="toolbar"><button className="dark" onClick={openCreate} disabled={busy}>创建 Key +</button></div><div className="panel"><div className="table-head key-head"><span>名称</span><span>Key</span><span>创建时间</span><span>状态</span><span>操作</span></div>{loading?<div className="empty">正在加载…</div>:keys.length?keys.map(k=><div className="table-row key-row" key={k.id}><span>{k.name||'Yingzo Agent'}</span><span className="key-value"><span>yk_••••••••{String(k.id).slice(-4)}</span>{k.key&&<button className="icon-button" title="复制 API Key" onClick={()=>copyKey(k)}>复制</button>}</span><span>{dateOnly(k.created_at)}</span><span className="status">● {k.status==='active'?'Active':'Inactive'}</span><span className="actions"><button onClick={()=>openEdit(k)}>编辑</button><button className="danger" onClick={()=>{setError('');setModal({type:'delete',...k})}}>删除</button></span></div>):<div className="empty"><strong>还没有 API Key</strong><p>创建一个 Key，让 Yingzo Agent 连接你的创作工作区。</p><button className="dark" onClick={openCreate}>创建第一个 Key</button></div>}</div>{modal&&<div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&!busy&&setModal(null)}><div className="modal-card">{modal==='create'||(modal?.id&&modal.type!=='delete')?<><div className="modal-brand"><Logo/><span>YINGZO / WORKSPACE</span></div><h2>{modal==='create'?'创建 API Key':'编辑 API Key 名称'}</h2><p className="muted">{modal==='create'?'此 Key 将固定绑定到 Yingzo Agent 分组。':'修改名称不会影响 Key 本身。'}</p><label>Key 名称<input autoFocus value={name} onChange={e=>setName(e.target.value)} onKeyDown={e=>e.key==='Enter'&&(modal==='create'?createKey():editKey())} placeholder="例如：我的创作工作区"/></label>{error&&<div className="error">{error}</div>}<div className="modal-actions"><button className="outline" onClick={()=>setModal(null)}>取消</button><button className="dark" onClick={modal==='create'?createKey:editKey} disabled={busy}>{busy?'处理中…':modal==='create'?'确认创建 →':'保存 →'}</button></div></>:<><h2>确认删除 API Key？</h2><p className="muted">删除“{modal.name||'Yingzo Agent'}”后将无法恢复，也无法再使用它访问工作区。</p>{error&&<div className="error">{error}</div>}<div className="modal-actions"><button className="outline" onClick={()=>setModal(null)}>取消</button><button className="dark danger-button" onClick={deleteKey} disabled={busy}>{busy?'删除中…':'确认删除'}</button></div></>}</div></div>}<Toast message={toast} onClose={()=>setToast('')}/></Page>}
 function Usage(){return <Page title="使用记录" desc="查看创作请求、媒体生成与余额消耗，金额单位为人民币。"><UsageDashboard/></Page>}
 function Profile({setUser,onLogout}){const [p,setP]=useState(null),[name,setName]=useState(''),[avatar,setAvatar]=useState(''),[pw,setPw]=useState({old:'',next:'',confirm:''}),[msg,setMsg]=useState(''),[err,setErr]=useState('');useEffect(()=>{request('/user/profile').then(x=>{setP(x);setName(x.username||'');setAvatar(x.avatar_url||'')}).catch(e=>setErr(e.message))},[]);function chooseAvatar(e){const f=e.target.files?.[0];if(!f)return;if(!f.type.startsWith('image/'))return setErr('请选择图片文件');const r=new FileReader();r.onload=()=>setAvatar(String(r.result||''));r.readAsDataURL(f)}async function save(){try{const x=await request('/user',{method:'PUT',body:JSON.stringify({username:name,avatar_url:avatar||null})});setP(x);setUser?.(x);localStorage.setItem('auth_user',JSON.stringify(x));setMsg('资料已保存')}catch(e){setErr(e.message)}}async function change(){if(pw.next.length<6||pw.next!==pw.confirm)return setErr('新密码至少 6 位且两次输入必须一致');try{await request('/user/password',{method:'PUT',body:JSON.stringify({old_password:pw.old,new_password:pw.next})});setPw({old:'',next:'',confirm:''});setMsg('密码已更新')}catch(e){setErr(e.message)}}return <Page title="个人资料" desc="管理你的身份、偏好与安全设置。"><div className="profile-actions-row"><button className="profile-logout" onClick={onLogout}>退出登录</button></div>{err&&<div className="error">{err}</div>}<Toast message={msg} onClose={()=>setMsg('')}/><div className="profile-summary panel"><label className="avatar avatar-edit" title="点击更换头像"><input type="file" accept="image/*" onChange={chooseAvatar}/>{avatar?<img src={avatar} alt="头像"/>:(p?.username||p?.email||'U').slice(0,1).toUpperCase()}<span>编辑</span></label><div><h2>{p?.username||p?.email||'—'}</h2><p className="muted">{p?.email}</p><span className="badge">{p?.role==='admin'?'管理员':'创作者'}</span> <span className="badge">{p?.status||'启用'}</span></div><div className="profile-stats"><div><small>账户余额</small><strong>¥{Number(p?.balance||0).toFixed(2)}</strong></div><div><small>并发限制</small><strong>{p?.concurrency??'—'}</strong></div><div><small>注册时间</small><strong>{p?.created_at?new Date(p.created_at).toLocaleDateString():'—'}</strong></div></div></div><div className="form-grid"><div className="panel form-card"><h2>资料与头像</h2><p className="muted">点击上方头像即可上传新头像。</p><label>昵称<input value={name} onChange={e=>setName(e.target.value)} placeholder="你的昵称"/></label><button className="dark" onClick={save}>保存资料 →</button></div><div className="panel form-card"><h2>更改密码</h2><label>当前密码<input type="password" value={pw.old} onChange={e=>setPw({...pw,old:e.target.value})}/></label><label>新密码<input type="password" value={pw.next} onChange={e=>setPw({...pw,next:e.target.value})}/></label><label>确认新密码<input type="password" value={pw.confirm} onChange={e=>setPw({...pw,confirm:e.target.value})}/></label><button className="dark" onClick={change}>更新密码 →</button></div></div></Page>}
-export function App(){const [page,setPage]=useState(()=>{const p=location.pathname.replace(/^\//,'');return p||'home'});const [user,setUser]=useState(()=>{try{return JSON.parse(localStorage.getItem('auth_user')||'null')}catch{return null}});const authenticated=!!user;const firstAuthRef=useRef(true);function logout(){clearAuthKeys();setUser(null);history.pushState({},'', '/');setPage('home')}
-// Announcement triggers (mirrors the original App.vue): throttled fetch on session
-// restore / route change / tab re-visibility, force fetch 3s after a fresh login.
-useEffect(()=>{if(authenticated){if(firstAuthRef.current){firstAuthRef.current=false;fetchAnnouncements(false)}else{const t=setTimeout(()=>fetchAnnouncements(true),3000);return()=>clearTimeout(t)}}else{firstAuthRef.current=false;resetAnnouncements()}},[authenticated])
-useEffect(()=>{if(!authenticated)return;fetchAnnouncements(false)},[page]) // eslint-disable-line react-hooks/exhaustive-deps
-useEffect(()=>{const onVis=()=>{if(document.visibilityState==='visible'&&localStorage.getItem('auth_token'))fetchAnnouncements(false)};document.addEventListener('visibilitychange',onVis);return()=>document.removeEventListener('visibilitychange',onVis)},[])
-useEffect(()=>{const onPop=()=>setPage(location.pathname.replace(/^\//,'')||'home');addEventListener('popstate',onPop);(async()=>{if(!localStorage.getItem('auth_token')&&localStorage.getItem('refresh_token')){try{await refreshAuthTokens()}catch{return}}if(localStorage.getItem('auth_token'))request('/auth/me').then(x=>{const u=x?.user||x;setUser(u);localStorage.setItem('auth_user',JSON.stringify(u))}).catch(()=>{clearAuthKeys();setUser(null)})})();return()=>removeEventListener('popstate',onPop)},[]);
-// 会话彻底失效（refresh token 也过期/被轮换失败）时同步 UI：受保护页回登录页，公开页停留。
-useEffect(()=>{const onExpired=()=>{setUser(null);const p=location.pathname.replace(/^\//,'');if(['keys','models','usage','profile','recharge'].includes(p)){history.pushState({},'','/login');setPage('login')}};addEventListener(AUTH_EXPIRED_EVENT,onExpired);return()=>removeEventListener(AUTH_EXPIRED_EVENT,onExpired)},[]);
-if(page==='models'&&!authenticated&&!localStorage.getItem('auth_token')&&!localStorage.getItem('refresh_token'))return <Auth key="login" mode="login" setPage={setPage} setUser={setUser}/>;if(page==='payment/stripe')return <><StripePayment/><AnnouncementPopup/></>;if(page==='payment/airwallex')return <><AirwallexPayment/><AnnouncementPopup/></>;if(page==='payment/result'||page==='recharge/result')return <><PaymentResult setUser={setUser}/><AnnouncementPopup/></>;if(['login','register','forgot-password','reset-password'].includes(page))return <><Auth key={page} mode={page} setPage={setPage} setUser={setUser}/><AnnouncementPopup/></>;if(page==='download')return <><DownloadPage setPage={setPage} user={user}/><AnnouncementPopup/></>;return page==='home'?<><LandingPage setPage={setPage} user={user}/><AnnouncementPopup/></>:<><Shell page={page} setPage={setPage} user={user} onLogout={logout}>{page==='keys'?<Keys/>:page==='models'?<ModelPlaza/>:page==='usage'?<Usage/>:page==='profile'?<Profile setUser={setUser} onLogout={logout}/>:<Recharge user={user} setUser={setUser}/>}</Shell><AnnouncementPopup/></>}
+export function App() {
+  const [page, setPage] = useState(() => pageFromPath(location.pathname))
+  const { user, status, setUser, retry } = useAuthSession()
+  const authenticated = status === 'authenticated' && hasAuthTokens()
+  const protectedPage = requiresLogin(page)
+  const firstAuthRef = useRef(true)
+
+  function logout() {
+    clearAuthKeys()
+    setUser(null)
+    history.pushState({}, '', '/')
+    setPage('home')
+  }
+
+  useEffect(() => {
+    const onPop = () => setPage(pageFromPath(location.pathname))
+    addEventListener('popstate', onPop)
+    return () => removeEventListener('popstate', onPop)
+  }, [])
+
+  useEffect(() => {
+    if (protectedPage && (status === 'anonymous' || (status === 'authenticated' && !hasAuthTokens()))) {
+      history.replaceState({}, '', '/login')
+      setPage('login')
+    }
+  }, [page, protectedPage, status])
+
+  // Announcements only run after the server has confirmed the session.
+  useEffect(() => {
+    if (authenticated) {
+      if (firstAuthRef.current) {
+        firstAuthRef.current = false
+        fetchAnnouncements(false)
+      } else {
+        const timer = setTimeout(() => fetchAnnouncements(true), 3000)
+        return () => clearTimeout(timer)
+      }
+    } else {
+      firstAuthRef.current = false
+      resetAnnouncements()
+    }
+  }, [authenticated])
+  useEffect(() => {
+    if (authenticated) fetchAnnouncements(false)
+  }, [page, authenticated])
+  useEffect(() => {
+    const onVisible = () => {
+      if (authenticated && document.visibilityState === 'visible') fetchAnnouncements(false)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [authenticated])
+
+  if (protectedPage && !authenticated) {
+    if (status === 'error') return <div className="auth-page"><div className="result-card" role="alert"><h1>暂时无法确认登录状态</h1><p>请检查网络连接后重试。</p><button className="dark" onClick={retry}>重试</button></div></div>
+    if (status === 'checking') return <div className="auth-page" role="status">正在确认登录状态…</div>
+    return null
+  }
+  if (page === 'payment/stripe') return <><StripePayment/><AnnouncementPopup/></>
+  if (page === 'payment/airwallex') return <><AirwallexPayment/><AnnouncementPopup/></>
+  if (page === 'payment/result' || page === 'recharge/result') return <><PaymentResult setUser={setUser}/><AnnouncementPopup/></>
+  if (['login', 'register', 'forgot-password', 'reset-password'].includes(page)) return <><Auth key={page} mode={page} setPage={setPage} setUser={setUser}/><AnnouncementPopup/></>
+  if (page === 'download') return <><DownloadPage setPage={setPage} user={user}/><AnnouncementPopup/></>
+  if (page === 'home') return <><LandingPage setPage={setPage} user={user}/><AnnouncementPopup/></>
+  return <><Shell page={page} setPage={setPage} user={user} onLogout={logout}>
+    {page === 'keys' ? <Keys/> : page === 'models' ? <ModelPlaza/> : page === 'usage' ? <Usage/> : page === 'profile' ? <Profile setUser={setUser} onLogout={logout}/> : <Recharge user={user} setUser={setUser}/>}
+  </Shell><AnnouncementPopup/></>
+}
