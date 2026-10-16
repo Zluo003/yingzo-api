@@ -66,8 +66,8 @@ func TestMikuapiKlingV4ModesAndBodies(t *testing.T) {
 		{"first and last", []VideoContent{first, last}, videoAbilityStartEndToVideo, map[string]any{"input_reference": "https://cdn/start.png", "image_end": "https://cdn/end.png"}},
 		{"references", klingV4References(1, 1, 1, 30), videoAbilityReferenceToVideo, map[string]any{
 			"reference_images": []map[string]any{{"url": "https://cdn/ref.png"}},
-			"reference_videos": []map[string]any{{"url": "https://cdn/ref.mp4"}},
-			"reference_audios": []map[string]any{{"url": "https://cdn/ref.mp3"}},
+			"reference_videos": []string{"https://cdn/ref.mp4"},
+			"reference_audios": []string{"https://cdn/ref.mp3"},
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

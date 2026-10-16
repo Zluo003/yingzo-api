@@ -298,8 +298,9 @@ func mikuapiGrokCreateBody(normalized *normalizedVideoRequest, upstreamModel str
 }
 
 // mikuapiKlingCreateBody 组装可灵请求体：分辨率只认 720p/1080p/4k（下游规范
-// 写法是大写 4K，必须转小写；V4 仅 720p/1080p）。参考素材为 reference_*
-// 对象数组；omni 将首帧也当参考图，V4 则通过 input_reference / image_end
+// 写法是大写 4K，必须转小写；V4 仅 720p/1080p）。参考图使用对象数组，
+// V4 的 reference_videos / reference_audios 使用 URL 字符串数组。
+// omni 将首帧也当参考图，V4 则通过 input_reference / image_end
 // 保留首尾帧角色。秒数与画幅在可服务范围内显式下发，
 // 不依赖上游默认值（4K/16:9 是最贵的一档，不能靠默认值兜底）。
 func mikuapiKlingCreateBody(normalized *normalizedVideoRequest, upstreamModel string) map[string]any {
@@ -316,6 +317,10 @@ func mikuapiKlingCreateBody(normalized *normalizedVideoRequest, upstreamModel st
 		for field, urls := range mikuapiMediaReferences(normalized.Content) {
 			if field == mikuapiFieldFirstFrame || field == mikuapiFieldLastFrame {
 				body[field] = urls[0]
+				continue
+			}
+			if field == "reference_videos" || field == "reference_audios" {
+				body[field] = urls
 				continue
 			}
 			refs := make([]map[string]any, 0, len(urls))
