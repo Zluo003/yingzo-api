@@ -53,5 +53,9 @@ func (h *GatewayHandler) AccountProfile(c *gin.Context) {
 		"balance":    user.Balance,
 		"remaining":  remaining,
 		"unit":       "USD",
+		// This is the user's shared inference allowance, not a per-model or
+		// per-key allowance. Non-positive values mean unlimited, as in the
+		// gateway's ConcurrencyService.
+		"concurrency": user.Concurrency,
 	})
 }
