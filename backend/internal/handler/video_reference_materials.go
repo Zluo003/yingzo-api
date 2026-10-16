@@ -24,8 +24,8 @@ import (
 	"github.com/google/uuid"
 )
 
-// videoReferenceMaterialLimits 参考素材单文件上限，按内容项类型区分。取值与
-// mediaPolicies 中同类媒体的上限一致，保证下载/解码出来的素材一定能入库。
+// videoReferenceMaterialLimits 参考素材默认单文件上限。视频按模型规格覆盖；
+// 素材上传入口允许最大的模型档位，引用时再校验对应模型的体积限制。
 var videoReferenceMaterialLimits = map[string]int64{
 	"image_url": 30 << 20,
 	"video_url": 200 << 20,
@@ -80,6 +80,7 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 	if !ok || len(content) == 0 {
 		return nil, false, nil
 	}
+	videoLimit := service.VideoReferenceMaxBytes(stringValue(raw["model"]))
 	ownHosts := h.referenceMaterialOwnHosts(c)
 	customAccess := service.S3CustomAccess{}
 	if h.agentHandler != nil && h.agentHandler.fileStorage != nil {
@@ -106,7 +107,7 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 		// 平台素材库里的地址：URL 不动，时长以素材行里的探测结果为准。
 		if urlField != "" && urlObject != nil {
 			if ref, isPlatformAsset := parsePlatformReferenceMaterialURL(rawURL, ownHosts, customAccess); isPlatformAsset {
-				duration, probed, err := h.platformReferenceMaterialDuration(c.Request.Context(), apiKey, ref)
+				duration, probed, err := h.platformReferenceMaterialDuration(c.Request.Context(), apiKey, ref, videoLimit)
 				if err != nil {
 					return nil, false, err
 				}
@@ -139,7 +140,7 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 				duration, cached := videoDurations[rawURL]
 				if !cached {
 					var err error
-					duration, err = h.probeExternalReferenceVideo(c.Request.Context(), rawURL)
+					duration, err = h.probeExternalReferenceVideo(c.Request.Context(), rawURL, videoLimit)
 					if err != nil {
 						return nil, false, err
 					}
@@ -160,7 +161,7 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 		}
 		result, cached := stored[rawURL]
 		if !cached {
-			uploaded, uploadErr := h.storeVideoReferenceMaterial(c, apiKey, rawURL, urlField)
+			uploaded, uploadErr := h.storeVideoReferenceMaterial(c, apiKey, rawURL, urlField, videoLimit)
 			if uploadErr != nil {
 				return nil, false, uploadErr
 			}
@@ -190,7 +191,7 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 
 // probeExternalReferenceVideo 仅为可信计费探测视频。临时文件不进入素材库，
 // 不依赖素材存储配置或公网回源地址；成功和失败路径都会删除临时文件。
-func (h *VideoHandler) probeExternalReferenceVideo(ctx context.Context, rawURL string) (float64, error) {
+func (h *VideoHandler) probeExternalReferenceVideo(ctx context.Context, rawURL string, maxBytes int64) (float64, error) {
 	spool, err := os.CreateTemp("", "yingzo-reference-video-*")
 	if err != nil {
 		return 0, videoReferenceMaterialFailure(http.StatusServiceUnavailable,
@@ -200,7 +201,7 @@ func (h *VideoHandler) probeExternalReferenceVideo(ctx context.Context, rawURL s
 		_ = spool.Close()
 		_ = os.Remove(spool.Name())
 	}()
-	if _, err := h.referenceMaterialFetcher.Fetch(ctx, rawURL, spool, videoReferenceMaterialLimits["video_url"]); err != nil {
+	if _, err := h.referenceMaterialFetcher.Fetch(ctx, rawURL, spool, maxBytes); err != nil {
 		return 0, videoReferenceMaterialFailure(http.StatusBadRequest,
 			"reference_material_download_failed", err.Error())
 	}
@@ -327,8 +328,8 @@ func parsePlatformReferenceMaterialURL(rawURL string, ownHosts map[string]bool, 
 //
 // 查询按 API Key、用户与分组收窄，与素材解析接口的凭据隔离保持一致：参考时长
 // 参与计费，不能从别的凭据上传的素材上取。
-func (h *VideoHandler) platformReferenceMaterialDuration(ctx context.Context, apiKey *service.APIKey, ref platformReferenceMaterialRef) (float64, bool, error) {
-	const selection = `SELECT metadata FROM temporary_assets
+func (h *VideoHandler) platformReferenceMaterialDuration(ctx context.Context, apiKey *service.APIKey, ref platformReferenceMaterialRef, maxVideoBytes int64) (float64, bool, error) {
+	const selection = `SELECT metadata,size_bytes FROM temporary_assets
 		WHERE api_key_id=$1 AND user_id=$2 AND group_id IS NOT DISTINCT FROM $3
 			AND deleted_at IS NULL AND GREATEST(expires_at,lease_until)>NOW() AND `
 	if apiKey == nil {
@@ -342,7 +343,8 @@ func (h *VideoHandler) platformReferenceMaterialDuration(ctx context.Context, ap
 		row = h.agentHandler.db.QueryRowContext(ctx, selection+`public_token_hash=$4`, apiKey.ID, apiKey.UserID, apiKey.GroupID, hashToken(ref.byToken))
 	}
 	var metadata []byte
-	err := row.Scan(&metadata)
+	var sizeBytes int64
+	err := row.Scan(&metadata, &sizeBytes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, videoReferenceMaterialFailure(http.StatusBadRequest,
 			"reference_material_unavailable", "Reference material is unavailable or has expired")
@@ -359,13 +361,20 @@ func (h *VideoHandler) platformReferenceMaterialDuration(ctx context.Context, ap
 			return 0, false, nil
 		}
 	}
+	if record.DurationSeconds > 0 && sizeBytes > maxVideoBytes {
+		return 0, false, videoReferenceMaterialFailure(http.StatusBadRequest,
+			"invalid_reference_material", "Reference video exceeds the size limit")
+	}
 	return record.DurationSeconds, record.DurationSeconds > 0, nil
 }
 
 // storeVideoReferenceMaterial 把内联参考素材落到平台素材库，返回它的公网 URL
 // 与可信探测结果（含时长），复用素材上传路径完成校验、探测、配额与入库。
-func (h *VideoHandler) storeVideoReferenceMaterial(c *gin.Context, apiKey *service.APIKey, rawURL string, itemType string) (*temporaryAssetUploadResult, error) {
+func (h *VideoHandler) storeVideoReferenceMaterial(c *gin.Context, apiKey *service.APIKey, rawURL string, itemType string, maxVideoBytes int64) (*temporaryAssetUploadResult, error) {
 	limit, ok := videoReferenceMaterialLimits[itemType]
+	if itemType == "video_url" {
+		limit = maxVideoBytes
+	}
 	if !ok {
 		return nil, videoReferenceMaterialFailure(http.StatusBadRequest,
 			"unsupported_reference_material", "Unsupported reference material type")

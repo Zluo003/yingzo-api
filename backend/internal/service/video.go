@@ -21,6 +21,7 @@ const (
 	// 状态值、成片机制都不同），渠道侧的分支见 mikuapi 适配器。
 	VideoModelGrokImagineVideo15 = "grok-imagine-video-1.5"
 	VideoModelKlingV3Omni        = "kling-v3-omni"
+	VideoModelKlingV4            = "kling-v4"
 
 	VideoResolution480P  = "480p"
 	VideoResolution720P  = "720p"
@@ -59,8 +60,11 @@ type videoModelSpec struct {
 	// MaxRefTotal caps images+videos+audios together. Zero means no aggregate
 	// cap beyond the per-kind ones.
 	MaxRefTotal int
-	// MaxRefVideoSeconds caps a single reference clip, MaxRefVideoTotalSeconds
-	// caps their sum.
+	// MinRefVideoSeconds defaults to 2; MaxRefVideoSeconds caps each clip,
+	// MaxRefVideoTotalSeconds caps their measured sum. MaxRefVideoBytes defaults
+	// to 200 MiB when the model does not specify a file size limit.
+	MinRefVideoSeconds      int
+	MaxRefVideoBytes        int64
 	MaxRefVideoSeconds      int
 	MaxRefVideoTotalSeconds int
 	// AudioNeedsVisual rejects reference sets whose only media is audio.
@@ -136,6 +140,21 @@ var videoModelSpecs = map[string]videoModelSpec{
 		MaxRefImages:      7,
 		AudioNeedsVisual:  true,
 	},
+	VideoModelKlingV4: {
+		Resolutions:             []string{VideoResolution720P, VideoResolution1080P},
+		DefaultResolution:       VideoResolution720P,
+		MinSeconds:              3,
+		MaxSeconds:              30,
+		MaxRefImages:            10,
+		MaxRefVideos:            5,
+		MaxRefAudios:            3,
+		MaxRefTotal:             15,
+		MinRefVideoSeconds:      3,
+		MaxRefVideoSeconds:      30,
+		MaxRefVideoTotalSeconds: 30,
+		MaxRefVideoBytes:        300_000_000,
+		AudioNeedsVisual:        true,
+	},
 }
 
 // videoDefaultModelSpec mirrors the limits that applied to every non-2.5 model
@@ -164,6 +183,15 @@ func videoSpecForModel(model string) (videoModelSpec, bool) {
 	return spec, true
 }
 
+// VideoReferenceMaxBytes is the model's per-reference-video download/upload limit.
+func VideoReferenceMaxBytes(model string) int64 {
+	spec, _ := videoSpecForModel(model)
+	if spec.MaxRefVideoBytes > 0 {
+		return spec.MaxRefVideoBytes
+	}
+	return 200 << 20
+}
+
 func IsSupportedVideoModel(model string) bool {
 	_, ok := videoModelSpecs[strings.TrimSpace(model)]
 	return ok
@@ -179,6 +207,7 @@ func SupportedVideoModels() []string {
 		VideoModelSeedance25,
 		VideoModelGrokImagineVideo15,
 		VideoModelKlingV3Omni,
+		VideoModelKlingV4,
 		VideoModelMinimaxH3,
 		VideoModelMinimaxH3Max,
 	}

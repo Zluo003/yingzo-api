@@ -14,7 +14,7 @@ import (
 )
 
 // referenceMaterialDownloadTimeout 参考素材下载超时。参考视频单文件上限
-// 200 MiB，比生成产物回捞需要更长的窗口。
+// 最大 300 MB，比生成产物回捞需要更长的窗口。
 const referenceMaterialDownloadTimeout = 5 * time.Minute
 
 // referenceMaterialMaxRedirects 参考素材下载允许的重定向跳数上限。

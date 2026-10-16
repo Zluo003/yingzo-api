@@ -29,7 +29,8 @@ export const VIDEO_MODEL_RESOLUTIONS: VideoModelResolutionSpec[] = [
   { model: 'grok-imagine-video-1.5', resolutions: ['480p', '720p', '1080p'] },
   { model: 'minimax-h3', resolutions: ['768p', '2K'] },
   { model: 'minimax-h3-max', resolutions: ['480p', '768p', '1080p'] },
-  { model: 'kling-v3-omni', resolutions: ['720p', '1080p', '4K'] }
+  { model: 'kling-v3-omni', resolutions: ['720p', '1080p', '4K'] },
+  { model: 'kling-v4', resolutions: ['720p', '1080p'] }
 ]
 
 /** 对外提供的视频模型清单，与后端 SupportedVideoModels() 一致。 */

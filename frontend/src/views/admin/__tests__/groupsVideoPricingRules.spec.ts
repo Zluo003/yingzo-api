@@ -22,7 +22,8 @@ describe('video group pricing rules', () => {
       'grok-imagine-video-1.5',
       'minimax-h3',
       'minimax-h3-max',
-      'kling-v3-omni'
+      'kling-v3-omni',
+      'kling-v4'
     ])
   })
 

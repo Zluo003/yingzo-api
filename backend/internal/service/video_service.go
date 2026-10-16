@@ -1632,9 +1632,14 @@ func videoReferenceLimitMessage(spec videoModelSpec) string {
 // 可用由上游判定，最坏情况只是这一段参考时长不计费。
 func referenceVideoSeconds(model string, content []VideoContent) (int, error) {
 	spec, _ := videoSpecForModel(model)
+	minDuration := float64(spec.MinRefVideoSeconds)
+	if minDuration == 0 {
+		minDuration = 2
+	}
 	maxDuration := float64(spec.MaxRefVideoSeconds)
 	maxTotal := spec.MaxRefVideoTotalSeconds
 	total := 0
+	measuredTotal := float64(0)
 	for _, item := range content {
 		if item.Type != "video_url" || (item.Role != "" && item.Role != "reference_video") {
 			continue
@@ -1644,11 +1649,12 @@ func referenceVideoSeconds(model string, content []VideoContent) (int, error) {
 		if item.DurationSeconds == nil || *item.DurationSeconds <= 0 {
 			continue
 		}
-		if *item.DurationSeconds < 2 || *item.DurationSeconds > maxDuration {
+		if *item.DurationSeconds < minDuration || *item.DurationSeconds > maxDuration {
 			return 0, videoBadRequest("invalid_reference_video_duration", "Invalid reference video duration")
 		}
 		total += int(math.Ceil(*item.DurationSeconds))
-		if total > maxTotal {
+		measuredTotal += *item.DurationSeconds
+		if measuredTotal > float64(maxTotal) {
 			return 0, videoBadRequest("invalid_reference_video_duration", "Invalid reference video duration")
 		}
 	}

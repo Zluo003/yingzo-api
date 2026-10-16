@@ -104,6 +104,7 @@ const DEFAULT_RESOLUTIONS: Record<string, string[]> = {
   'seedance-2.5': ['480p', '720p', '1080p'],
   'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
   'kling-v3-omni': ['720p', '1080p', '4K'],
+  'kling-v4': ['720p', '1080p'],
 }
 const DEFAULT_DURATIONS: Record<string, number[]> = {
   'seedance-2.0': [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -111,6 +112,7 @@ const DEFAULT_DURATIONS: Record<string, number[]> = {
   'seedance-2.5': [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30],
   'grok-imagine-video-1.5': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
   'kling-v3-omni': [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+  'kling-v4': Array.from({ length: 28 }, (_, i) => i + 3),
 }
 
 describe('CreateAccountModal video resolutions', () => {

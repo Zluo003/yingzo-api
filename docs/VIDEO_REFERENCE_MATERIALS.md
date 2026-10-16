@@ -52,12 +52,13 @@ curl -X POST https://api-key.cc/v1/videos \
 
 ## Limits
 
-- Reference video, per clip: 2–15s (`seedance-2.5`: 2–30s); total reference video duration: ≤15s (`seedance-2.5`: ≤30s). These are now evaluated against the **measured** durations.
-- Reference counts: `seedance-2.0` and `seedance-2.0-fast` accept 9 images + 3 videos + 3 audios; `seedance-2.5` accepts 30 images + 10 videos + 10 audios, ≤50 materials in total.
+- Reference video, per clip: 2–15s (`seedance-2.5`: 2–30s); total reference video duration: ≤15s (`seedance-2.5`: ≤30s). `kling-v4`: 3–30s per clip and ≤30s total. These are now evaluated against the **measured** durations.
+- Reference counts: `seedance-2.0` and `seedance-2.0-fast` accept 9 images + 3 videos + 3 audios; `seedance-2.5` accepts 30 images + 10 videos + 10 audios, ≤50 materials in total; `kling-v4` accepts up to 10 images, 5 videos, and 3 audios, ≤15 materials in total.
 - Reference audio must be accompanied by at least one image or video. An audio-only reference set is rejected for **every** model (`seedance-2.0`, `seedance-2.0-fast`, `seedance-2.5`) with `invalid_video_content`. The model catalog declares this per model as `capabilities.supports_audio_only_reference` (`false` for all current models).
-- Uploaded material size: image 30 MiB, video 200 MiB, audio 15 MiB. External reference videos also have a 200 MiB probe limit; public image/audio files are fetched and validated by the upstream provider. Uploaded media types are decided by content sniffing and must be one of the whitelisted types (`jpeg/png/webp/gif/bmp/tiff/heic/heif`, `mp4/quicktime`, `wav/mp3`).
+- Uploaded material size: image 30 MiB, video 300 MB (300,000,000 bytes), audio 15 MiB. `kling-v4` accepts reference videos up to 300 MB; other models retain their 200 MiB per-video limit. These model limits apply to inline uploads, stored asset references, and external video probes; public image/audio files are fetched and validated by the upstream provider. Uploaded media types are decided by content sniffing and must be one of the whitelisted types (`jpeg/png/webp/gif/bmp/tiff/heic/heif`, `mp4/quicktime`, `wav/mp3`).
 - Only `http` / `https` URLs are fetched. Loopback, private-range and link-local addresses (including cloud metadata endpoints) are refused, redirects are re-validated hop by hop, and the download is capped by the size limit above with a 5-minute timeout.
 - Repeated external video URLs are probed once per request; each content item still counts its own measured duration. Repeated inline data is uploaded once.
+- Uploads also remain subject to the configured server/gateway request-body limits. For a 300 MB inline video, allow for base64 expansion (for example, a 512 MiB body limit); public reference URLs avoid that upload limit.
 - Reference video probes and inline uploads happen synchronously during submission. Public image/audio references require no download or upload.
 
 ## Storage, capacity and cleanup

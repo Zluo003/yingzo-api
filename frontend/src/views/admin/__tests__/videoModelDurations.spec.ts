@@ -27,6 +27,9 @@ describe('video model durations', () => {
     expect(videoModelDurations('kling-v3-omni')).toEqual(
       Array.from({ length: 13 }, (_, i) => i + 3)
     )
+    expect(videoModelDurations('kling-v4')).toEqual(
+      Array.from({ length: 28 }, (_, i) => i + 3)
+    )
     expect(videoModelDurations('seedance-9.9')).toEqual([])
   })
 

@@ -26,7 +26,7 @@ import (
 
 // Stream directly to the single spool used for probing and storage.
 func (h *AgentHandler) receiveTemporaryAsset(c *gin.Context) (*os.File, *multipart.FileHeader, string, error) {
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 201<<20)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.VideoReferenceMaxBytes(service.VideoModelKlingV4)+(1<<20))
 	reader, err := c.Request.MultipartReader()
 	if err != nil {
 		return nil, nil, "", errors.New("multipart file is required")

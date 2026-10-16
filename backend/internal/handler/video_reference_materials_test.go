@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,10 +13,72 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+type sizeCheckedReferenceDownloader struct {
+	stubReferenceMaterialDownloader
+	size int64
+}
+
+func (d *sizeCheckedReferenceDownloader) Fetch(ctx context.Context, rawURL string, dst *os.File, limit int64) (*service.ReferenceMaterialFetchResult, error) {
+	if d.size > limit {
+		return nil, errors.New("reference material exceeds the size limit")
+	}
+	return d.stubReferenceMaterialDownloader.Fetch(ctx, rawURL, dst, limit)
+}
+
+func TestKlingV4ReferenceVideoSizeLimit(t *testing.T) {
+	video, err := os.ReadFile("../pkg/mediaprobe/testdata/reference.mp4")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		model string
+		size  int64
+		valid bool
+	}{
+		{service.VideoModelKlingV4, 300_000_000, true},
+		{service.VideoModelKlingV4, 300_000_001, false},
+		{service.VideoModelSeedance25, 200 << 20, true},
+		{service.VideoModelSeedance25, (200 << 20) + 1, false},
+	} {
+		t.Run(tc.model+"/"+fmt.Sprint(tc.size), func(t *testing.T) {
+			t.Run("external URL", func(t *testing.T) {
+				h := referenceMaterialTestHandler(t)
+				h.referenceMaterialFetcher = &sizeCheckedReferenceDownloader{stubReferenceMaterialDownloader: stubReferenceMaterialDownloader{payload: video}, size: tc.size}
+				raw := map[string]any{"model": tc.model, "content": []any{map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://cdn.example.com/ref.mp4"}}}}
+				_, _, err := h.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), referenceMaterialTestAPIKey(), raw)
+				if tc.valid {
+					require.NoError(t, err)
+				} else {
+					require.ErrorContains(t, err, "size limit")
+				}
+			})
+			t.Run("stored asset", func(t *testing.T) {
+				db, mock, err := sqlmock.New()
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = db.Close() })
+				h := referenceMaterialTestHandler(t)
+				h.agentHandler.db = db
+				id := uuid.New()
+				mock.ExpectQuery("SELECT metadata,size_bytes FROM temporary_assets").
+					WithArgs(int64(10), int64(100), int64(20), id).
+					WillReturnRows(sqlmock.NewRows([]string{"metadata", "size_bytes"}).AddRow([]byte(`{"duration_seconds":3}`), tc.size))
+				raw := map[string]any{"model": tc.model, "content": []any{map[string]any{"type": "video_url", "video_url": map[string]any{"url": "http://localhost:8080/media/" + id.String() + "/ref.mp4"}}}}
+				_, _, err = h.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), referenceMaterialTestAPIKey(), raw)
+				if tc.valid {
+					require.NoError(t, err)
+				} else {
+					require.ErrorContains(t, err, "size limit")
+				}
+				require.NoError(t, mock.ExpectationsWereMet())
+			})
+		})
+	}
+}
 
 // referenceMaterialTestDB 返回一个永不真正连接的 *sql.DB。它只用来通过
 // "handler 已配置数据库"的守卫：纯改写路径不应触发任何查询，一旦触发就会报错，

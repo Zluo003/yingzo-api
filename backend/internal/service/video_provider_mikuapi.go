@@ -13,6 +13,7 @@ const (
 	// 映射在 videoMikuapiUpstreamModel），清晰度/时长同样走请求体字段。
 	videoMikuapiGrokImagineVideo15PreviewModel = "grok-imagine-video-1.5-preview"
 	videoMikuapiKlingVideoV3OmniModel          = "kling-video-v3-omni"
+	videoMikuapiKlingVideoV4Model              = "kling-video-v4"
 	// mikuapi 的 2.0-fast 只开放 5 秒与 10 秒两档。上游对超范围时长是"夹到允许区间"
 	// 而不是报错，静默夹取会让我们按 A 时长计费、交付 B 时长的片子，因此这里必须
 	// 严格判定；判定不通过时该账号在调度阶段就被排除，请求会落到别的上游。
@@ -66,7 +67,7 @@ func (m mikuapiVideoProviderAdapter) DefaultAPIPath() string {
 func (m mikuapiVideoProviderAdapter) Compatible(model, resolution string) bool {
 	switch strings.TrimSpace(model) {
 	case VideoModelSeedance20, VideoModelSeedance20Fast, VideoModelSeedance25,
-		VideoModelGrokImagineVideo15, VideoModelKlingV3Omni:
+		VideoModelGrokImagineVideo15, VideoModelKlingV3Omni, VideoModelKlingV4:
 	default:
 		return false
 	}
@@ -80,6 +81,8 @@ func (m mikuapiVideoProviderAdapter) CompatibleRequest(normalized *normalizedVid
 	switch strings.TrimSpace(normalized.Model) {
 	case VideoModelGrokImagineVideo15:
 		return mikuapiGrokRequestCompatible(normalized)
+	case VideoModelKlingV4:
+		return mikuapiKlingV4RequestCompatible(normalized)
 	case VideoModelKlingV3Omni:
 		return mikuapiKlingRequestCompatible(normalized)
 	default:
@@ -163,6 +166,26 @@ func mikuapiKlingRequestCompatible(normalized *normalizedVideoRequest) bool {
 	return true
 }
 
+// V4 supports text, first-frame, first/last-frame, and mixed reference media.
+func mikuapiKlingV4RequestCompatible(normalized *normalizedVideoRequest) bool {
+	spec, _ := videoSpecForModel(VideoModelKlingV4)
+	if normalized.GeneratedSeconds < spec.MinSeconds || normalized.GeneratedSeconds > spec.MaxSeconds ||
+		(normalized.RatioProvided && !isKlingAspectRatio(normalized.Ratio)) {
+		return false
+	}
+	stats := inspectVideoContent(normalized.Content)
+	// Frame inputs and reference mode are distinct: never silently discard either.
+	if stats.HasReference && (stats.FirstFrameCount > 0 || stats.LastFrameCount > 0) {
+		return false
+	}
+	ability := inferVideoAbility(stats)
+	if err := validateVideoAbilityInput(VideoModelKlingV4, ability, normalized.Prompt, stats); err != nil {
+		return false
+	}
+	_, err := referenceVideoSeconds(VideoModelKlingV4, normalized.Content)
+	return err == nil
+}
+
 func (m mikuapiVideoProviderAdapter) UpstreamModel(account *Account, normalized *normalizedVideoRequest) string {
 	if normalized == nil {
 		return ""
@@ -178,7 +201,7 @@ func (m mikuapiVideoProviderAdapter) UpstreamModel(account *Account, normalized 
 }
 
 // videoMikuapiUpstreamModel 是 mikuapi 模型名的单一来源：Seedance 不带分辨率、
-// Grok 与可灵与下游同名；未接入的模型（例如 seedance-2-mini）返回空串。
+// Grok 与可灵映射到各自上游名；未接入的模型（例如 seedance-2-mini）返回空串。
 func videoMikuapiUpstreamModel(model string) string {
 	switch strings.TrimSpace(model) {
 	case VideoModelSeedance20:
@@ -191,6 +214,8 @@ func videoMikuapiUpstreamModel(model string) string {
 		return videoMikuapiGrokImagineVideo15PreviewModel
 	case VideoModelKlingV3Omni:
 		return videoMikuapiKlingVideoV3OmniModel
+	case VideoModelKlingV4:
+		return videoMikuapiKlingVideoV4Model
 	default:
 		return ""
 	}
@@ -215,7 +240,7 @@ func (m mikuapiVideoProviderAdapter) BuildCreateBody(normalized *normalizedVideo
 	switch strings.TrimSpace(normalized.Model) {
 	case VideoModelGrokImagineVideo15:
 		return mikuapiGrokCreateBody(normalized, upstreamModel)
-	case VideoModelKlingV3Omni:
+	case VideoModelKlingV3Omni, VideoModelKlingV4:
 		return mikuapiKlingCreateBody(normalized, upstreamModel)
 	default:
 		return mikuapiSeedanceCreateBody(normalized, upstreamModel)
@@ -273,8 +298,9 @@ func mikuapiGrokCreateBody(normalized *normalizedVideoRequest, upstreamModel str
 }
 
 // mikuapiKlingCreateBody 组装可灵请求体：分辨率只认 720p/1080p/4k（下游规范
-// 写法是大写 4K，必须转小写），参考图是 reference_images 对象数组（omni 至多
-// 7 张，首帧角色同样按参考图下发）。秒数与画幅在可服务范围内始终显式下发，
+// 写法是大写 4K，必须转小写；V4 仅 720p/1080p）。参考素材为 reference_*
+// 对象数组；omni 将首帧也当参考图，V4 则通过 input_reference / image_end
+// 保留首尾帧角色。秒数与画幅在可服务范围内显式下发，
 // 不依赖上游默认值（4K/16:9 是最贵的一档，不能靠默认值兜底）。
 func mikuapiKlingCreateBody(normalized *normalizedVideoRequest, upstreamModel string) map[string]any {
 	body := map[string]any{
@@ -286,7 +312,19 @@ func mikuapiKlingCreateBody(normalized *normalizedVideoRequest, upstreamModel st
 	if normalized.RatioProvided && isKlingAspectRatio(normalized.Ratio) {
 		body["aspect_ratio"] = normalized.Ratio
 	}
-	if refs := mikuapiKlingImageReferences(normalized.Content); len(refs) > 0 {
+	if normalized.Model == VideoModelKlingV4 {
+		for field, urls := range mikuapiMediaReferences(normalized.Content) {
+			if field == mikuapiFieldFirstFrame || field == mikuapiFieldLastFrame {
+				body[field] = urls[0]
+				continue
+			}
+			refs := make([]map[string]any, 0, len(urls))
+			for _, url := range urls {
+				refs = append(refs, map[string]any{"url": url})
+			}
+			body[field] = refs
+		}
+	} else if refs := mikuapiKlingImageReferences(normalized.Content); len(refs) > 0 {
 		body["reference_images"] = refs
 	}
 	return body

@@ -265,7 +265,7 @@ export default {
         },
         aigodAdapter: 'Seedance 2.0 / 2.0 Fast / 2.5',
         newtokenAdapter: 'Routes the upstream model by resolution: 2.0 / 1080p, 2.0 Fast, 2.5',
-        mikuapiAdapter: 'Routes by the resolution field: Seedance 2.0 (incl. 4K) / 2.0 Fast (480p/720p, 5s or 10s only) / 2.5 (no 4K), plus grok-imagine-video-1.5 and Kling kling-v3-omni (Kling uses /v1/videos and returns direct CDN links)',
+        mikuapiAdapter: 'Routes by the resolution field: Seedance 2.0 (incl. 4K) / 2.0 Fast (480p/720p, 5s or 10s only) / 2.5 (no 4K), plus grok-imagine-video-1.5 and Kling kling-v3-omni / kling-v4 (720p/1080p, 3–30s; Kling uses /v1/videos and returns direct CDN links)',
         jingyuAdapter: 'Jingyu /v1/video/generations: 2.0 (incl. 4K) / 2.5 (480p/720p)',
         apimartAdapter: 'MiniMax H3 / H3 Max; /v1/tasks; H3: 768p/2K, 4–15s; H3 Max: 480p/768p/1080p, 5–15s',
         xingguangAdapter: 'xingapi.top /v1/videos async API: text-to-video and reference-to-video requests (subject to upstream model support); Seedance 2.0 upstream model seedance2.0-933 (switch to seedance2.0-933-2 via model_mapping), 2.5 upstream model seedance2.5; 480p/720p; forwards 16:9/9:16/21:9/1:1/4:3/3:4 ratios; results fetched from the authenticated /content endpoint. Reference videos are not hard-coded: keep max reference videos at 0 while the upstream has them disabled, raise it once supported',

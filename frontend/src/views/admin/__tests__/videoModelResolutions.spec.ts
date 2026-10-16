@@ -19,7 +19,8 @@ describe('video model resolutions', () => {
       'grok-imagine-video-1.5',
       'minimax-h3',
       'minimax-h3-max',
-      'kling-v3-omni'
+      'kling-v3-omni',
+      'kling-v4'
     ])
     expect(videoModelResolutions('seedance-2.0')).toEqual([
       '480p',
@@ -57,7 +58,8 @@ describe('video model resolutions', () => {
       'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
       'minimax-h3': ['768p', '2K'],
       'minimax-h3-max': ['480p', '768p', '1080p'],
-      'kling-v3-omni': ['720p', '1080p', '4K']
+      'kling-v3-omni': ['720p', '1080p', '4K'],
+      'kling-v4': ['720p', '1080p']
     })
   })
 
@@ -136,7 +138,8 @@ describe('video model resolutions', () => {
       'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
       'minimax-h3': ['768p', '2K'],
       'minimax-h3-max': ['480p', '768p', '1080p'],
-      'kling-v3-omni': ['720p', '1080p', '4K']
+      'kling-v3-omni': ['720p', '1080p', '4K'],
+      'kling-v4': ['720p', '1080p']
     })
   })
 

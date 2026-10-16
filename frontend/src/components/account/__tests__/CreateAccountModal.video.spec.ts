@@ -98,7 +98,7 @@ async function submitVideoAccount(wrapper: ReturnType<typeof mount>) {
 
 async function selectXingguang(wrapper: ReturnType<typeof mount>) {
   await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
-  for (const model of ['seedance-2.0-fast', 'grok-imagine-video-1.5', 'kling-v3-omni']) {
+  for (const model of ['seedance-2.0-fast', 'grok-imagine-video-1.5', 'kling-v3-omni', 'kling-v4']) {
     await wrapper.get(`[data-testid="video-model-${model}"]`).trigger('click')
   }
   await wrapper.get('[data-testid="video-provider-select"]').setValue('xingguang')
@@ -140,6 +140,7 @@ describe('CreateAccountModal video mode', () => {
     await flushPromises()
     await wrapper.get('[data-testid="video-model-grok-imagine-video-1.5"]').trigger('click')
     await wrapper.get('[data-testid="video-model-kling-v3-omni"]').trigger('click')
+    await wrapper.get('[data-testid="video-model-kling-v4"]').trigger('click')
     await flushPromises()
 
     // jingyu 不服务 seedance-2.0-fast，因此不在可服务平台里。
@@ -195,6 +196,7 @@ describe('CreateAccountModal video mode', () => {
     await flushPromises()
     await wrapper.get('[data-testid="video-model-grok-imagine-video-1.5"]').trigger('click')
     await wrapper.get('[data-testid="video-model-kling-v3-omni"]').trigger('click')
+    await wrapper.get('[data-testid="video-model-kling-v4"]').trigger('click')
     await flushPromises()
     await wrapper.get('[data-testid="video-provider-select"]').setValue('newtoken')
     await flushPromises()
@@ -223,7 +225,8 @@ describe('CreateAccountModal video mode', () => {
       'seedance-2.0-fast',
       'seedance-2.5',
       'grok-imagine-video-1.5',
-      'kling-v3-omni'
+      'kling-v3-omni',
+      'kling-v4'
     ]) {
       expect(wrapper.find(`[data-testid="video-model-${model}"]`).exists()).toBe(true)
     }
@@ -239,6 +242,7 @@ describe('CreateAccountModal video mode', () => {
       'seedance-2.5': 'seedance-2.5',
       'grok-imagine-video-1.5': 'grok-imagine-video-1.5',
       'kling-v3-omni': 'kling-v3-omni',
+      'kling-v4': 'kling-v4',
     })
   })
 
@@ -260,6 +264,7 @@ describe('CreateAccountModal video mode', () => {
       'seedance-2.5': 'seedance-2.5',
       'grok-imagine-video-1.5': 'grok-imagine-video-1.5',
       'kling-v3-omni': 'kling-v3-omni',
+      'kling-v4': 'kling-v4',
     })
   })
 

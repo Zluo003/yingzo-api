@@ -17,7 +17,8 @@ export const VIDEO_MODEL_REFERENCE_LIMITS: Record<string, readonly [number, numb
   'grok-imagine-video-1.5': [7, 0, 0],
   'minimax-h3': [9, 3, 3],
   'minimax-h3-max': [9, 3, 3],
-  'kling-v3-omni': [7, 0, 0]
+  'kling-v3-omni': [7, 0, 0],
+  'kling-v4': [10, 5, 3]
 }
 
 export function defaultVideoModelCapabilities(model: string): VideoModelCapabilities {

@@ -656,40 +656,44 @@ func TestMikuapiGrokPollLifecycleCompletesFromContentEndpoint(t *testing.T) {
 // mikuapi 可灵的轮询全链路：queued 原地等待，completed 后成片是可灵 CDN 直链，
 // 直接发布且不带上游 key。
 func TestMikuapiKlingPollLifecyclePublishesCDNURL(t *testing.T) {
-	const cdnURL = "https://v15-kling.klingai.com/bs2/upload-ylab-stunt-sgp/abc-output.mp4?x-kcdn-pid=112372"
-	var statusCalls int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet || r.URL.Path != "/v1/videos/kling-task-1" {
-			http.NotFound(w, r)
-			return
-		}
-		if atomic.AddInt32(&statusCalls, 1) == 1 {
-			_, _ = w.Write([]byte(`{"id":"kling-task-1","status":"queued","progress":0}`))
-			return
-		}
-		_, _ = w.Write([]byte(`{"id":"kling-task-1","status":"completed","progress":100,"download_url":"` + cdnURL + `","video_url":"` + cdnURL + `"}`))
-	}))
-	t.Cleanup(server.Close)
+	for _, model := range []string{videoMikuapiKlingVideoV3OmniModel, videoMikuapiKlingVideoV4Model} {
+		t.Run(model, func(t *testing.T) {
+			const cdnURL = "https://v15-kling.klingai.com/bs2/upload-ylab-stunt-sgp/abc-output.mp4?x-kcdn-pid=112372"
+			var statusCalls int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/v1/videos/kling-task-1" {
+					http.NotFound(w, r)
+					return
+				}
+				if atomic.AddInt32(&statusCalls, 1) == 1 {
+					_, _ = w.Write([]byte(`{"id":"kling-task-1","status":"queued","progress":0}`))
+					return
+				}
+				_, _ = w.Write([]byte(`{"id":"kling-task-1","status":"completed","progress":100,"download_url":"` + cdnURL + `","video_url":"` + cdnURL + `"}`))
+			}))
+			t.Cleanup(server.Close)
 
-	account := &Account{ID: 45, Platform: PlatformVideo, Type: AccountTypeAPIKey,
-		Credentials: map[string]any{"api_key": "sk-miku-test"},
-		Extra: map[string]any{
-			VideoProviderExtraKey: videoProviderMikuapi,
-			"base_url":            server.URL,
-			"api_path":            videoDefaultAPIPath,
-			"poll_interval_ms":    1,
-		}}
-	taskRepo := &mikuapiPollTaskRepoStub{task: &VideoTask{PublicID: "video_miku_kling", Status: VideoTaskStatusProcessing}}
-	publisher := &mikuapiResultPublisherStub{}
-	svc := newMikuapiPollTestService(taskRepo, publisher)
+			account := &Account{ID: 45, Platform: PlatformVideo, Type: AccountTypeAPIKey,
+				Credentials: map[string]any{"api_key": "sk-miku-test"},
+				Extra: map[string]any{
+					VideoProviderExtraKey: videoProviderMikuapi,
+					"base_url":            server.URL,
+					"api_path":            videoDefaultAPIPath,
+					"poll_interval_ms":    1,
+				}}
+			taskRepo := &mikuapiPollTaskRepoStub{task: &VideoTask{PublicID: "video_miku_kling", Status: VideoTaskStatusProcessing}}
+			publisher := &mikuapiResultPublisherStub{}
+			svc := newMikuapiPollTestService(taskRepo, publisher)
 
-	input := mikuapiPollTestInput(account)
-	input.UpstreamBody = map[string]any{"model": videoMikuapiKlingVideoV3OmniModel}
-	require.NoError(t, svc.pollLifecycle(input, "kling-task-1"))
+			input := mikuapiPollTestInput(account)
+			input.UpstreamBody = map[string]any{"model": model}
+			require.NoError(t, svc.pollLifecycle(input, "kling-task-1"))
 
-	require.Equal(t, VideoTaskStatusCompleted, taskRepo.task.Status)
-	require.Equal(t, []string{cdnURL}, publisher.urls, "可灵成片按状态响应里的 CDN 直链发布")
-	require.Empty(t, publisher.auths, "可灵 CDN 直链公开可读，不能把上游 key 发给第三方")
+			require.Equal(t, VideoTaskStatusCompleted, taskRepo.task.Status)
+			require.Equal(t, []string{cdnURL}, publisher.urls, "可灵成片按状态响应里的 CDN 直链发布")
+			require.Empty(t, publisher.auths, "可灵 CDN 直链公开可读，不能把上游 key 发给第三方")
+		})
+	}
 }
 
 // 归一化阶段的按模型约束：时长边界（grok 1-15、可灵 3-15）与参考图数量上限。
