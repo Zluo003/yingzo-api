@@ -35,7 +35,7 @@
 | `duration` | number | 必填，单位为秒。统一传模型支持的正整数，不传字符串；不使用上游的 `seconds` 等字段名。 |
 | `resolution` | string | 建议显式填写，如 `480p`、`720p`、`1080p`、`4K`，具体取值以模型和可用渠道为准。 |
 | `aspect_ratio` | string | 画幅，如 `16:9`、`9:16`、`1:1`。建议显式填写模型支持的值；首帧模式的实际画幅也可能由输入图片决定。 |
-| `generate_audio` | boolean | 可选，期望是否生成音频。适配器在上游支持时转换；不支持该开关的上游可能忽略它，`false` 不是所有渠道都能保证的静音承诺。 |
+| `generate_audio` | boolean | 可选。`kling-v4` 默认开启音频，省略或传 `true` 均开启，传 `false` 显式关闭。其他模型由渠道能力决定；不支持该开关的上游可能忽略它。 |
 | `content` | array | 文生模式省略或传 `[]`；其余模式统一在此填写素材，结构见下表。 |
 | `safety_identifier` | string | 可选，安全审计标识。 |
 
@@ -63,7 +63,7 @@
 }
 ```
 
-不要在顶层发送供应商的 `images`、`videos`、`audios`、`image`、`first_frame_url` 等字段；不要把 `image_url` 写成字符串。下游不需要发送 `subject_type`，也不需要声明参考视频的 `duration_seconds`。参考视频时长由平台探测，客户端声明不会用于计费。
+不要在顶层发送供应商的 `reference_images`、`reference_videos`、`reference_audios`、`enable_audio`、`images`、`videos`、`audios`、`image`、`first_frame_url` 等字段；不要把 `image_url` 写成字符串。下游不需要发送 `subject_type`，也不需要声明参考视频的 `duration_seconds`。参考视频时长由平台探测，客户端声明不会用于计费。
 
 ## 3. 四种模式：同一请求，只改变能力码与素材
 
@@ -215,7 +215,7 @@ curl -sS "$BASE_URL/v1/models" \
 | `kling-v3-omni` | 3–15 | `720p` / `1080p` / `4K` |
 | `kling-v4` | 3–30 | `720p` / `1080p` |
 
-`kling-v4` 经 mikuapi 提供，支持文生、图生（首帧）、首尾帧和参考生成。参考图片最多 10 张、视频最多 5 段、音频最多 3 段，所有素材合计最多 15 个；每段参考视频实际时长为 3–30 秒，视频总时长不超过 30 秒，单段体积不超过 300 MB（300,000,000 字节）。首尾帧与参考生成素材分属不同模式，不可混用。
+`kling-v4` 经 mikuapi 提供，支持文生、图生（首帧）、首尾帧和参考生成。参考图片最多 10 张、视频最多 5 段、音频最多 3 段，所有素材合计最多 15 个；每段参考视频实际时长为 3–30 秒，视频总时长不超过 30 秒，单段体积不超过 300 MB（300,000,000 字节）。首尾帧与参考生成素材分属不同模式，不可混用。音频默认开启，下游可通过 `generate_audio: false` 显式关闭。完整下游示例见第 4.3 节。
 
 Grok Imagine 和 Kling Omni 当前接入的参考素材为图片（至多 7 张），未开放首尾帧模式；Kling Omni 画幅为 `16:9`、`9:16`、`1:1`。这些是能力差异，客户端仍使用第 2、3 节的同一套参数。
 
@@ -235,6 +235,57 @@ Grok Imagine 和 Kling Omni 当前接入的参考素材为图片（至多 7 张�
 例如，同一个下游 `aspect_ratio` 可以被适配器转换成上游的 `ratio`，`duration` 可以被转换成 `seconds`，`content` 中的参考图可以被转换成上游的 `images` 数组。这些转换不需要客户端感知。
 
 Xingguang 适配器目前接入 Seedance 2.0、2.5 的文生与参考生成，两者的 5 秒、720p 文生请求均已实测成功；Seedance 2.0 的 `21:9` 文生请求也已实测完成。画幅按通用枚举 `16:9` / `9:16` / `21:9` / `1:1` / `4:3` / `3:4` 透传，文档中的“常用 16:9、9:16”不作为完整白名单；其余比例仍应以对应上游模型的实际结果为准。首帧、首尾帧尚未在该适配器开放，客户端不能因为文档列出四种统一模式就假定这个渠道支持全部模式。
+
+### 4.3 Kling V4 下游对接
+
+公开模型名为 `kling-v4`。沿用本文统一协议：通过 `POST /v1/videos` 创建任务，时长填写 `duration`，参考素材放在 `content`，音频开关填写 `generate_audio`。供应商示例中的 `kling-video-v4`、`seconds`、顶层 `reference_*` 和 `enable_audio` 由网关转换，下游无需发送。
+
+| 参数或素材 | Kling V4 限制 |
+| --- | --- |
+| 生成时长 | 3–30 秒，整数 |
+| 分辨率 | `720p` / `1080p`，省略默认 `720p` |
+| 画幅 | `16:9` / `9:16` / `1:1` |
+| 生成模式 | 文生、首帧图生、首尾帧、参考生成 |
+| 参考图片 | 最多 10 张 |
+| 参考视频 | 最多 5 段，每段实际时长 3–30 秒，单段不超过 300 MB（300,000,000 字节）；所有参考视频实际总时长不超过 30 秒 |
+| 参考音频 | 最多 3 段，须搭配至少一张图片或一段视频 |
+| 参考素材总数 | 图片、视频、音频合计最多 15 个 |
+| 音频开关 | 省略 `generate_audio` 或传 `true` 均开启；传 `false` 显式关闭 |
+
+下面是同时使用图片、视频和音频参考的完整下游请求，可保存为 `request.json`，按第 6.1 节发送：
+
+```json
+{
+  "model": "kling-v4",
+  "prompt": "保持参考图片中的主体外观，参考视频1的风格和镜头运动，结合参考音频的节奏，生成新的3秒视频",
+  "ability_code": "video_reference_to_video",
+  "duration": 3,
+  "resolution": "720p",
+  "aspect_ratio": "16:9",
+  "generate_audio": true,
+  "content": [
+    {
+      "type": "image_url",
+      "image_url": {"url": "https://cdn.example.com/reference.png"},
+      "role": "reference_image"
+    },
+    {
+      "type": "video_url",
+      "video_url": {"url": "https://cdn.example.com/reference.mp4"},
+      "role": "reference_video"
+    },
+    {
+      "type": "audio_url",
+      "audio_url": {"url": "https://cdn.example.com/reference.mp3"},
+      "role": "reference_audio"
+    }
+  ]
+}
+```
+
+只使用参考视频时，保留 `video_url` 素材项即可；图片或音频参考均可按需省略。删除 `generate_audio` 后仍默认生成音频；设为 `false` 可关闭输出音频。
+
+文生、首帧和首尾帧请求可以使用第 3.1–3.3 节结构，将 `model` 改为 `kling-v4`，并按本节范围设置时长与分辨率。首帧模式恰好一张 `first_frame`；首尾帧模式恰好一张 `first_frame` 和一张 `last_frame`，不可与参考图、视频或音频混用。任务受理、查询、获取成片和重试均沿用第 6、7 节流程。
 
 ## 5. 公网素材与本地文件
 

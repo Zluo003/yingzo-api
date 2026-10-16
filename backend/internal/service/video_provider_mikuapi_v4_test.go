@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -75,7 +76,7 @@ func TestMikuapiKlingV4ModesAndBodies(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.ability, n.AbilityCode)
 			require.True(t, adapter.CompatibleRequest(n))
-			body := map[string]any{"model": "kling-video-v4", "prompt": "boat", "seconds": 3, "resolution": "1080p", "aspect_ratio": "9:16"}
+			body := map[string]any{"model": "kling-video-v4", "prompt": "boat", "seconds": 3, "enable_audio": true, "resolution": "1080p", "aspect_ratio": "9:16"}
 			for k, v := range tc.fields {
 				body[k] = v
 			}
@@ -121,4 +122,38 @@ func TestMikuapiKlingV4ReferenceLimits(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMikuapiKlingV4ConfirmedUpstreamProtocol(t *testing.T) {
+	enableAudio := true
+	n, err := normalizeVideoCreateRequest(&VideoCreateRequest{
+		Model:         VideoModelKlingV4,
+		Prompt:        "参考视频1的风格和镜头运动，生成新的3秒视频",
+		Duration:      3,
+		Resolution:    VideoResolution720P,
+		GenerateAudio: &enableAudio,
+		Content: []VideoContent{
+			{Type: "video_url", Role: "reference_video", VideoURL: &VideoContentURL{URL: "https://example.com/reference.mp4"}, DurationSeconds: videoFloat64Ptr(3)},
+			{Type: "image_url", Role: "reference_image", ImageURL: &VideoContentURL{URL: "https://example.com/reference.png"}},
+		},
+	})
+	require.NoError(t, err)
+	adapter := videoProviderAdapterByName(videoProviderMikuapi)
+	require.True(t, adapter.CompatibleRequest(n))
+	body := adapter.BuildCreateBody(n, adapter.UpstreamModel(nil, n))
+	encoded, err := json.Marshal(body)
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"model":"kling-video-v4",
+		"prompt":"参考视频1的风格和镜头运动，生成新的3秒视频",
+		"seconds":3,
+		"resolution":"720p",
+		"reference_videos":["https://example.com/reference.mp4"],
+		"reference_images":[{"url":"https://example.com/reference.png"}],
+		"enable_audio":true
+	}`, string(encoded))
+	enableAudio = false
+	require.Equal(t, false, adapter.BuildCreateBody(n, "kling-video-v4")["enable_audio"])
+	n.GenerateAudio = nil
+	require.Equal(t, true, adapter.BuildCreateBody(n, "kling-video-v4")["enable_audio"])
 }

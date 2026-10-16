@@ -240,8 +240,10 @@ func (m mikuapiVideoProviderAdapter) BuildCreateBody(normalized *normalizedVideo
 	switch strings.TrimSpace(normalized.Model) {
 	case VideoModelGrokImagineVideo15:
 		return mikuapiGrokCreateBody(normalized, upstreamModel)
-	case VideoModelKlingV3Omni, VideoModelKlingV4:
+	case VideoModelKlingV3Omni:
 		return mikuapiKlingCreateBody(normalized, upstreamModel)
+	case VideoModelKlingV4:
+		return mikuapiKlingV4CreateBody(normalized, upstreamModel)
 	default:
 		return mikuapiSeedanceCreateBody(normalized, upstreamModel)
 	}
@@ -297,12 +299,7 @@ func mikuapiGrokCreateBody(normalized *normalizedVideoRequest, upstreamModel str
 	return body
 }
 
-// mikuapiKlingCreateBody 组装可灵请求体：分辨率只认 720p/1080p/4k（下游规范
-// 写法是大写 4K，必须转小写；V4 仅 720p/1080p）。参考图使用对象数组，
-// V4 的 reference_videos / reference_audios 使用 URL 字符串数组。
-// omni 将首帧也当参考图，V4 则通过 input_reference / image_end
-// 保留首尾帧角色。秒数与画幅在可服务范围内显式下发，
-// 不依赖上游默认值（4K/16:9 是最贵的一档，不能靠默认值兜底）。
+// mikuapiKlingCreateBody preserves V3 Omni's seconds field and image objects.
 func mikuapiKlingCreateBody(normalized *normalizedVideoRequest, upstreamModel string) map[string]any {
 	body := map[string]any{
 		"model":      upstreamModel,
@@ -313,24 +310,40 @@ func mikuapiKlingCreateBody(normalized *normalizedVideoRequest, upstreamModel st
 	if normalized.RatioProvided && isKlingAspectRatio(normalized.Ratio) {
 		body["aspect_ratio"] = normalized.Ratio
 	}
-	if normalized.Model == VideoModelKlingV4 {
-		for field, urls := range mikuapiMediaReferences(normalized.Content) {
-			if field == mikuapiFieldFirstFrame || field == mikuapiFieldLastFrame {
-				body[field] = urls[0]
-				continue
-			}
-			if field == "reference_videos" || field == "reference_audios" {
-				body[field] = urls
-				continue
-			}
+	if refs := mikuapiKlingImageReferences(normalized.Content); len(refs) > 0 {
+		body["reference_images"] = refs
+	}
+	return body
+}
+
+// V4 keeps the Omni request format and adds URL arrays for video/audio.
+// Audio defaults to enabled; an explicit downstream generate_audio=false wins.
+func mikuapiKlingV4CreateBody(normalized *normalizedVideoRequest, upstreamModel string) map[string]any {
+	body := map[string]any{
+		"model":        upstreamModel,
+		"prompt":       normalized.Prompt,
+		"seconds":      normalized.GeneratedSeconds,
+		"enable_audio": true,
+		"resolution":   strings.ToLower(normalized.Resolution),
+	}
+	if normalized.RatioProvided && isKlingAspectRatio(normalized.Ratio) {
+		body["aspect_ratio"] = normalized.Ratio
+	}
+	if normalized.GenerateAudio != nil {
+		body["enable_audio"] = *normalized.GenerateAudio
+	}
+	for field, urls := range mikuapiMediaReferences(normalized.Content) {
+		if field == mikuapiFieldFirstFrame || field == mikuapiFieldLastFrame {
+			body[field] = urls[0]
+		} else if field == "reference_images" {
 			refs := make([]map[string]any, 0, len(urls))
 			for _, url := range urls {
 				refs = append(refs, map[string]any{"url": url})
 			}
 			body[field] = refs
+		} else {
+			body[field] = urls
 		}
-	} else if refs := mikuapiKlingImageReferences(normalized.Content); len(refs) > 0 {
-		body["reference_images"] = refs
 	}
 	return body
 }
