@@ -152,6 +152,7 @@ docs/*
 !docs/BATCH_IMAGE_MVP.md
 !docs/COMPOSITE_GROUPS.md
 !docs/PLUGIN_DEVELOPMENT.md
+!docs/TUTORIALS.md
 !docs/channel-monitor-v2-safe-defaults.md
 !docs/legal/
 !docs/legal/*.md

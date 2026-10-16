@@ -56,6 +56,11 @@ var requiredCSPDirectiveValues = []struct {
 	// 插件配置 UI 使用同源 iframe；目标响应仍必须显式放开 X-Frame-Options，
 	// 因此这里只允许 'self' 不会使其他默认 DENY 的管理/API 页面可被嵌入。
 	{"frame-src", "'self'"},
+	// Official Feishu document component; document/media traffic stays direct.
+	{"script-src", "https://sf1-scmcdn-cn.feishucdn.com"},
+	{"frame-src", "https://*.feishu.cn"},
+	{"frame-src", "https://*.larksuite.com"},
+	{"connect-src", "https://*.feishu.cn"},
 	{"script-src", CloudflareInsightsDomain},
 	{"script-src", TencentCaptchaDomain},
 	{"frame-src", TencentCaptchaDomain},

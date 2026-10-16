@@ -3,7 +3,7 @@ import { clearAuthKeys, refreshAuthTokens, request } from './lib.js'
 // Public payment return/recovery pages use scoped order tokens, not an account
 // session. Everything else defaults to requiring login, including new routes.
 const PUBLIC_PAGES = new Set([
-  'home', 'download', 'login', 'register', 'forgot-password', 'reset-password',
+  'home', 'download', 'tutorials', 'login', 'register', 'forgot-password', 'reset-password',
   'payment/result', 'recharge/result', 'payment/airwallex',
 ])
 

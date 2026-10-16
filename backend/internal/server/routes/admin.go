@@ -45,6 +45,10 @@ func RegisterAdminRoutes(
 		// 公告管理
 		registerAnnouncementRoutes(admin, h)
 
+		// 独立教程配置，复用管理员认证、限流与审计。
+		admin.GET("/tutorials", h.Admin.Setting.GetTutorialConfig)
+		admin.PUT("/tutorials", h.Admin.Setting.SaveTutorialConfig)
+
 		// OpenAI OAuth
 		registerOpenAIOAuthRoutes(admin, h)
 

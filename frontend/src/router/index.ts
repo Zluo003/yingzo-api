@@ -568,6 +568,12 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/tutorials',
+    name: 'AdminTutorials',
+    component: () => import('@/views/admin/TutorialsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: '教程管理', titleKey: 'nav.tutorials' }
+  },
+  {
     path: '/admin/announcements',
     name: 'AdminAnnouncements',
     component: () => import('@/views/admin/AnnouncementsView.vue'),

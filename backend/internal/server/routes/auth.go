@@ -244,6 +244,8 @@ func RegisterAuthRoutes(
 	settings.Use(panelRateLimiter.PublicIP())
 	{
 		settings.GET("/public", h.Setting.GetPublicSettings)
+		settings.GET("/tutorials", h.Setting.GetTutorials)
+		settings.GET("/tutorials/auth", h.Setting.GetTutorialAuth)
 		settings.GET("/email-unsubscribe", h.Setting.UnsubscribeNotificationEmail)
 	}
 

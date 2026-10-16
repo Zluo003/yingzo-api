@@ -354,7 +354,7 @@ const faqs = [
   ],
 ]
 
-export default function LandingPage({ user, setPage }) {
+export default function LandingPage({ user, setPage, tutorialsEnabled = false }) {
   const root = useRef(null)
   const menuButton = useRef(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -435,6 +435,7 @@ export default function LandingPage({ user, setPage }) {
               {label}
             </a>
           ))}
+          {tutorialsEnabled && <a {...routeLink('tutorials')}>使用教程</a>}
         </nav>
         <div className="lp-header-actions">
           <a
