@@ -170,7 +170,7 @@ func mikuapiKlingRequestCompatible(normalized *normalizedVideoRequest) bool {
 func mikuapiKlingV4RequestCompatible(normalized *normalizedVideoRequest) bool {
 	spec, _ := videoSpecForModel(VideoModelKlingV4)
 	if normalized.GeneratedSeconds < spec.MinSeconds || normalized.GeneratedSeconds > spec.MaxSeconds ||
-		(normalized.RatioProvided && !isKlingAspectRatio(normalized.Ratio)) {
+		(normalized.RatioProvided && !isKlingV4AspectRatio(normalized.Ratio)) {
 		return false
 	}
 	stats := inspectVideoContent(normalized.Content)
@@ -326,7 +326,7 @@ func mikuapiKlingV4CreateBody(normalized *normalizedVideoRequest, upstreamModel 
 		"enable_audio": true,
 		"resolution":   strings.ToLower(normalized.Resolution),
 	}
-	if normalized.RatioProvided && isKlingAspectRatio(normalized.Ratio) {
+	if normalized.RatioProvided && isKlingV4AspectRatio(normalized.Ratio) {
 		body["aspect_ratio"] = normalized.Ratio
 	}
 	if normalized.GenerateAudio != nil {
@@ -510,4 +510,9 @@ func isKlingAspectRatio(ratio string) bool {
 	default:
 		return false
 	}
+}
+
+// Kling V4 additionally supports ultrawide output; keep V3 limits unchanged.
+func isKlingV4AspectRatio(ratio string) bool {
+	return ratio == "21:9" || isKlingAspectRatio(ratio)
 }

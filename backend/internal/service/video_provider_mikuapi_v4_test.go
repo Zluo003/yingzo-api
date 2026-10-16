@@ -71,17 +71,19 @@ func TestMikuapiKlingV4ModesAndBodies(t *testing.T) {
 			"reference_audios": []string{"https://cdn/ref.mp3"},
 		}},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			n, err := normalizeVideoCreateRequest(&VideoCreateRequest{Model: VideoModelKlingV4, Prompt: "boat", Duration: 3, Resolution: "1080p", Ratio: "9:16", Content: tc.content})
-			require.NoError(t, err)
-			require.Equal(t, tc.ability, n.AbilityCode)
-			require.True(t, adapter.CompatibleRequest(n))
-			body := map[string]any{"model": "kling-video-v4", "prompt": "boat", "seconds": 3, "enable_audio": true, "resolution": "1080p", "aspect_ratio": "9:16"}
-			for k, v := range tc.fields {
-				body[k] = v
-			}
-			require.Equal(t, body, adapter.BuildCreateBody(n, adapter.UpstreamModel(nil, n)))
-		})
+		for _, ratio := range []string{"16:9", "9:16", "1:1", "21:9"} {
+			t.Run(tc.name+"/"+ratio, func(t *testing.T) {
+				n, err := normalizeVideoCreateRequest(&VideoCreateRequest{Model: VideoModelKlingV4, Prompt: "boat", Duration: 3, Resolution: "1080p", Ratio: ratio, Content: tc.content})
+				require.NoError(t, err)
+				require.Equal(t, tc.ability, n.AbilityCode)
+				require.True(t, adapter.CompatibleRequest(n))
+				body := map[string]any{"model": "kling-video-v4", "prompt": "boat", "seconds": 3, "enable_audio": true, "resolution": "1080p", "aspect_ratio": ratio}
+				for k, v := range tc.fields {
+					body[k] = v
+				}
+				require.Equal(t, body, adapter.BuildCreateBody(n, adapter.UpstreamModel(nil, n)))
+			})
+		}
 	}
 	for _, content := range [][]VideoContent{{last}, {first, first}, {first, klingV4References(1, 0, 0, 0)[0]}} {
 		n := &normalizedVideoRequest{Model: VideoModelKlingV4, Prompt: "boat", Resolution: "720p", GeneratedSeconds: 3, Content: content}
