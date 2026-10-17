@@ -17,23 +17,27 @@ import (
 func referencePCM(t *testing.T, streaming bool) []byte {
 	t.Helper()
 	var data bytes.Buffer
-	data.WriteString("RIFF")
+	_, err := data.WriteString("RIFF")
+	require.NoError(t, err)
 	size := uint32(36 + 160)
 	if streaming {
 		size = ^uint32(0)
 	}
 	require.NoError(t, binary.Write(&data, binary.LittleEndian, size))
-	data.WriteString("WAVEfmt ")
+	_, err = data.WriteString("WAVEfmt ")
+	require.NoError(t, err)
 	for _, value := range []any{uint32(16), uint16(1), uint16(1), uint32(8000), uint32(16000), uint16(2), uint16(16)} {
 		require.NoError(t, binary.Write(&data, binary.LittleEndian, value))
 	}
-	data.WriteString("data")
+	_, err = data.WriteString("data")
+	require.NoError(t, err)
 	size = 160
 	if streaming {
 		size = ^uint32(0)
 	}
 	require.NoError(t, binary.Write(&data, binary.LittleEndian, size))
-	data.Write(make([]byte, 160))
+	_, err = data.Write(make([]byte, 160))
+	require.NoError(t, err)
 	return data.Bytes()
 }
 
