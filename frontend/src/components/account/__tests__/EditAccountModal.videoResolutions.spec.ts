@@ -159,6 +159,24 @@ describe('EditAccountModal video resolutions', () => {
     expect(Object.keys(payload.extra.video_model_durations)).toEqual(['seedance-2.0', 'seedance-2.5'])
   })
 
+  it('restores vipprompt and preserves custom names when editing', async () => {
+    const account = buildVideoAccount({ video_provider: 'vipprompt', base_url: 'https://www.vipprompt.cn', poll_interval_ms: 10000 })
+    const mapping = {
+      'seedance-2.0': 'sd-2.0-S2 支持真人933',
+      'seedance-2.5': 'SD-2.5-M支持真人满血稳定版',
+      'kling-v4': '自定义 Kling v4（官渠）',
+    }
+    account.credentials.model_mapping = mapping
+    const wrapper = mountModal(account)
+    await flushPromises()
+    expect((wrapper.get('select').element as HTMLSelectElement).value).toBe('vipprompt')
+    const payload = await submitEdit(wrapper)
+    expect(payload.extra.video_provider).toBe('vipprompt')
+    expect(payload.extra.base_url).toBe('https://www.vipprompt.cn')
+    expect(payload.extra.poll_interval_ms).toBe(10000)
+    expect(payload.credentials.model_mapping).toEqual(mapping)
+  })
+
   it('edits a saved upstream model name and can clear it to use the adapter default', async () => {
     const account = buildVideoAccount({ video_provider: 'xingguang' })
     account.credentials.model_mapping = { 'seedance-2.0': 'seedance2.0-933' }

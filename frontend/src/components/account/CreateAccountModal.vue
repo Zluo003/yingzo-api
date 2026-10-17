@@ -4499,7 +4499,7 @@ function onCnPresetSelect(preset: { mode: CnAccountMode; protocol: CnApiProtocol
 }
 
 /** 视频上游平台，名称与后端适配器保持一致。 */
-type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart'
+type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart' | 'vipprompt'
 
 const videoProvider = ref<VideoProvider>('aigod')
 const videoAPIPath = ref('/v1/videos')
@@ -4557,6 +4557,7 @@ const videoProviderDefaultsMap: Record<
     requestTimeoutMs: 1800000,
     connectTimeoutMs: 60000
   },
+  vipprompt: { baseUrl: 'https://www.vipprompt.cn', apiPath: '/v1/videos', pollIntervalMs: 10000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
   apimart: { baseUrl: 'https://api.apimart.ai', apiPath: '/v1/tasks', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
   xingguang: {
     baseUrl: 'https://xingapi.top',
@@ -4592,6 +4593,11 @@ const videoProviderOptions: {
     value: 'jingyu',
     labelKey: 'admin.accounts.video.providers.jingyu',
     hintKey: 'admin.accounts.video.jingyuAdapter'
+  },
+  {
+    value: 'vipprompt',
+    labelKey: 'admin.accounts.video.providers.vipprompt',
+    hintKey: 'admin.accounts.video.vippromptAdapter'
   },
   {
     value: 'apimart',

@@ -397,7 +397,7 @@ const VideoModelDurationsExtraKey = "video_model_durations"
 
 // supportedVideoProviders 是视频账号允许配置的上游平台，必须与
 // videoProviderAdapterByName 的实现保持一致。
-var supportedVideoProviders = []string{videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang, videoProviderApimart}
+var supportedVideoProviders = []string{videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang, videoProviderApimart, videoProviderVipprompt}
 
 // NormalizeVideoProviderExtra 校验并归一化视频账号的 video_provider、
 // video_model_resolutions 与 video_model_durations。

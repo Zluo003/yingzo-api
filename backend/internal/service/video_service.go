@@ -592,6 +592,9 @@ func (s *VideoService) createUpstreamTask(ctx context.Context, account *Account,
 	// 同一渠道的不同模型族可能用不同创建路径（mikuapi 的 grok-imagine 走
 	// /generations），由适配器按上游模型名调整；其余适配器原样返回。
 	endpoint = videoProviderAdapterForAccount(account).CreateEndpoint(endpoint, stringFromMap(body, "model"))
+	if videoAccountProvider(account) == videoProviderVipprompt {
+		return s.createVippromptTask(ctx, account, endpoint, raw)
+	}
 	reqCtx, cancel := context.WithTimeout(ctx, videoAccountDuration(account, "request_timeout_ms", videoAccountDefaultDuration(account, "request_timeout_ms")))
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, endpoint, bytes.NewReader(raw))
@@ -636,6 +639,9 @@ func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, u
 		return nil, err
 	}
 	endpoint := strings.TrimRight(baseEndpoint, "/") + "/" + url.PathEscape(upstreamTaskID)
+	if videoAccountProvider(account) == videoProviderVipprompt {
+		endpoint = vippromptPollEndpoint(baseEndpoint, upstreamTaskID)
+	}
 	reqCtx, cancel := context.WithTimeout(ctx, videoAccountDuration(account, "request_timeout_ms", videoAccountDefaultDuration(account, "request_timeout_ms")))
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, endpoint, nil)
@@ -661,6 +667,9 @@ func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, u
 		if err != nil {
 			return nil, err
 		}
+	}
+	if videoAccountProvider(account) == videoProviderVipprompt {
+		return vippromptPollResult(baseEndpoint, upstreamTaskID, payload, respBody), nil
 	}
 	rawStatus := stringFromMap(payload, "status")
 	status := normalizeVideoUpstreamStatus(rawStatus)
@@ -745,7 +754,7 @@ func (s *VideoService) runLifecycle(input VideoTaskLifecycleInput) {
 			if switchedUpstream {
 				s.reattributeVideoUsageAfterFailover(context.Background(), input, account)
 			}
-			err = s.pollLifecycle(input, created.ID)
+			err = s.pollLifecycle(input, created.ID, created.InitialResult)
 			if err == nil {
 				return
 			}
@@ -841,7 +850,7 @@ func isVideoCreateFailoverError(err error) bool {
 
 // 仅确认生成失败且允许换号时返回错误，让外层重新创建任务。查询异常、超时、
 // 取消和内容拒绝均在本轮终结，不能把结果未知的任务再次提交到其他上游。
-func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTaskID string) error {
+func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTaskID string, initial ...*videoPollResult) error {
 	intervalFallback := videoAccountDefaultDuration(input.Account, "poll_interval_ms")
 	timeoutFallback := videoAccountDefaultDuration(input.Account, "poll_timeout_ms")
 	interval := videoAccountDuration(input.Account, "poll_interval_ms", intervalFallback)
@@ -863,6 +872,14 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 	var lastPollError error
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	pollTicks := ticker.C
+	var initialResult *videoPollResult
+	if len(initial) > 0 && initial[0] != nil {
+		initialResult = initial[0]
+		ready := make(chan time.Time, 1)
+		ready <- time.Now()
+		pollTicks = ready
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -874,8 +891,14 @@ func (s *VideoService) pollLifecycle(input VideoTaskLifecycleInput, upstreamTask
 			_ = s.refundFailedTask(context.Background(), task, input.APIKey, input.Subscription, input.Account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, input.InboundEndpoint, input.UpstreamEndpoint)
 			s.releaseTaskReferenceAssets(input)
 			return nil
-		case <-ticker.C:
-			result, err := s.pollUpstreamTask(ctx, input.Account, upstreamTaskID)
+		case <-pollTicks:
+			pollTicks = ticker.C
+			result := initialResult
+			initialResult = nil
+			var err error
+			if result == nil {
+				result, err = s.pollUpstreamTask(ctx, input.Account, upstreamTaskID)
+			}
 			if err != nil {
 				// The deadline can cancel an in-flight poll. Keep the last actual
 				// upstream response instead of replacing it with local cancellation.
@@ -1796,7 +1819,7 @@ func isVideoAccountCompatibleForRequest(account *Account, normalized *normalized
 // unsupported request is routed to another upstream instead of failing there.
 func videoProviderNeedsRequestCompatibility(provider string) bool {
 	switch provider {
-	case videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang, videoProviderApimart:
+	case videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang, videoProviderApimart, videoProviderVipprompt:
 		return true
 	default:
 		return false
@@ -1804,7 +1827,8 @@ func videoProviderNeedsRequestCompatibility(provider string) bool {
 }
 
 type videoUpstreamCreateResult struct {
-	ID string
+	InitialResult *videoPollResult
+	ID            string
 }
 
 type videoPollResult struct {
@@ -1991,6 +2015,7 @@ func SanitizeVideoClientError(code, message string) (string, string) {
 		"jingyu",
 		"jingyuapi",
 		"api.jingyuapi.art",
+		"vipprompt",
 		// Covers every newtoken upstream model id (sd2.0-720p-official, ...).
 		"-official",
 		"upstream",
@@ -2047,6 +2072,8 @@ func videoAccountAPIPath(account *Account) string {
 func videoAccountProvider(account *Account) string {
 	provider := strings.ToLower(strings.TrimSpace(accountExtraString(account, "video_provider")))
 	switch provider {
+	case videoProviderVipprompt:
+		return videoProviderVipprompt
 	case videoProviderApimart:
 		return videoProviderApimart
 	case videoProviderNewtoken:
@@ -2080,6 +2107,10 @@ func videoAccountDuration(account *Account, key string, fallback time.Duration) 
 
 func videoAccountDefaultDuration(account *Account, key string) time.Duration {
 	switch videoAccountProvider(account) {
+	case videoProviderVipprompt:
+		if key == "poll_interval_ms" {
+			return videoVippromptPollInterval
+		}
 	case videoProviderJingyu:
 		switch key {
 		case "poll_interval_ms":

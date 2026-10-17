@@ -292,6 +292,30 @@ describe('CreateAccountModal video mode', () => {
     })
   })
 
+  it('creates a vipprompt account with three custom upstream names', async () => {
+    const wrapper = await mountVideoModal()
+    await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
+    for (const model of ['seedance-2.0-fast', 'grok-imagine-video-1.5', 'kling-v3-omni']) {
+      await wrapper.get(`[data-testid="video-model-${model}"]`).trigger('click')
+    }
+    await wrapper.get('[data-testid="video-provider-select"]').setValue('vipprompt')
+    await flushPromises()
+    const mapping = {
+      'seedance-2.0': 'sd-2.0-S2 支持真人933',
+      'seedance-2.5': 'SD-2.5-M支持真人满血稳定版',
+      'kling-v4': '自定义 Kling v4（官渠）',
+    }
+    for (const [model, name] of Object.entries(mapping)) {
+      await wrapper.get(`[data-testid="video-upstream-model-${model}"]`).setValue(name)
+    }
+    const payload = await submitVideoAccount(wrapper)
+    expect(payload.credentials.model_mapping).toEqual(mapping)
+    expect(payload.extra.video_provider).toBe('vipprompt')
+    expect(payload.extra.base_url).toBe('https://www.vipprompt.cn')
+    expect(payload.extra.api_path).toBe('/v1/videos')
+    expect(payload.extra.poll_interval_ms).toBe(10000)
+  })
+
   it('saves upstream names for selected models without losing the capability selection', async () => {
     const wrapper = await mountVideoModal()
     await selectXingguang(wrapper)

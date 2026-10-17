@@ -39,7 +39,7 @@ export const VIDEO_MODEL_CODES: string[] = VIDEO_MODEL_RESOLUTIONS.map(
 )
 
 /** 视频上游平台名，与后端 supportedVideoProviders 对齐。 */
-export type VideoProviderName = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart'
+export type VideoProviderName = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart' | 'vipprompt'
 
 /**
  * 各上游适配器当前能路由的模型——仅用于「上游平台」下拉的分组提示，
@@ -54,6 +54,7 @@ export const VIDEO_PROVIDER_SUPPORTED_MODELS: Record<
   aigod: ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5'],
   newtoken: ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5'],
   apimart: ['minimax-h3', 'minimax-h3-max'],
+  vipprompt: ['seedance-2.0', 'seedance-2.5', 'kling-v4'],
   mikuapi: VIDEO_MODEL_CODES.filter(model => !model.startsWith('minimax-h3')),
   jingyu: ['seedance-2.0', 'seedance-2.5'],
   // xingguang 上游没有 fast 对应模型；档位与时长/画幅的渠道硬约束由适配器闸门兜底。
