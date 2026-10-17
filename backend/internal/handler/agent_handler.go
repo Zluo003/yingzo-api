@@ -742,12 +742,23 @@ var mediaPolicies = map[string]mediaPolicy{
 	"video/mp4":       {kind: "video", limit: service.VideoReferenceMaxBytes(service.VideoModelKlingV4), extensions: map[string]bool{".mp4": true}},
 	"video/quicktime": {kind: "video", limit: service.VideoReferenceMaxBytes(service.VideoModelKlingV4), extensions: map[string]bool{".mov": true}},
 	"audio/wav":       {kind: "audio", limit: 15 << 20, extensions: map[string]bool{".wav": true}},
-	"audio/x-wav":     {kind: "audio", limit: 15 << 20, extensions: map[string]bool{".wav": true}},
 	"audio/mpeg":      {kind: "audio", limit: 15 << 20, extensions: map[string]bool{".mp3": true}},
 }
 
+// WAV has several MIME spellings. Normalize both declared and sniffed values
+// before checking policy; Go's HTTP sniffer can return audio/wave.
+func canonicalUploadMIME(value string) string {
+	value = strings.ToLower(strings.TrimSpace(strings.Split(value, ";")[0]))
+	switch value {
+	case "audio/wave", "audio/x-wav":
+		return "audio/wav"
+	default:
+		return value
+	}
+}
+
 func inspectMedia(file multipart.File, header *multipart.FileHeader) (mediaPolicy, string, bool) {
-	declared := strings.ToLower(strings.TrimSpace(strings.Split(header.Header.Get("Content-Type"), ";")[0]))
+	declared := canonicalUploadMIME(header.Header.Get("Content-Type"))
 	policy, ok := mediaPolicies[declared]
 	if !ok || !policy.extensions[strings.ToLower(filepath.Ext(header.Filename))] {
 		return mediaPolicy{}, "", false
@@ -762,10 +773,7 @@ func inspectMedia(file multipart.File, header *multipart.FileHeader) (mediaPolic
 	}
 	detected := detectMediaMIME(buf[:n])
 	if detected != declared {
-		// Browsers commonly report WAV with either registered MIME spelling.
-		if policy.kind != "audio" || (detected != "audio/wav" && detected != "audio/x-wav") {
-			return mediaPolicy{}, detected, false
-		}
+		return mediaPolicy{}, detected, false
 	}
 	return policy, declared, true
 }
@@ -789,7 +797,7 @@ func detectMediaMIME(header []byte) string {
 			return "video/mp4"
 		}
 	}
-	return strings.ToLower(strings.TrimSpace(strings.Split(http.DetectContentType(header), ";")[0]))
+	return canonicalUploadMIME(http.DetectContentType(header))
 }
 
 func probeTrustedMedia(ctx context.Context, filePath string, policy mediaPolicy, contentType string) (trustedMediaMetadata, error) {

@@ -44,7 +44,7 @@ func (h *AgentHandler) receiveTemporaryAsset(c *gin.Context) (*os.File, *multipa
 			_ = part.Close()
 			continue
 		}
-		ct := strings.ToLower(strings.TrimSpace(strings.Split(part.Header.Get("Content-Type"), ";")[0]))
+		ct := canonicalUploadMIME(part.Header.Get("Content-Type"))
 		policy, ok := mediaPolicies[ct]
 		if !ok || !policy.extensions[strings.ToLower(filepath.Ext(part.FileName()))] {
 			return nil, nil, "", &temporaryAssetUploadError{status: 400, code: "unsupported_media"}
