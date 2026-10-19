@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { request } from './lib.js'
-import { modelPriceRange } from './model-pricing.js'
+import { modelPriceRange, modelPriceUnit, seedancePriceChannels } from './model-pricing.js'
 import { musicPriceLabel } from './music-pricing.js'
 import './model-plaza.css'
 
@@ -12,26 +12,40 @@ const categories = [
 ]
 const platforms = { openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Google', grok: 'xAI', deepseek: 'DeepSeek', kimi: 'Kimi', zhipu: '智谱', minimax: 'MiniMax', video: '视频生成' }
 
-function PriceLine({ label, prices, field, featured = false }) {
-  return <div className={`mp-price-line${featured ? ' is-featured' : ''}`}><dt>{label}</dt><dd>{modelPriceRange(prices, field)}</dd></div>
+function PriceLine({ label, prices, field, unit, featured = false }) {
+  return <div className={`mp-price-line${featured ? ' is-featured' : ''}`}><dt>{label}</dt><dd>{modelPriceRange(prices, field)}{unit && <small className="mp-price-unit">/{modelPriceUnit(unit) || '计费单位待确认'}</small>}</dd></div>
+}
+
+function SeedanceChannelPrices({ prices }) {
+  return <div className="mp-video-channels">{seedancePriceChannels(prices).map(channel => {
+    const units = [...new Set(channel.prices.map(price => price.unit))]
+    const billing = units.length === 1 ? { second: '按秒计费', request: '按次计费' }[units[0]] : ''
+    return <section className="mp-video-channel" key={channel.id} aria-label={`${channel.name}价格`}>
+      <div className="mp-channel-heading"><h3>{channel.name}</h3><span>{billing || '按档位计费'}</span></div>
+      <dl className="mp-prices">{channel.prices.map((price, index) => <PriceLine key={`${price.resolution}-${index}`} label={price.resolution || '标准'} prices={[price]} field="unit_price" unit={price.unit} featured />)}</dl>
+      {units.includes('request') && <p className="mp-channel-note">按次档位每个生成任务计费一次，参考视频不另收费。</p>}
+      {units.includes('second') && <p className="mp-channel-note">按秒档位按生成视频时长计费。</p>}
+    </section>
+  })}</div>
 }
 
 function ModelCard({ model, category }) {
   const prices = (model.prices || []).filter(price => price.enabled !== false)
   const tokenPrices = prices.filter(price => price.unit === 'million_tokens')
   const requestPrices = prices.filter(price => price.unit === 'request')
+  const hasVideoChannels = model.media_type === 'video' && model.model_code.startsWith('seedance-')
   const operationLabels = model.model_code === 'midjourney-v8.2' ? { generation: '图片生成', upscale: '放大' } : {}
   return <article className="mp-card">
     <div className="mp-card-top"><span>{model.model_code === 'suno-v6' ? 'Suno' : platforms[model.platform] || model.platform}</span><span className="mp-enabled"><i />已启用</span></div>
     <h2>{model.model_code}</h2>
-    <div className="mp-price-caption"><span>{category.name}模型</span><span>人民币 · {model.media_type === 'video' && prices.some(p => p.video_channel_name) ? '按通道计价' : tokenPrices.length ? '每百万 tokens' : requestPrices.length ? '每次' : category.unit}</span></div>
+    <div className="mp-price-caption"><span>{category.name}模型</span><span>人民币 · {hasVideoChannels ? '按通道计价' : tokenPrices.length ? '每百万 tokens' : requestPrices.length ? '每次' : category.unit}</span></div>
     {prices.length ? <>
       {tokenPrices.length > 0 && <dl className="mp-prices">
         <PriceLine label="输入" prices={tokenPrices} field="input_price" featured />
         <PriceLine label="输出" prices={tokenPrices} field="output_price" featured />
       </dl>}
       {model.media_type === 'text' && requestPrices.length > 0 && <dl className="mp-prices"><PriceLine label="调用价格" prices={requestPrices} field="unit_price" featured /></dl>}
-      {model.media_type !== 'text' && <dl className="mp-prices">{prices.map((price, index) => <PriceLine key={`${price.resolution}-${index}`} label={price.video_channel_name ? `${price.video_channel_name} · ${price.resolution} · ${price.unit === 'request' ? '每次' : '每秒'}` : model.media_type === 'audio' ? musicPriceLabel(price.resolution) : operationLabels[price.resolution] || price.resolution || '标准'} prices={[price]} field="unit_price" featured />)}</dl>}
+      {hasVideoChannels ? <SeedanceChannelPrices prices={prices} /> : model.media_type !== 'text' && <dl className="mp-prices">{prices.map((price, index) => <PriceLine key={`${price.resolution}-${index}`} label={model.media_type === 'audio' ? musicPriceLabel(price.resolution) : operationLabels[price.resolution] || price.resolution || '标准'} prices={[price]} field="unit_price" unit={price.unit} featured />)}</dl>}
       {tokenPrices.some(price => price.cache_read_price != null || price.cache_write_price != null) && <details className="mp-cache"><summary>缓存价格<span aria-hidden="true">＋</span></summary><dl>
         <PriceLine label="缓存读取" prices={tokenPrices} field="cache_read_price" />
         <PriceLine label="缓存写入" prices={tokenPrices} field="cache_write_price" />
@@ -74,6 +88,6 @@ export default function ModelPlaza() {
     <div className="mp-categories" role="group" aria-label="模型分类">{categories.map(item => <button key={item.id} aria-pressed={type === item.id} className={type === item.id ? 'is-selected' : ''} onClick={() => setType(item.id)}><span className="mp-category-mark" aria-hidden="true">{item.mark}</span><span className="mp-category-label">{item.name}<small>{item.en}</small></span><span className="mp-category-count">{loading || error ? '—' : counts[item.id]}</span></button>)}</div>
     <div className="mp-toolbar"><div><h2>{category.description}</h2><p aria-live="polite">{loading ? '正在读取最新模型与价格…' : error ? '暂时无法获取模型' : `${visible.length} 个${category.name}模型 · 仅展示已启用模型`}</p></div><label className="mp-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></svg><input type="search" aria-label="搜索模型或提供方" placeholder="搜索模型或提供方" value={query} onChange={event => setQuery(event.target.value)} /></label></div>
     {loading ? <div className="mp-loading" role="status"><span className="mp-loading-dot" />正在同步模型目录</div> : error ? <div className="mp-empty" role="alert"><h2>模型暂时未能加载</h2><p>{error}</p><button className="outline" onClick={() => setRevision(value => value + 1)}>重新加载 ↗</button></div> : visible.length ? <div className="mp-grid">{visible.map(model => <ModelCard key={`${model.platform}:${model.model_code}`} model={model} category={category} />)}</div> : <div className="mp-empty"><span aria-hidden="true">{category.mark}</span><h2>{search ? '没有找到匹配的模型' : `暂无已启用的${category.name}模型`}</h2><p>{search ? '试试其他名称，或切换模型分类。' : '模型启用后，会自动出现在这里。'}</p>{search && <button className="outline" onClick={() => setQuery('')}>清除搜索</button>}</div>}
-    <footer className="mp-footnote">{type === 'audio' && <p>音乐按操作与版本分别计价，价格来自 Yingzo Agent 分组配置。支持 Max 的操作开启 Max 后按对应单次价格的 2 倍计费。</p>}<p>展示 Yingzo Agent 的实际价格，文本价格已包含模型倍率。文本按百万 tokens、图片按张、视频按秒、音乐按次计价；仅展示已启用的价格档位。</p><p>文本展示当前时段、标准请求的基础价格。价格区间表示可用线路的价格差异；长上下文、服务档位及推理选项等以实际请求计费为准。</p>{!loading && !error && data?.as_of && <div><span>更新于 {new Date(data.as_of).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span><button onClick={() => setRevision(value => value + 1)}>刷新价格 ↻</button></div>}</footer>
+    <footer className="mp-footnote">{type === 'audio' && <p>音乐按操作与版本分别计价，价格来自 Yingzo Agent 分组配置。支持 Max 的操作开启 Max 后按对应单次价格的 2 倍计费。</p>}{type === 'video' && <p>Seedance 按通道和分辨率独立定价，计费单位以各档位标注为准。按次计费包含参考视频；按秒计费按生成时长计算。</p>}<p>展示 Yingzo Agent 的实际价格，文本价格已包含模型倍率。文本按百万 tokens、图片按张或按次、视频按秒或按次、音乐按次计价；仅展示已启用的价格档位。</p>{type === 'text' && <p>文本展示当前时段、标准请求的基础价格。价格区间表示可用线路的价格差异；长上下文、服务档位及推理选项等以实际请求计费为准。</p>}{!loading && !error && data?.as_of && <div><span>更新于 {new Date(data.as_of).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}</span><button onClick={() => setRevision(value => value + 1)}>刷新价格 ↻</button></div>}</footer>
   </div>
 }

@@ -153,3 +153,51 @@ func TestYingzoPlazaMusicEnabledPrices(t *testing.T) {
 		}
 	}
 }
+
+func TestYingzoPlazaSeedanceChannelPricesMatchBilling(t *testing.T) {
+	off := false
+	accounts := []Account{channelAccount(1, 0, "", ""), channelAccount(2, 0, "", channelA), channelAccount(3, 0, "", channelB)}
+	catalog, repo := channelCatalog(accounts, []AgentModelPrice{
+		{Resolution: "720p", BillingUnit: "second", UnitPrice: 0.2},
+		{VideoChannelID: channelA, Resolution: "720p", BillingUnit: "request", UnitPrice: 4},
+		{VideoChannelID: channelA, Resolution: "1080p", BillingUnit: "request", UnitPrice: 0},
+		{VideoChannelID: channelA, Resolution: "480p", BillingUnit: "request", UnitPrice: 99, Enabled: &off},
+		{VideoChannelID: channelB, Resolution: "720p", BillingUnit: "second", UnitPrice: 99},
+	})
+	repo.channels[0].Name = "标准线路"
+	repo.channels[1].Name = "官转"
+	repo.channels[2].Enabled = false
+	plaza := &ModelPlazaService{}
+	result, err := plaza.ListYingzoModels(context.Background(), catalog, 20)
+	require.NoError(t, err)
+	require.Len(t, result.Models, 1)
+	require.Equal(t, "available", result.Models[0].PricingStatus)
+	prices := result.Models[0].Prices
+	require.Len(t, prices, 3)
+	require.Equal(t, "标准线路", prices[0].VideoChannelName)
+	require.Equal(t, "官转", prices[1].VideoChannelName)
+	require.Zero(t, *prices[2].UnitPrice)
+	svc := &VideoService{agentModels: catalog}
+	key := &APIKey{Group: &Group{ID: 20, Kind: "agent", SystemCode: "yingzo", RateMultiplier: 7}}
+	for _, price := range prices {
+		referenceSeconds := 6.0
+		quote, quoteErr := svc.EstimateGenerationCost(context.Background(), key, &VideoCreateRequest{
+			Model: VideoModelSeedance20, VideoChannelID: price.VideoChannelID, Resolution: price.Resolution,
+			Prompt: "move", Duration: 10,
+			Content: []VideoContent{{Type: "video_url", VideoURL: &VideoContentURL{URL: "https://example.com/ref.mp4"}, DurationSeconds: &referenceSeconds}},
+		}, 1)
+		require.NoError(t, quoteErr)
+		require.Equal(t, price.Unit, quote.BillingUnit)
+		expected := *price.UnitPrice
+		if price.Unit == "second" {
+			expected *= 10
+		}
+		require.InDelta(t, expected, quote.ActualCost, 1e-10)
+	}
+	// Removing a priced channel's account must not borrow another channel's price.
+	catalog.accountRepo = &agentCatalogAccountRepoStub{accounts: accounts[:1]}
+	result, err = plaza.ListYingzoModels(context.Background(), catalog, 20)
+	require.NoError(t, err)
+	require.Len(t, result.Models[0].Prices, 1)
+	require.Equal(t, "", result.Models[0].Prices[0].VideoChannelID)
+}
