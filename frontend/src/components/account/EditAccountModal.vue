@@ -273,6 +273,7 @@
           </div>
           <p class="input-hint">{{ t('admin.accounts.video.durationsHint') }}</p>
         </div>
+        <VideoModelChannelsField v-if="account.platform === 'video'" v-model="editVideoChannels" :models="editSelectedVideoModels" />
         <VideoModelCapabilitiesField
           v-if="account.platform === 'video'"
           v-model="editVideoCapabilities"
@@ -3130,6 +3131,8 @@ import GrokBaseUrlPresets from '@/components/account/GrokBaseUrlPresets.vue'
 import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
+import VideoModelChannelsField from '@/components/account/VideoModelChannelsField.vue'
+import { parseVideoModelChannels, serializeVideoModelChannels } from '@/components/account/videoModelChannels'
 import VideoModelCapabilitiesField from '@/components/account/VideoModelCapabilitiesField.vue'
 import VideoModelMappingField from '@/components/account/VideoModelMappingField.vue'
 import { buildVideoModelMapping } from '@/components/account/videoModelMapping'
@@ -3298,6 +3301,7 @@ const editVideoResolutions = ref<Record<string, string[]>>(
 const editVideoDurations = ref<Record<string, number[]>>(
   defaultVideoModelDurations()
 )
+const editVideoChannels = ref<Record<string, string>>({})
 const editVideoCapabilities = ref(parseVideoModelCapabilities(undefined))
 
 /** 勾选/取消一个分辨率档位。 */
@@ -4428,6 +4432,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     if (newAccount.platform === 'video') {
       editVideoProvider.value = storedVideoProvider
       // 分辨率/时长白名单：按保存的 extra 回填，未配置的模型回落到官方全档。
+      editVideoChannels.value = parseVideoModelChannels(extra?.video_model_channels)
       editVideoResolutions.value = parseVideoModelResolutions(
         extra?.video_model_resolutions
       )
@@ -5322,6 +5327,7 @@ const handleSubmit = async () => {
         const nextExtra: Record<string, unknown> = {
           ...currentExtra,
           video_provider: editVideoProvider.value,
+          video_model_channels: serializeVideoModelChannels(editVideoChannels.value, editSelectedVideoModels.value),
           video_result_delivery: editVideoResultDelivery.value,
           base_url: newBaseUrl || editVideoProviderDefaults.value.baseUrl,
           api_path: resolvedEditVideoAPIPath.value,

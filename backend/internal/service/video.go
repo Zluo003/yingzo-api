@@ -271,6 +271,9 @@ var (
 )
 
 type VideoGroupPricingRule struct {
+	VideoChannelID           string    `json:"video_channel_id"`
+	BillingUnit              string    `json:"billing_unit"`
+	CreditsPerRequest        float64   `json:"credits_per_request"`
 	FreeInputImages          *int      `json:"free_input_images,omitempty"`
 	CreditsPerInputImage     float64   `json:"credits_per_input_image"`
 	ID                       int64     `json:"id"`
@@ -285,6 +288,9 @@ type VideoGroupPricingRule struct {
 }
 
 type VideoTask struct {
+	VideoChannelID           string  `json:"video_channel_id"`
+	BillingUnit              string  `json:"billing_unit"`
+	UnitPrice                float64 `json:"unit_price"`
 	ID                       int64
 	PublicID                 string
 	RequestID                *string
@@ -320,18 +326,21 @@ type VideoClientError struct {
 }
 
 type VideoCreateRequest struct {
-	Model            string         `json:"model"`
-	Prompt           string         `json:"prompt"`
-	Content          []VideoContent `json:"content"`
-	Ratio            string         `json:"ratio"`
-	AspectRatio      string         `json:"aspect_ratio"`
-	AspectRatioCamel string         `json:"aspectRatio"`
-	Duration         float64        `json:"duration"`
-	Resolution       string         `json:"resolution"`
-	GenerateAudio    *bool          `json:"generate_audio"`
-	SafetyIdentifier string         `json:"safety_identifier"`
-	AbilityCode      string         `json:"ability_code"`
-	Raw              map[string]any `json:"-"`
+	ExpectedUnitPrice   *float64       `json:"expected_unit_price,omitempty"`
+	ExpectedBillingUnit string         `json:"expected_billing_unit,omitempty"`
+	VideoChannelID      string         `json:"video_channel_id"`
+	Model               string         `json:"model"`
+	Prompt              string         `json:"prompt"`
+	Content             []VideoContent `json:"content"`
+	Ratio               string         `json:"ratio"`
+	AspectRatio         string         `json:"aspect_ratio"`
+	AspectRatioCamel    string         `json:"aspectRatio"`
+	Duration            float64        `json:"duration"`
+	Resolution          string         `json:"resolution"`
+	GenerateAudio       *bool          `json:"generate_audio"`
+	SafetyIdentifier    string         `json:"safety_identifier"`
+	AbilityCode         string         `json:"ability_code"`
+	Raw                 map[string]any `json:"-"`
 }
 
 type VideoContent struct {
@@ -370,18 +379,22 @@ type VideoCreateInput struct {
 }
 
 type VideoResponse struct {
-	ID           string            `json:"id"`
-	Object       string            `json:"object"`
-	Model        string            `json:"model"`
-	Status       string            `json:"status"`
-	VideoURL     *string           `json:"video_url,omitempty"`
-	Error        *VideoClientError `json:"error,omitempty"`
-	RefundStatus string            `json:"refund_status"`
-	CreatedAt    int64             `json:"created_at"`
-	CompletedAt  *int64            `json:"completed_at,omitempty"`
+	VideoChannelID string            `json:"video_channel_id"`
+	ID             string            `json:"id"`
+	Object         string            `json:"object"`
+	Model          string            `json:"model"`
+	Status         string            `json:"status"`
+	VideoURL       *string           `json:"video_url,omitempty"`
+	Error          *VideoClientError `json:"error,omitempty"`
+	RefundStatus   string            `json:"refund_status"`
+	CreatedAt      int64             `json:"created_at"`
+	CompletedAt    *int64            `json:"completed_at,omitempty"`
 }
 
 type VideoCostEstimate struct {
+	VideoChannelID           string    `json:"video_channel_id"`
+	BillingUnit              string    `json:"billing_unit"`
+	UnitPrice                float64   `json:"unit_price"`
 	InputImages              int       `json:"input_images"`
 	BillableInputImages      int       `json:"billable_input_images"`
 	FreeInputImages          int       `json:"free_input_images"`
@@ -428,6 +441,9 @@ type VideoTaskLifecycleInput struct {
 }
 
 type VideoTaskCreateInput struct {
+	VideoChannelID           string  `json:"video_channel_id"`
+	BillingUnit              string  `json:"billing_unit"`
+	UnitPrice                float64 `json:"unit_price"`
 	PublicID                 string
 	RequestID                *string
 	UserID                   int64

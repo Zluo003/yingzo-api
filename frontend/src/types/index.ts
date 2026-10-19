@@ -542,6 +542,9 @@ export type VideoModelPrices = Record<string, Record<string, number>>
  * credits_per_second 在管理界面按“元/秒”录入与展示。
  */
 export interface VideoGroupPricingRule {
+  video_channel_id?: string
+  billing_unit?: 'second' | 'request'
+  credits_per_request?: number
   free_input_images?: number | null
   id?: number
   group_id?: number

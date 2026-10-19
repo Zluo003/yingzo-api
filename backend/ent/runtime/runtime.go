@@ -2508,8 +2508,26 @@ func init() {
 	usersubscription.DefaultAssignedAt = usersubscriptionDescAssignedAt.Default.(func() time.Time)
 	videogrouppricingruleFields := schema.VideoGroupPricingRule{}.Fields()
 	_ = videogrouppricingruleFields
+	// videogrouppricingruleDescVideoChannelID is the schema descriptor for video_channel_id field.
+	videogrouppricingruleDescVideoChannelID := videogrouppricingruleFields[0].Descriptor()
+	// videogrouppricingrule.DefaultVideoChannelID holds the default value on creation for the video_channel_id field.
+	videogrouppricingrule.DefaultVideoChannelID = videogrouppricingruleDescVideoChannelID.Default.(string)
+	// videogrouppricingrule.VideoChannelIDValidator is a validator for the "video_channel_id" field. It is called by the builders before save.
+	videogrouppricingrule.VideoChannelIDValidator = videogrouppricingruleDescVideoChannelID.Validators[0].(func(string) error)
+	// videogrouppricingruleDescBillingUnit is the schema descriptor for billing_unit field.
+	videogrouppricingruleDescBillingUnit := videogrouppricingruleFields[1].Descriptor()
+	// videogrouppricingrule.DefaultBillingUnit holds the default value on creation for the billing_unit field.
+	videogrouppricingrule.DefaultBillingUnit = videogrouppricingruleDescBillingUnit.Default.(string)
+	// videogrouppricingrule.BillingUnitValidator is a validator for the "billing_unit" field. It is called by the builders before save.
+	videogrouppricingrule.BillingUnitValidator = videogrouppricingruleDescBillingUnit.Validators[0].(func(string) error)
+	// videogrouppricingruleDescCreditsPerRequest is the schema descriptor for credits_per_request field.
+	videogrouppricingruleDescCreditsPerRequest := videogrouppricingruleFields[2].Descriptor()
+	// videogrouppricingrule.DefaultCreditsPerRequest holds the default value on creation for the credits_per_request field.
+	videogrouppricingrule.DefaultCreditsPerRequest = videogrouppricingruleDescCreditsPerRequest.Default.(float64)
+	// videogrouppricingrule.CreditsPerRequestValidator is a validator for the "credits_per_request" field. It is called by the builders before save.
+	videogrouppricingrule.CreditsPerRequestValidator = videogrouppricingruleDescCreditsPerRequest.Validators[0].(func(float64) error)
 	// videogrouppricingruleDescModelCode is the schema descriptor for model_code field.
-	videogrouppricingruleDescModelCode := videogrouppricingruleFields[1].Descriptor()
+	videogrouppricingruleDescModelCode := videogrouppricingruleFields[4].Descriptor()
 	// videogrouppricingrule.ModelCodeValidator is a validator for the "model_code" field. It is called by the builders before save.
 	videogrouppricingrule.ModelCodeValidator = func() func(string) error {
 		validators := videogrouppricingruleDescModelCode.Validators
@@ -2527,7 +2545,7 @@ func init() {
 		}
 	}()
 	// videogrouppricingruleDescResolution is the schema descriptor for resolution field.
-	videogrouppricingruleDescResolution := videogrouppricingruleFields[2].Descriptor()
+	videogrouppricingruleDescResolution := videogrouppricingruleFields[5].Descriptor()
 	// videogrouppricingrule.ResolutionValidator is a validator for the "resolution" field. It is called by the builders before save.
 	videogrouppricingrule.ResolutionValidator = func() func(string) error {
 		validators := videogrouppricingruleDescResolution.Validators
@@ -2545,37 +2563,53 @@ func init() {
 		}
 	}()
 	// videogrouppricingruleDescReferenceVideoMultiplier is the schema descriptor for reference_video_multiplier field.
-	videogrouppricingruleDescReferenceVideoMultiplier := videogrouppricingruleFields[4].Descriptor()
+	videogrouppricingruleDescReferenceVideoMultiplier := videogrouppricingruleFields[7].Descriptor()
 	// videogrouppricingrule.DefaultReferenceVideoMultiplier holds the default value on creation for the reference_video_multiplier field.
 	videogrouppricingrule.DefaultReferenceVideoMultiplier = videogrouppricingruleDescReferenceVideoMultiplier.Default.(float64)
 	// videogrouppricingruleDescFreeInputImages is the schema descriptor for free_input_images field.
-	videogrouppricingruleDescFreeInputImages := videogrouppricingruleFields[5].Descriptor()
+	videogrouppricingruleDescFreeInputImages := videogrouppricingruleFields[8].Descriptor()
 	// videogrouppricingrule.FreeInputImagesValidator is a validator for the "free_input_images" field. It is called by the builders before save.
 	videogrouppricingrule.FreeInputImagesValidator = videogrouppricingruleDescFreeInputImages.Validators[0].(func(int) error)
 	// videogrouppricingruleDescCreditsPerInputImage is the schema descriptor for credits_per_input_image field.
-	videogrouppricingruleDescCreditsPerInputImage := videogrouppricingruleFields[6].Descriptor()
+	videogrouppricingruleDescCreditsPerInputImage := videogrouppricingruleFields[9].Descriptor()
 	// videogrouppricingrule.DefaultCreditsPerInputImage holds the default value on creation for the credits_per_input_image field.
 	videogrouppricingrule.DefaultCreditsPerInputImage = videogrouppricingruleDescCreditsPerInputImage.Default.(float64)
 	// videogrouppricingrule.CreditsPerInputImageValidator is a validator for the "credits_per_input_image" field. It is called by the builders before save.
 	videogrouppricingrule.CreditsPerInputImageValidator = videogrouppricingruleDescCreditsPerInputImage.Validators[0].(func(float64) error)
 	// videogrouppricingruleDescEnabled is the schema descriptor for enabled field.
-	videogrouppricingruleDescEnabled := videogrouppricingruleFields[7].Descriptor()
+	videogrouppricingruleDescEnabled := videogrouppricingruleFields[10].Descriptor()
 	// videogrouppricingrule.DefaultEnabled holds the default value on creation for the enabled field.
 	videogrouppricingrule.DefaultEnabled = videogrouppricingruleDescEnabled.Default.(bool)
 	// videogrouppricingruleDescCreatedAt is the schema descriptor for created_at field.
-	videogrouppricingruleDescCreatedAt := videogrouppricingruleFields[8].Descriptor()
+	videogrouppricingruleDescCreatedAt := videogrouppricingruleFields[11].Descriptor()
 	// videogrouppricingrule.DefaultCreatedAt holds the default value on creation for the created_at field.
 	videogrouppricingrule.DefaultCreatedAt = videogrouppricingruleDescCreatedAt.Default.(func() time.Time)
 	// videogrouppricingruleDescUpdatedAt is the schema descriptor for updated_at field.
-	videogrouppricingruleDescUpdatedAt := videogrouppricingruleFields[9].Descriptor()
+	videogrouppricingruleDescUpdatedAt := videogrouppricingruleFields[12].Descriptor()
 	// videogrouppricingrule.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	videogrouppricingrule.DefaultUpdatedAt = videogrouppricingruleDescUpdatedAt.Default.(func() time.Time)
 	// videogrouppricingrule.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	videogrouppricingrule.UpdateDefaultUpdatedAt = videogrouppricingruleDescUpdatedAt.UpdateDefault.(func() time.Time)
 	videotaskFields := schema.VideoTask{}.Fields()
 	_ = videotaskFields
+	// videotaskDescVideoChannelID is the schema descriptor for video_channel_id field.
+	videotaskDescVideoChannelID := videotaskFields[0].Descriptor()
+	// videotask.DefaultVideoChannelID holds the default value on creation for the video_channel_id field.
+	videotask.DefaultVideoChannelID = videotaskDescVideoChannelID.Default.(string)
+	// videotask.VideoChannelIDValidator is a validator for the "video_channel_id" field. It is called by the builders before save.
+	videotask.VideoChannelIDValidator = videotaskDescVideoChannelID.Validators[0].(func(string) error)
+	// videotaskDescBillingUnit is the schema descriptor for billing_unit field.
+	videotaskDescBillingUnit := videotaskFields[1].Descriptor()
+	// videotask.DefaultBillingUnit holds the default value on creation for the billing_unit field.
+	videotask.DefaultBillingUnit = videotaskDescBillingUnit.Default.(string)
+	// videotask.BillingUnitValidator is a validator for the "billing_unit" field. It is called by the builders before save.
+	videotask.BillingUnitValidator = videotaskDescBillingUnit.Validators[0].(func(string) error)
+	// videotaskDescUnitPrice is the schema descriptor for unit_price field.
+	videotaskDescUnitPrice := videotaskFields[2].Descriptor()
+	// videotask.DefaultUnitPrice holds the default value on creation for the unit_price field.
+	videotask.DefaultUnitPrice = videotaskDescUnitPrice.Default.(float64)
 	// videotaskDescPublicID is the schema descriptor for public_id field.
-	videotaskDescPublicID := videotaskFields[0].Descriptor()
+	videotaskDescPublicID := videotaskFields[3].Descriptor()
 	// videotask.PublicIDValidator is a validator for the "public_id" field. It is called by the builders before save.
 	videotask.PublicIDValidator = func() func(string) error {
 		validators := videotaskDescPublicID.Validators
@@ -2593,11 +2627,11 @@ func init() {
 		}
 	}()
 	// videotaskDescRequestID is the schema descriptor for request_id field.
-	videotaskDescRequestID := videotaskFields[1].Descriptor()
+	videotaskDescRequestID := videotaskFields[4].Descriptor()
 	// videotask.RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
 	videotask.RequestIDValidator = videotaskDescRequestID.Validators[0].(func(string) error)
 	// videotaskDescModel is the schema descriptor for model field.
-	videotaskDescModel := videotaskFields[6].Descriptor()
+	videotaskDescModel := videotaskFields[9].Descriptor()
 	// videotask.ModelValidator is a validator for the "model" field. It is called by the builders before save.
 	videotask.ModelValidator = func() func(string) error {
 		validators := videotaskDescModel.Validators
@@ -2615,7 +2649,7 @@ func init() {
 		}
 	}()
 	// videotaskDescUpstreamModel is the schema descriptor for upstream_model field.
-	videotaskDescUpstreamModel := videotaskFields[7].Descriptor()
+	videotaskDescUpstreamModel := videotaskFields[10].Descriptor()
 	// videotask.UpstreamModelValidator is a validator for the "upstream_model" field. It is called by the builders before save.
 	videotask.UpstreamModelValidator = func() func(string) error {
 		validators := videotaskDescUpstreamModel.Validators
@@ -2633,7 +2667,7 @@ func init() {
 		}
 	}()
 	// videotaskDescResolution is the schema descriptor for resolution field.
-	videotaskDescResolution := videotaskFields[8].Descriptor()
+	videotaskDescResolution := videotaskFields[11].Descriptor()
 	// videotask.ResolutionValidator is a validator for the "resolution" field. It is called by the builders before save.
 	videotask.ResolutionValidator = func() func(string) error {
 		validators := videotaskDescResolution.Validators
@@ -2651,31 +2685,31 @@ func init() {
 		}
 	}()
 	// videotaskDescDurationSeconds is the schema descriptor for duration_seconds field.
-	videotaskDescDurationSeconds := videotaskFields[9].Descriptor()
+	videotaskDescDurationSeconds := videotaskFields[12].Descriptor()
 	// videotask.DefaultDurationSeconds holds the default value on creation for the duration_seconds field.
 	videotask.DefaultDurationSeconds = videotaskDescDurationSeconds.Default.(int)
 	// videotaskDescReferenceDurationSeconds is the schema descriptor for reference_duration_seconds field.
-	videotaskDescReferenceDurationSeconds := videotaskFields[10].Descriptor()
+	videotaskDescReferenceDurationSeconds := videotaskFields[13].Descriptor()
 	// videotask.DefaultReferenceDurationSeconds holds the default value on creation for the reference_duration_seconds field.
 	videotask.DefaultReferenceDurationSeconds = videotaskDescReferenceDurationSeconds.Default.(int)
 	// videotaskDescBillableSeconds is the schema descriptor for billable_seconds field.
-	videotaskDescBillableSeconds := videotaskFields[11].Descriptor()
+	videotaskDescBillableSeconds := videotaskFields[14].Descriptor()
 	// videotask.DefaultBillableSeconds holds the default value on creation for the billable_seconds field.
 	videotask.DefaultBillableSeconds = videotaskDescBillableSeconds.Default.(int)
 	// videotaskDescCostPerSecond is the schema descriptor for cost_per_second field.
-	videotaskDescCostPerSecond := videotaskFields[12].Descriptor()
+	videotaskDescCostPerSecond := videotaskFields[15].Descriptor()
 	// videotask.DefaultCostPerSecond holds the default value on creation for the cost_per_second field.
 	videotask.DefaultCostPerSecond = videotaskDescCostPerSecond.Default.(float64)
 	// videotaskDescTotalCost is the schema descriptor for total_cost field.
-	videotaskDescTotalCost := videotaskFields[13].Descriptor()
+	videotaskDescTotalCost := videotaskFields[16].Descriptor()
 	// videotask.DefaultTotalCost holds the default value on creation for the total_cost field.
 	videotask.DefaultTotalCost = videotaskDescTotalCost.Default.(float64)
 	// videotaskDescActualCost is the schema descriptor for actual_cost field.
-	videotaskDescActualCost := videotaskFields[14].Descriptor()
+	videotaskDescActualCost := videotaskFields[17].Descriptor()
 	// videotask.DefaultActualCost holds the default value on creation for the actual_cost field.
 	videotask.DefaultActualCost = videotaskDescActualCost.Default.(float64)
 	// videotaskDescStatus is the schema descriptor for status field.
-	videotaskDescStatus := videotaskFields[15].Descriptor()
+	videotaskDescStatus := videotaskFields[18].Descriptor()
 	// videotask.DefaultStatus holds the default value on creation for the status field.
 	videotask.DefaultStatus = videotaskDescStatus.Default.(string)
 	// videotask.StatusValidator is a validator for the "status" field. It is called by the builders before save.
@@ -2695,15 +2729,15 @@ func init() {
 		}
 	}()
 	// videotaskDescUpstreamTaskID is the schema descriptor for upstream_task_id field.
-	videotaskDescUpstreamTaskID := videotaskFields[16].Descriptor()
+	videotaskDescUpstreamTaskID := videotaskFields[19].Descriptor()
 	// videotask.UpstreamTaskIDValidator is a validator for the "upstream_task_id" field. It is called by the builders before save.
 	videotask.UpstreamTaskIDValidator = videotaskDescUpstreamTaskID.Validators[0].(func(string) error)
 	// videotaskDescCreatedAt is the schema descriptor for created_at field.
-	videotaskDescCreatedAt := videotaskFields[21].Descriptor()
+	videotaskDescCreatedAt := videotaskFields[24].Descriptor()
 	// videotask.DefaultCreatedAt holds the default value on creation for the created_at field.
 	videotask.DefaultCreatedAt = videotaskDescCreatedAt.Default.(func() time.Time)
 	// videotaskDescUpdatedAt is the schema descriptor for updated_at field.
-	videotaskDescUpdatedAt := videotaskFields[22].Descriptor()
+	videotaskDescUpdatedAt := videotaskFields[25].Descriptor()
 	// videotask.DefaultUpdatedAt holds the default value on creation for the updated_at field.
 	videotask.DefaultUpdatedAt = videotaskDescUpdatedAt.Default.(func() time.Time)
 	// videotask.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.

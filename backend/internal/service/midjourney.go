@@ -493,6 +493,14 @@ func billingUnitForAgentModel(model, mediaType string) string {
 	return billingUnitForAgentMedia(mediaType)
 }
 func normalizeAgentModelPricesForModel(model, mediaType string, prices []AgentModelPrice) ([]AgentModelPrice, error) {
+	if IsSeedanceModel(model) && mediaType == AgentMediaTypeVideo {
+		return normalizeSeedanceChannelPrices(prices)
+	}
+	for _, p := range prices {
+		if p.VideoChannelID != "" {
+			return nil, errors.New("video channels require a Seedance model")
+		}
+	}
 	if model == SunoModel {
 		return normalizeSunoPrices(mediaType, prices)
 	}

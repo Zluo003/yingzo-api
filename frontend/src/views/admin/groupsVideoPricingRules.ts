@@ -35,6 +35,8 @@ export function videoPricingResolutions(model: string): string[] {
 
 /** 表单行：价格允许为空字符串以支持清空输入框。 */
 export interface VideoPricingRuleRow {
+  video_channel_id?: string
+  billing_unit?: 'second' | 'request'
   free_input_images?: number | string | null
   model_code: string
   resolution: string
@@ -47,6 +49,8 @@ export function createVideoPricingRuleRow(
 ): VideoPricingRuleRow {
   const model = overrides.model_code ?? VIDEO_PRICING_MODELS[0]
   return {
+    video_channel_id: overrides.video_channel_id ?? '',
+    billing_unit: overrides.billing_unit ?? 'second',
     free_input_images: overrides.free_input_images ?? null,
     model_code: model,
     resolution: overrides.resolution ?? videoPricingResolutions(model)[0] ?? '720p',
@@ -62,10 +66,12 @@ export function createVideoPricingRulesForm(
   if (!rules || rules.length === 0) return []
   return rules.map((rule) =>
     createVideoPricingRuleRow({
+      video_channel_id: rule.video_channel_id,
+      billing_unit: rule.billing_unit,
       free_input_images: rule.free_input_images,
       model_code: rule.model_code,
       resolution: rule.resolution,
-      credits_per_second: rule.credits_per_second,
+      credits_per_second: rule.billing_unit === 'request' ? rule.credits_per_request : rule.credits_per_second,
       enabled: rule.enabled ?? true
     })
   )
@@ -86,7 +92,7 @@ export function serializeVideoPricingRules(
     const model = row.model_code?.trim()
     const resolution = row.resolution?.trim()
     if (!model || !resolution) return null
-    const key = `${model}\u0000${resolution}`
+    const key = `${model}\u0000${row.video_channel_id || ''}\u0000${resolution}`
     if (seen.has(key)) return null
     seen.add(key)
     // 必须显式拒绝空值：Number(null) === 0 会把留空的输入框静默变成“免费”，
@@ -108,7 +114,9 @@ export function serializeVideoPricingRules(
       free_input_images: freeImages,
       model_code: model,
       resolution,
-      credits_per_second: price,
+      ...(row.video_channel_id ? { video_channel_id: row.video_channel_id } : {}),
+      ...(row.billing_unit === 'request' ? { billing_unit: 'request' as const, credits_per_request: price } : {}),
+      credits_per_second: row.billing_unit === 'request' ? 0 : price,
       reference_video_multiplier: 1,
       enabled: row.enabled !== false
     })
@@ -148,6 +156,7 @@ export function onVideoPricingModelChange(
 ): void {
   const row = form.video_pricing_rules[index]
   if (!row) return
+  if (!row.model_code.startsWith('seedance-')) { row.video_channel_id = ''; row.billing_unit = 'second' }
   const allowed = videoPricingResolutions(row.model_code)
   if (!allowed.includes(row.resolution)) {
     row.resolution = allowed[0] ?? row.resolution
@@ -160,7 +169,7 @@ export function hasDuplicateVideoPricingRule(
 ): boolean {
   const seen = new Set<string>()
   for (const row of rows) {
-    const key = `${row.model_code?.trim()}\u0000${row.resolution?.trim()}`
+    const key = `${row.model_code?.trim()}\u0000${row.video_channel_id || ''}\u0000${row.resolution?.trim()}`
     if (seen.has(key)) return true
     seen.add(key)
   }

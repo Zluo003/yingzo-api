@@ -413,6 +413,9 @@ func NormalizeVideoProviderExtra(platform string, extra map[string]any) (map[str
 	if normalized == nil {
 		normalized = make(map[string]any, 2)
 	}
+	if err := normalizeVideoModelChannels(normalized); err != nil {
+		return nil, err
+	}
 	if err := normalizeVideoResultDelivery(normalized); err != nil {
 		return nil, err
 	}
@@ -821,6 +824,9 @@ func (s *adminServiceImpl) CreateAccount(ctx context.Context, input *CreateAccou
 	if err != nil {
 		return nil, err
 	}
+	if err := s.validateVideoChannelBindings(ctx, input.Platform, accountExtra); err != nil {
+		return nil, err
+	}
 	if err := ValidateUpstreamRequestIDHeaderExtra(accountExtra); err != nil {
 		return nil, err
 	}
@@ -929,6 +935,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 		normalizedExtra, err = NormalizeVideoProviderExtra(account.Platform, normalizedExtra)
 		if err != nil {
+			return nil, err
+		}
+		if err := s.validateVideoChannelBindings(ctx, account.Platform, normalizedExtra); err != nil {
 			return nil, err
 		}
 		if err := ValidateUpstreamRequestIDHeaderExtra(normalizedExtra); err != nil {

@@ -18,6 +18,12 @@ type VideoGroupPricingRule struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int64 `json:"id,omitempty"`
+	// VideoChannelID holds the value of the "video_channel_id" field.
+	VideoChannelID string `json:"video_channel_id,omitempty"`
+	// BillingUnit holds the value of the "billing_unit" field.
+	BillingUnit string `json:"billing_unit,omitempty"`
+	// CreditsPerRequest holds the value of the "credits_per_request" field.
+	CreditsPerRequest float64 `json:"credits_per_request,omitempty"`
 	// GroupID holds the value of the "group_id" field.
 	GroupID int64 `json:"group_id,omitempty"`
 	// ModelCode holds the value of the "model_code" field.
@@ -71,11 +77,11 @@ func (*VideoGroupPricingRule) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case videogrouppricingrule.FieldEnabled:
 			values[i] = new(sql.NullBool)
-		case videogrouppricingrule.FieldCreditsPerSecond, videogrouppricingrule.FieldReferenceVideoMultiplier, videogrouppricingrule.FieldCreditsPerInputImage:
+		case videogrouppricingrule.FieldCreditsPerRequest, videogrouppricingrule.FieldCreditsPerSecond, videogrouppricingrule.FieldReferenceVideoMultiplier, videogrouppricingrule.FieldCreditsPerInputImage:
 			values[i] = new(sql.NullFloat64)
 		case videogrouppricingrule.FieldID, videogrouppricingrule.FieldGroupID, videogrouppricingrule.FieldFreeInputImages:
 			values[i] = new(sql.NullInt64)
-		case videogrouppricingrule.FieldModelCode, videogrouppricingrule.FieldResolution:
+		case videogrouppricingrule.FieldVideoChannelID, videogrouppricingrule.FieldBillingUnit, videogrouppricingrule.FieldModelCode, videogrouppricingrule.FieldResolution:
 			values[i] = new(sql.NullString)
 		case videogrouppricingrule.FieldCreatedAt, videogrouppricingrule.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -100,6 +106,24 @@ func (_m *VideoGroupPricingRule) assignValues(columns []string, values []any) er
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int64(value.Int64)
+		case videogrouppricingrule.FieldVideoChannelID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field video_channel_id", values[i])
+			} else if value.Valid {
+				_m.VideoChannelID = value.String
+			}
+		case videogrouppricingrule.FieldBillingUnit:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_unit", values[i])
+			} else if value.Valid {
+				_m.BillingUnit = value.String
+			}
+		case videogrouppricingrule.FieldCreditsPerRequest:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field credits_per_request", values[i])
+			} else if value.Valid {
+				_m.CreditsPerRequest = value.Float64
+			}
 		case videogrouppricingrule.FieldGroupID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field group_id", values[i])
@@ -202,6 +226,15 @@ func (_m *VideoGroupPricingRule) String() string {
 	var builder strings.Builder
 	builder.WriteString("VideoGroupPricingRule(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("video_channel_id=")
+	builder.WriteString(_m.VideoChannelID)
+	builder.WriteString(", ")
+	builder.WriteString("billing_unit=")
+	builder.WriteString(_m.BillingUnit)
+	builder.WriteString(", ")
+	builder.WriteString("credits_per_request=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CreditsPerRequest))
+	builder.WriteString(", ")
 	builder.WriteString("group_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GroupID))
 	builder.WriteString(", ")

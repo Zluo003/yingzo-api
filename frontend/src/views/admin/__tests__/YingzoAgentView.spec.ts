@@ -24,6 +24,8 @@ vi.mock('@/api/admin/agentModels', () => ({
   agentModelsAPI: { getAgentModels, syncAgentModels, updateAgentModel, deleteAgentModel },
 }))
 
+vi.mock('@/api/admin/videoChannels', () => ({ listVideoChannels: vi.fn().mockResolvedValue([{id:'',name:'Default',enabled:true}]), saveVideoChannel: vi.fn() }))
+
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string, params?: Record<string, unknown>) =>
@@ -359,10 +361,10 @@ describe('admin YingzoAgentView', () => {
     const wrapper = await mountView()
 
     await wrapper.get('[data-testid="yingzo-agent-tab-video"]').trigger('click')
-    expect(inputValue(wrapper, 'yingzo-agent-price-3-720p')).toBe('0.2')
+    expect((wrapper.get('input[aria-label="videoChannels.default 720p"]').element as HTMLInputElement).value).toBe('0.2')
     // seedance-2.5 官方档位是 480p/720p/1080p：不提供 4K 输入框。
-    expect(wrapper.find('[data-testid="yingzo-agent-price-3-4K"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="yingzo-agent-price-3-480p"]').exists()).toBe(true)
+    expect(wrapper.find('input[aria-label="videoChannels.default 4K"]').exists()).toBe(false)
+    expect(wrapper.find('input[aria-label="videoChannels.default 480p"]').exists()).toBe(true)
   })
 
   it('excludes a model and reloads the catalog', async () => {

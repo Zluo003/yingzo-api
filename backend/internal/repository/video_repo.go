@@ -26,6 +26,7 @@ func (r *videoTaskRepository) Create(ctx context.Context, input *service.VideoTa
 	// lifecycle and billing fields; request/provider payloads are never persisted.
 	builder := r.client.VideoTask.Create().
 		SetPublicID(input.PublicID).
+		SetVideoChannelID(input.VideoChannelID).SetBillingUnit(defaultVideoBillingUnit(input.BillingUnit)).SetUnitPrice(input.UnitPrice).
 		SetNillableRequestID(input.RequestID).
 		SetUserID(input.UserID).
 		SetAPIKeyID(input.APIKeyID).
@@ -210,6 +211,7 @@ func (r *videoGroupPricingRuleRepository) ReplaceForGroup(ctx context.Context, g
 		if _, err := tx.VideoGroupPricingRule.Create().
 			SetGroupID(groupID).
 			SetModelCode(rule.ModelCode).
+			SetVideoChannelID(rule.VideoChannelID).SetBillingUnit(defaultVideoBillingUnit(rule.BillingUnit)).SetCreditsPerRequest(rule.CreditsPerRequest).
 			SetResolution(rule.Resolution).
 			SetCreditsPerSecond(rule.CreditsPerSecond).
 			SetNillableFreeInputImages(rule.FreeInputImages).
@@ -224,11 +226,16 @@ func (r *videoGroupPricingRuleRepository) ReplaceForGroup(ctx context.Context, g
 }
 
 func (r *videoGroupPricingRuleRepository) GetEnabledRule(ctx context.Context, groupID int64, modelCode string, resolution string) (*service.VideoGroupPricingRule, error) {
+	return r.GetEnabledChannelRule(ctx, groupID, modelCode, resolution, "")
+}
+
+func (r *videoGroupPricingRuleRepository) GetEnabledChannelRule(ctx context.Context, groupID int64, modelCode, resolution, channelID string) (*service.VideoGroupPricingRule, error) {
 	row, err := r.client.VideoGroupPricingRule.Query().
 		Where(
 			dbvideogrouppricingrule.GroupIDEQ(groupID),
 			dbvideogrouppricingrule.ModelCodeEQ(modelCode),
 			dbvideogrouppricingrule.ResolutionEQ(resolution),
+			dbvideogrouppricingrule.VideoChannelIDEQ(channelID),
 			dbvideogrouppricingrule.EnabledEQ(true),
 		).
 		Only(ctx)
@@ -246,6 +253,7 @@ func videoTaskEntityToService(m *dbent.VideoTask) *service.VideoTask {
 		return nil
 	}
 	return &service.VideoTask{
+		VideoChannelID: m.VideoChannelID, BillingUnit: m.BillingUnit, UnitPrice: m.UnitPrice,
 		ID:                       m.ID,
 		PublicID:                 m.PublicID,
 		RequestID:                m.RequestID,
@@ -281,6 +289,7 @@ func videoPricingRuleEntityToService(m *dbent.VideoGroupPricingRule) *service.Vi
 		return nil
 	}
 	return &service.VideoGroupPricingRule{
+		VideoChannelID: m.VideoChannelID, BillingUnit: m.BillingUnit, CreditsPerRequest: m.CreditsPerRequest,
 		ID:                       m.ID,
 		GroupID:                  m.GroupID,
 		ModelCode:                m.ModelCode,
@@ -293,4 +302,11 @@ func videoPricingRuleEntityToService(m *dbent.VideoGroupPricingRule) *service.Vi
 		CreatedAt:                m.CreatedAt,
 		UpdatedAt:                m.UpdatedAt,
 	}
+}
+
+func defaultVideoBillingUnit(unit string) string {
+	if unit == "" {
+		return "second"
+	}
+	return unit
 }

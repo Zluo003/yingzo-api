@@ -1,3 +1,4 @@
+import videoChannels from './videoChannels'
 import midjourney from './midjourney'
 import landing from './landing'
 import common from './common'
@@ -21,6 +22,7 @@ export default deepMergeMessages(
     ...batchImage,
     admin,
     midjourney,
+    videoChannels,
     suno,
     ...misc,
   },

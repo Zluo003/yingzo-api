@@ -22,6 +22,12 @@ type VideoTask struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int64 `json:"id,omitempty"`
+	// VideoChannelID holds the value of the "video_channel_id" field.
+	VideoChannelID string `json:"video_channel_id,omitempty"`
+	// BillingUnit holds the value of the "billing_unit" field.
+	BillingUnit string `json:"billing_unit,omitempty"`
+	// UnitPrice holds the value of the "unit_price" field.
+	UnitPrice float64 `json:"unit_price,omitempty"`
 	// PublicID holds the value of the "public_id" field.
 	PublicID string `json:"public_id,omitempty"`
 	// RequestID holds the value of the "request_id" field.
@@ -146,11 +152,11 @@ func (*VideoTask) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case videotask.FieldRequestJSON, videotask.FieldUpstreamResponseJSON, videotask.FieldErrorJSON:
 			values[i] = new([]byte)
-		case videotask.FieldCostPerSecond, videotask.FieldTotalCost, videotask.FieldActualCost:
+		case videotask.FieldUnitPrice, videotask.FieldCostPerSecond, videotask.FieldTotalCost, videotask.FieldActualCost:
 			values[i] = new(sql.NullFloat64)
 		case videotask.FieldID, videotask.FieldUserID, videotask.FieldAPIKeyID, videotask.FieldGroupID, videotask.FieldAccountID, videotask.FieldDurationSeconds, videotask.FieldReferenceDurationSeconds, videotask.FieldBillableSeconds:
 			values[i] = new(sql.NullInt64)
-		case videotask.FieldPublicID, videotask.FieldRequestID, videotask.FieldModel, videotask.FieldUpstreamModel, videotask.FieldResolution, videotask.FieldStatus, videotask.FieldUpstreamTaskID, videotask.FieldResultVideoURL:
+		case videotask.FieldVideoChannelID, videotask.FieldBillingUnit, videotask.FieldPublicID, videotask.FieldRequestID, videotask.FieldModel, videotask.FieldUpstreamModel, videotask.FieldResolution, videotask.FieldStatus, videotask.FieldUpstreamTaskID, videotask.FieldResultVideoURL:
 			values[i] = new(sql.NullString)
 		case videotask.FieldCreatedAt, videotask.FieldUpdatedAt, videotask.FieldCompletedAt, videotask.FieldBilledAt, videotask.FieldRefundedAt:
 			values[i] = new(sql.NullTime)
@@ -175,6 +181,24 @@ func (_m *VideoTask) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int64(value.Int64)
+		case videotask.FieldVideoChannelID:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field video_channel_id", values[i])
+			} else if value.Valid {
+				_m.VideoChannelID = value.String
+			}
+		case videotask.FieldBillingUnit:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field billing_unit", values[i])
+			} else if value.Valid {
+				_m.BillingUnit = value.String
+			}
+		case videotask.FieldUnitPrice:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field unit_price", values[i])
+			} else if value.Valid {
+				_m.UnitPrice = value.Float64
+			}
 		case videotask.FieldPublicID:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field public_id", values[i])
@@ -399,6 +423,15 @@ func (_m *VideoTask) String() string {
 	var builder strings.Builder
 	builder.WriteString("VideoTask(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
+	builder.WriteString("video_channel_id=")
+	builder.WriteString(_m.VideoChannelID)
+	builder.WriteString(", ")
+	builder.WriteString("billing_unit=")
+	builder.WriteString(_m.BillingUnit)
+	builder.WriteString(", ")
+	builder.WriteString("unit_price=")
+	builder.WriteString(fmt.Sprintf("%v", _m.UnitPrice))
+	builder.WriteString(", ")
 	builder.WriteString("public_id=")
 	builder.WriteString(_m.PublicID)
 	builder.WriteString(", ")

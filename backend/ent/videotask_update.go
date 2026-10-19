@@ -32,6 +32,55 @@ func (_u *VideoTaskUpdate) Where(ps ...predicate.VideoTask) *VideoTaskUpdate {
 	return _u
 }
 
+// SetVideoChannelID sets the "video_channel_id" field.
+func (_u *VideoTaskUpdate) SetVideoChannelID(v string) *VideoTaskUpdate {
+	_u.mutation.SetVideoChannelID(v)
+	return _u
+}
+
+// SetNillableVideoChannelID sets the "video_channel_id" field if the given value is not nil.
+func (_u *VideoTaskUpdate) SetNillableVideoChannelID(v *string) *VideoTaskUpdate {
+	if v != nil {
+		_u.SetVideoChannelID(*v)
+	}
+	return _u
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (_u *VideoTaskUpdate) SetBillingUnit(v string) *VideoTaskUpdate {
+	_u.mutation.SetBillingUnit(v)
+	return _u
+}
+
+// SetNillableBillingUnit sets the "billing_unit" field if the given value is not nil.
+func (_u *VideoTaskUpdate) SetNillableBillingUnit(v *string) *VideoTaskUpdate {
+	if v != nil {
+		_u.SetBillingUnit(*v)
+	}
+	return _u
+}
+
+// SetUnitPrice sets the "unit_price" field.
+func (_u *VideoTaskUpdate) SetUnitPrice(v float64) *VideoTaskUpdate {
+	_u.mutation.ResetUnitPrice()
+	_u.mutation.SetUnitPrice(v)
+	return _u
+}
+
+// SetNillableUnitPrice sets the "unit_price" field if the given value is not nil.
+func (_u *VideoTaskUpdate) SetNillableUnitPrice(v *float64) *VideoTaskUpdate {
+	if v != nil {
+		_u.SetUnitPrice(*v)
+	}
+	return _u
+}
+
+// AddUnitPrice adds value to the "unit_price" field.
+func (_u *VideoTaskUpdate) AddUnitPrice(v float64) *VideoTaskUpdate {
+	_u.mutation.AddUnitPrice(v)
+	return _u
+}
+
 // SetPublicID sets the "public_id" field.
 func (_u *VideoTaskUpdate) SetPublicID(v string) *VideoTaskUpdate {
 	_u.mutation.SetPublicID(v)
@@ -533,6 +582,16 @@ func (_u *VideoTaskUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *VideoTaskUpdate) check() error {
+	if v, ok := _u.mutation.VideoChannelID(); ok {
+		if err := videotask.VideoChannelIDValidator(v); err != nil {
+			return &ValidationError{Name: "video_channel_id", err: fmt.Errorf(`ent: validator failed for field "VideoTask.video_channel_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BillingUnit(); ok {
+		if err := videotask.BillingUnitValidator(v); err != nil {
+			return &ValidationError{Name: "billing_unit", err: fmt.Errorf(`ent: validator failed for field "VideoTask.billing_unit": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.PublicID(); ok {
 		if err := videotask.PublicIDValidator(v); err != nil {
 			return &ValidationError{Name: "public_id", err: fmt.Errorf(`ent: validator failed for field "VideoTask.public_id": %w`, err)}
@@ -594,6 +653,18 @@ func (_u *VideoTaskUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.VideoChannelID(); ok {
+		_spec.SetField(videotask.FieldVideoChannelID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BillingUnit(); ok {
+		_spec.SetField(videotask.FieldBillingUnit, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.UnitPrice(); ok {
+		_spec.SetField(videotask.FieldUnitPrice, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUnitPrice(); ok {
+		_spec.AddField(videotask.FieldUnitPrice, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.PublicID(); ok {
 		_spec.SetField(videotask.FieldPublicID, field.TypeString, value)
@@ -837,6 +908,55 @@ type VideoTaskUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *VideoTaskMutation
+}
+
+// SetVideoChannelID sets the "video_channel_id" field.
+func (_u *VideoTaskUpdateOne) SetVideoChannelID(v string) *VideoTaskUpdateOne {
+	_u.mutation.SetVideoChannelID(v)
+	return _u
+}
+
+// SetNillableVideoChannelID sets the "video_channel_id" field if the given value is not nil.
+func (_u *VideoTaskUpdateOne) SetNillableVideoChannelID(v *string) *VideoTaskUpdateOne {
+	if v != nil {
+		_u.SetVideoChannelID(*v)
+	}
+	return _u
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (_u *VideoTaskUpdateOne) SetBillingUnit(v string) *VideoTaskUpdateOne {
+	_u.mutation.SetBillingUnit(v)
+	return _u
+}
+
+// SetNillableBillingUnit sets the "billing_unit" field if the given value is not nil.
+func (_u *VideoTaskUpdateOne) SetNillableBillingUnit(v *string) *VideoTaskUpdateOne {
+	if v != nil {
+		_u.SetBillingUnit(*v)
+	}
+	return _u
+}
+
+// SetUnitPrice sets the "unit_price" field.
+func (_u *VideoTaskUpdateOne) SetUnitPrice(v float64) *VideoTaskUpdateOne {
+	_u.mutation.ResetUnitPrice()
+	_u.mutation.SetUnitPrice(v)
+	return _u
+}
+
+// SetNillableUnitPrice sets the "unit_price" field if the given value is not nil.
+func (_u *VideoTaskUpdateOne) SetNillableUnitPrice(v *float64) *VideoTaskUpdateOne {
+	if v != nil {
+		_u.SetUnitPrice(*v)
+	}
+	return _u
+}
+
+// AddUnitPrice adds value to the "unit_price" field.
+func (_u *VideoTaskUpdateOne) AddUnitPrice(v float64) *VideoTaskUpdateOne {
+	_u.mutation.AddUnitPrice(v)
+	return _u
 }
 
 // SetPublicID sets the "public_id" field.
@@ -1353,6 +1473,16 @@ func (_u *VideoTaskUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *VideoTaskUpdateOne) check() error {
+	if v, ok := _u.mutation.VideoChannelID(); ok {
+		if err := videotask.VideoChannelIDValidator(v); err != nil {
+			return &ValidationError{Name: "video_channel_id", err: fmt.Errorf(`ent: validator failed for field "VideoTask.video_channel_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BillingUnit(); ok {
+		if err := videotask.BillingUnitValidator(v); err != nil {
+			return &ValidationError{Name: "billing_unit", err: fmt.Errorf(`ent: validator failed for field "VideoTask.billing_unit": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.PublicID(); ok {
 		if err := videotask.PublicIDValidator(v); err != nil {
 			return &ValidationError{Name: "public_id", err: fmt.Errorf(`ent: validator failed for field "VideoTask.public_id": %w`, err)}
@@ -1431,6 +1561,18 @@ func (_u *VideoTaskUpdateOne) sqlSave(ctx context.Context) (_node *VideoTask, er
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.VideoChannelID(); ok {
+		_spec.SetField(videotask.FieldVideoChannelID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BillingUnit(); ok {
+		_spec.SetField(videotask.FieldBillingUnit, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.UnitPrice(); ok {
+		_spec.SetField(videotask.FieldUnitPrice, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedUnitPrice(); ok {
+		_spec.AddField(videotask.FieldUnitPrice, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.PublicID(); ok {
 		_spec.SetField(videotask.FieldPublicID, field.TypeString, value)

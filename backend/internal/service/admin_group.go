@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -1543,7 +1544,7 @@ func normalizeVideoPricingRules(rules []VideoGroupPricingRule) ([]VideoGroupPric
 		if !IsSupportedVideoResolution(model, resolution) {
 			return nil, infraerrors.BadRequest("invalid_video_resolution", "Invalid video resolution")
 		}
-		if rule.CreditsPerSecond < 0 {
+		if rule.CreditsPerSecond < 0 || math.IsNaN(rule.CreditsPerSecond) || math.IsInf(rule.CreditsPerSecond, 0) {
 			return nil, infraerrors.BadRequest("invalid_video_pricing_rule", "Video price must be non-negative")
 		}
 		if rule.FreeInputImages != nil && *rule.FreeInputImages < 0 {
@@ -1565,7 +1566,20 @@ func normalizeVideoPricingRules(rules []VideoGroupPricingRule) ([]VideoGroupPric
 		if referenceMultiplier <= 0 {
 			referenceMultiplier = 1.0
 		}
-		key := model + "\x1f" + resolution
+		if !validVideoChannelID(rule.VideoChannelID) || (rule.VideoChannelID != "" && !IsSeedanceModel(model)) {
+			return nil, infraerrors.BadRequest("invalid_video_channel", "Invalid video pricing channel")
+		}
+		unit := rule.BillingUnit
+		if unit == "" {
+			unit = "second"
+		}
+		if unit != "second" && (unit != "request" || !IsSeedanceModel(model)) {
+			return nil, infraerrors.BadRequest("invalid_video_pricing_rule", "Invalid video billing unit")
+		}
+		if rule.CreditsPerRequest < 0 || math.IsNaN(rule.CreditsPerRequest) || math.IsInf(rule.CreditsPerRequest, 0) {
+			return nil, infraerrors.BadRequest("invalid_video_pricing_rule", "Video price must be non-negative")
+		}
+		key := model + "\x1f" + rule.VideoChannelID + "\x1f" + resolution
 		if _, ok := seen[key]; ok {
 			return nil, infraerrors.BadRequest("duplicate_video_pricing_rule", "Duplicate video pricing rule")
 		}
@@ -1575,6 +1589,7 @@ func normalizeVideoPricingRules(rules []VideoGroupPricingRule) ([]VideoGroupPric
 			inputImagePrice = rule.CreditsPerSecond
 		}
 		out = append(out, VideoGroupPricingRule{
+			VideoChannelID: rule.VideoChannelID, BillingUnit: unit, CreditsPerRequest: rule.CreditsPerRequest,
 			ModelCode:                model,
 			Resolution:               resolution,
 			CreditsPerSecond:         rule.CreditsPerSecond,

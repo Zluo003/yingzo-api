@@ -24,14 +24,14 @@ function ModelCard({ model, category }) {
   return <article className="mp-card">
     <div className="mp-card-top"><span>{model.model_code === 'suno-v6' ? 'Suno' : platforms[model.platform] || model.platform}</span><span className="mp-enabled"><i />已启用</span></div>
     <h2>{model.model_code}</h2>
-    <div className="mp-price-caption"><span>{category.name}模型</span><span>人民币 · {tokenPrices.length ? '每百万 tokens' : requestPrices.length ? '每次' : category.unit}</span></div>
+    <div className="mp-price-caption"><span>{category.name}模型</span><span>人民币 · {model.media_type === 'video' && prices.some(p => p.video_channel_name) ? '按通道计价' : tokenPrices.length ? '每百万 tokens' : requestPrices.length ? '每次' : category.unit}</span></div>
     {prices.length ? <>
       {tokenPrices.length > 0 && <dl className="mp-prices">
         <PriceLine label="输入" prices={tokenPrices} field="input_price" featured />
         <PriceLine label="输出" prices={tokenPrices} field="output_price" featured />
       </dl>}
       {model.media_type === 'text' && requestPrices.length > 0 && <dl className="mp-prices"><PriceLine label="调用价格" prices={requestPrices} field="unit_price" featured /></dl>}
-      {model.media_type !== 'text' && <dl className="mp-prices">{prices.map((price, index) => <PriceLine key={`${price.resolution}-${index}`} label={model.media_type === 'audio' ? musicPriceLabel(price.resolution) : operationLabels[price.resolution] || price.resolution || '标准'} prices={[price]} field="unit_price" featured />)}</dl>}
+      {model.media_type !== 'text' && <dl className="mp-prices">{prices.map((price, index) => <PriceLine key={`${price.resolution}-${index}`} label={price.video_channel_name ? `${price.video_channel_name} · ${price.resolution} · ${price.unit === 'request' ? '每次' : '每秒'}` : model.media_type === 'audio' ? musicPriceLabel(price.resolution) : operationLabels[price.resolution] || price.resolution || '标准'} prices={[price]} field="unit_price" featured />)}</dl>}
       {tokenPrices.some(price => price.cache_read_price != null || price.cache_write_price != null) && <details className="mp-cache"><summary>缓存价格<span aria-hidden="true">＋</span></summary><dl>
         <PriceLine label="缓存读取" prices={tokenPrices} field="cache_read_price" />
         <PriceLine label="缓存写入" prices={tokenPrices} field="cache_write_price" />

@@ -300,12 +300,12 @@ func (_q *VideoGroupPricingRuleQuery) WithGroup(opts ...func(*GroupQuery)) *Vide
 // Example:
 //
 //	var v []struct {
-//		GroupID int64 `json:"group_id,omitempty"`
+//		VideoChannelID string `json:"video_channel_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.VideoGroupPricingRule.Query().
-//		GroupBy(videogrouppricingrule.FieldGroupID).
+//		GroupBy(videogrouppricingrule.FieldVideoChannelID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *VideoGroupPricingRuleQuery) GroupBy(field string, fields ...string) *VideoGroupPricingRuleGroupBy {
@@ -323,11 +323,11 @@ func (_q *VideoGroupPricingRuleQuery) GroupBy(field string, fields ...string) *V
 // Example:
 //
 //	var v []struct {
-//		GroupID int64 `json:"group_id,omitempty"`
+//		VideoChannelID string `json:"video_channel_id,omitempty"`
 //	}
 //
 //	client.VideoGroupPricingRule.Query().
-//		Select(videogrouppricingrule.FieldGroupID).
+//		Select(videogrouppricingrule.FieldVideoChannelID).
 //		Scan(ctx, &v)
 func (_q *VideoGroupPricingRuleQuery) Select(fields ...string) *VideoGroupPricingRuleSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

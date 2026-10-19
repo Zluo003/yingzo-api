@@ -14,6 +14,12 @@ const (
 	Label = "video_group_pricing_rule"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
+	// FieldVideoChannelID holds the string denoting the video_channel_id field in the database.
+	FieldVideoChannelID = "video_channel_id"
+	// FieldBillingUnit holds the string denoting the billing_unit field in the database.
+	FieldBillingUnit = "billing_unit"
+	// FieldCreditsPerRequest holds the string denoting the credits_per_request field in the database.
+	FieldCreditsPerRequest = "credits_per_request"
 	// FieldGroupID holds the string denoting the group_id field in the database.
 	FieldGroupID = "group_id"
 	// FieldModelCode holds the string denoting the model_code field in the database.
@@ -50,6 +56,9 @@ const (
 // Columns holds all SQL columns for videogrouppricingrule fields.
 var Columns = []string{
 	FieldID,
+	FieldVideoChannelID,
+	FieldBillingUnit,
+	FieldCreditsPerRequest,
 	FieldGroupID,
 	FieldModelCode,
 	FieldResolution,
@@ -73,6 +82,18 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultVideoChannelID holds the default value on creation for the "video_channel_id" field.
+	DefaultVideoChannelID string
+	// VideoChannelIDValidator is a validator for the "video_channel_id" field. It is called by the builders before save.
+	VideoChannelIDValidator func(string) error
+	// DefaultBillingUnit holds the default value on creation for the "billing_unit" field.
+	DefaultBillingUnit string
+	// BillingUnitValidator is a validator for the "billing_unit" field. It is called by the builders before save.
+	BillingUnitValidator func(string) error
+	// DefaultCreditsPerRequest holds the default value on creation for the "credits_per_request" field.
+	DefaultCreditsPerRequest float64
+	// CreditsPerRequestValidator is a validator for the "credits_per_request" field. It is called by the builders before save.
+	CreditsPerRequestValidator func(float64) error
 	// ModelCodeValidator is a validator for the "model_code" field. It is called by the builders before save.
 	ModelCodeValidator func(string) error
 	// ResolutionValidator is a validator for the "resolution" field. It is called by the builders before save.
@@ -101,6 +122,21 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByVideoChannelID orders the results by the video_channel_id field.
+func ByVideoChannelID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVideoChannelID, opts...).ToFunc()
+}
+
+// ByBillingUnit orders the results by the billing_unit field.
+func ByBillingUnit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingUnit, opts...).ToFunc()
+}
+
+// ByCreditsPerRequest orders the results by the credits_per_request field.
+func ByCreditsPerRequest(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCreditsPerRequest, opts...).ToFunc()
 }
 
 // ByGroupID orders the results by the group_id field.

@@ -55,6 +55,21 @@ func IDLTE(id int64) predicate.VideoTask {
 	return predicate.VideoTask(sql.FieldLTE(FieldID, id))
 }
 
+// VideoChannelID applies equality check predicate on the "video_channel_id" field. It's identical to VideoChannelIDEQ.
+func VideoChannelID(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldEQ(FieldVideoChannelID, v))
+}
+
+// BillingUnit applies equality check predicate on the "billing_unit" field. It's identical to BillingUnitEQ.
+func BillingUnit(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldEQ(FieldBillingUnit, v))
+}
+
+// UnitPrice applies equality check predicate on the "unit_price" field. It's identical to UnitPriceEQ.
+func UnitPrice(v float64) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldEQ(FieldUnitPrice, v))
+}
+
 // PublicID applies equality check predicate on the "public_id" field. It's identical to PublicIDEQ.
 func PublicID(v string) predicate.VideoTask {
 	return predicate.VideoTask(sql.FieldEQ(FieldPublicID, v))
@@ -168,6 +183,176 @@ func BilledAt(v time.Time) predicate.VideoTask {
 // RefundedAt applies equality check predicate on the "refunded_at" field. It's identical to RefundedAtEQ.
 func RefundedAt(v time.Time) predicate.VideoTask {
 	return predicate.VideoTask(sql.FieldEQ(FieldRefundedAt, v))
+}
+
+// VideoChannelIDEQ applies the EQ predicate on the "video_channel_id" field.
+func VideoChannelIDEQ(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldEQ(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDNEQ applies the NEQ predicate on the "video_channel_id" field.
+func VideoChannelIDNEQ(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldNEQ(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDIn applies the In predicate on the "video_channel_id" field.
+func VideoChannelIDIn(vs ...string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldIn(FieldVideoChannelID, vs...))
+}
+
+// VideoChannelIDNotIn applies the NotIn predicate on the "video_channel_id" field.
+func VideoChannelIDNotIn(vs ...string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldNotIn(FieldVideoChannelID, vs...))
+}
+
+// VideoChannelIDGT applies the GT predicate on the "video_channel_id" field.
+func VideoChannelIDGT(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldGT(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDGTE applies the GTE predicate on the "video_channel_id" field.
+func VideoChannelIDGTE(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldGTE(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDLT applies the LT predicate on the "video_channel_id" field.
+func VideoChannelIDLT(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldLT(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDLTE applies the LTE predicate on the "video_channel_id" field.
+func VideoChannelIDLTE(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldLTE(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDContains applies the Contains predicate on the "video_channel_id" field.
+func VideoChannelIDContains(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldContains(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDHasPrefix applies the HasPrefix predicate on the "video_channel_id" field.
+func VideoChannelIDHasPrefix(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldHasPrefix(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDHasSuffix applies the HasSuffix predicate on the "video_channel_id" field.
+func VideoChannelIDHasSuffix(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldHasSuffix(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDEqualFold applies the EqualFold predicate on the "video_channel_id" field.
+func VideoChannelIDEqualFold(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldEqualFold(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDContainsFold applies the ContainsFold predicate on the "video_channel_id" field.
+func VideoChannelIDContainsFold(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldContainsFold(FieldVideoChannelID, v))
+}
+
+// BillingUnitEQ applies the EQ predicate on the "billing_unit" field.
+func BillingUnitEQ(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldEQ(FieldBillingUnit, v))
+}
+
+// BillingUnitNEQ applies the NEQ predicate on the "billing_unit" field.
+func BillingUnitNEQ(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldNEQ(FieldBillingUnit, v))
+}
+
+// BillingUnitIn applies the In predicate on the "billing_unit" field.
+func BillingUnitIn(vs ...string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldIn(FieldBillingUnit, vs...))
+}
+
+// BillingUnitNotIn applies the NotIn predicate on the "billing_unit" field.
+func BillingUnitNotIn(vs ...string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldNotIn(FieldBillingUnit, vs...))
+}
+
+// BillingUnitGT applies the GT predicate on the "billing_unit" field.
+func BillingUnitGT(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldGT(FieldBillingUnit, v))
+}
+
+// BillingUnitGTE applies the GTE predicate on the "billing_unit" field.
+func BillingUnitGTE(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldGTE(FieldBillingUnit, v))
+}
+
+// BillingUnitLT applies the LT predicate on the "billing_unit" field.
+func BillingUnitLT(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldLT(FieldBillingUnit, v))
+}
+
+// BillingUnitLTE applies the LTE predicate on the "billing_unit" field.
+func BillingUnitLTE(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldLTE(FieldBillingUnit, v))
+}
+
+// BillingUnitContains applies the Contains predicate on the "billing_unit" field.
+func BillingUnitContains(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldContains(FieldBillingUnit, v))
+}
+
+// BillingUnitHasPrefix applies the HasPrefix predicate on the "billing_unit" field.
+func BillingUnitHasPrefix(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldHasPrefix(FieldBillingUnit, v))
+}
+
+// BillingUnitHasSuffix applies the HasSuffix predicate on the "billing_unit" field.
+func BillingUnitHasSuffix(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldHasSuffix(FieldBillingUnit, v))
+}
+
+// BillingUnitEqualFold applies the EqualFold predicate on the "billing_unit" field.
+func BillingUnitEqualFold(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldEqualFold(FieldBillingUnit, v))
+}
+
+// BillingUnitContainsFold applies the ContainsFold predicate on the "billing_unit" field.
+func BillingUnitContainsFold(v string) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldContainsFold(FieldBillingUnit, v))
+}
+
+// UnitPriceEQ applies the EQ predicate on the "unit_price" field.
+func UnitPriceEQ(v float64) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldEQ(FieldUnitPrice, v))
+}
+
+// UnitPriceNEQ applies the NEQ predicate on the "unit_price" field.
+func UnitPriceNEQ(v float64) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldNEQ(FieldUnitPrice, v))
+}
+
+// UnitPriceIn applies the In predicate on the "unit_price" field.
+func UnitPriceIn(vs ...float64) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldIn(FieldUnitPrice, vs...))
+}
+
+// UnitPriceNotIn applies the NotIn predicate on the "unit_price" field.
+func UnitPriceNotIn(vs ...float64) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldNotIn(FieldUnitPrice, vs...))
+}
+
+// UnitPriceGT applies the GT predicate on the "unit_price" field.
+func UnitPriceGT(v float64) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldGT(FieldUnitPrice, v))
+}
+
+// UnitPriceGTE applies the GTE predicate on the "unit_price" field.
+func UnitPriceGTE(v float64) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldGTE(FieldUnitPrice, v))
+}
+
+// UnitPriceLT applies the LT predicate on the "unit_price" field.
+func UnitPriceLT(v float64) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldLT(FieldUnitPrice, v))
+}
+
+// UnitPriceLTE applies the LTE predicate on the "unit_price" field.
+func UnitPriceLTE(v float64) predicate.VideoTask {
+	return predicate.VideoTask(sql.FieldLTE(FieldUnitPrice, v))
 }
 
 // PublicIDEQ applies the EQ predicate on the "public_id" field.

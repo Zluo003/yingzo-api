@@ -1,0 +1,22 @@
+export default {
+  "title": "Seedance 通道",
+  "accountHint": "同一模型只在所属通道内调度；未分配时使用默认通道。",
+  "disabled": "已停用",
+  "newName": "输入新通道名称",
+  "create": "创建通道",
+  "saveFailed": "通道保存失败",
+  "loadFailed": "通道加载失败",
+  "default": "默认通道",
+  "manage": "管理视频通道",
+  "name": "通道名称",
+  "enabled": "启用",
+  "defaultHint": "未分配账号与旧请求使用此通道",
+  "saved": "已保存",
+  "noAccounts": "暂无账号",
+  "billing": "计费方式",
+  "perSecond": "按秒",
+  "perRequest": "按次",
+  "price": "单价（元）",
+  "requestHint": "每个生成任务按次计费，参考视频不加收，自动换号不重复收费。",
+  "invalidPrice": "请为启用的通道档位填写有效的非负单价。"
+}

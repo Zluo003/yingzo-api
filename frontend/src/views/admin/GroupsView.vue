@@ -1201,6 +1201,7 @@
             class="mb-2 grid grid-cols-1 items-end gap-2 md:grid-cols-3"
           >
             <div>
+              <VideoPricingChannelField :model="rule.model_code" v-model:channel-id="rule.video_channel_id" v-model:billing-unit="rule.billing_unit" />
               <label class="input-label">{{ t("admin.groups.videoPricing.model") }}</label>
               <select v-model="rule.model_code" class="input" @change="onVideoPricingModelChange(createForm, index)">
                 <option v-for="model in VIDEO_PRICING_MODELS" :key="model" :value="model">
@@ -1222,7 +1223,7 @@
             </div>
             <div>
               <label class="input-label">
-                {{ t("admin.groups.videoPricing.creditsPerSecond") }}（{{ t("admin.groups.videoPricing.priceUnit") }}）
+                {{ rule.billing_unit === 'request' ? t('videoChannels.perRequest') : t("admin.groups.videoPricing.creditsPerSecond") }}（{{ t('videoChannels.price') }}）
               </label>
               <input
                 v-model.number="rule.credits_per_second"
@@ -2927,6 +2928,7 @@
             class="mb-2 grid grid-cols-1 items-end gap-2 md:grid-cols-3"
           >
             <div>
+              <VideoPricingChannelField :model="rule.model_code" v-model:channel-id="rule.video_channel_id" v-model:billing-unit="rule.billing_unit" />
               <label class="input-label">{{ t("admin.groups.videoPricing.model") }}</label>
               <select v-model="rule.model_code" class="input" @change="onVideoPricingModelChange(editForm, index)">
                 <option v-for="model in VIDEO_PRICING_MODELS" :key="model" :value="model">
@@ -2948,7 +2950,7 @@
             </div>
             <div>
               <label class="input-label">
-                {{ t("admin.groups.videoPricing.creditsPerSecond") }}（{{ t("admin.groups.videoPricing.priceUnit") }}）
+                {{ rule.billing_unit === 'request' ? t('videoChannels.perRequest') : t("admin.groups.videoPricing.creditsPerSecond") }}（{{ t('videoChannels.price') }}）
               </label>
               <input
                 v-model.number="rule.credits_per_second"
@@ -4443,6 +4445,7 @@
 </template>
 
 <script setup lang="ts">
+import VideoPricingChannelField from '@/components/admin/VideoPricingChannelField.vue'
 import { ref, reactive, computed, onMounted, onUnmounted, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useAppStore } from "@/stores/app";

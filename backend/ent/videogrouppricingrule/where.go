@@ -55,6 +55,21 @@ func IDLTE(id int64) predicate.VideoGroupPricingRule {
 	return predicate.VideoGroupPricingRule(sql.FieldLTE(FieldID, id))
 }
 
+// VideoChannelID applies equality check predicate on the "video_channel_id" field. It's identical to VideoChannelIDEQ.
+func VideoChannelID(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldVideoChannelID, v))
+}
+
+// BillingUnit applies equality check predicate on the "billing_unit" field. It's identical to BillingUnitEQ.
+func BillingUnit(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldBillingUnit, v))
+}
+
+// CreditsPerRequest applies equality check predicate on the "credits_per_request" field. It's identical to CreditsPerRequestEQ.
+func CreditsPerRequest(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldCreditsPerRequest, v))
+}
+
 // GroupID applies equality check predicate on the "group_id" field. It's identical to GroupIDEQ.
 func GroupID(v int64) predicate.VideoGroupPricingRule {
 	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldGroupID, v))
@@ -103,6 +118,176 @@ func CreatedAt(v time.Time) predicate.VideoGroupPricingRule {
 // UpdatedAt applies equality check predicate on the "updated_at" field. It's identical to UpdatedAtEQ.
 func UpdatedAt(v time.Time) predicate.VideoGroupPricingRule {
 	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldUpdatedAt, v))
+}
+
+// VideoChannelIDEQ applies the EQ predicate on the "video_channel_id" field.
+func VideoChannelIDEQ(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDNEQ applies the NEQ predicate on the "video_channel_id" field.
+func VideoChannelIDNEQ(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNEQ(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDIn applies the In predicate on the "video_channel_id" field.
+func VideoChannelIDIn(vs ...string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldIn(FieldVideoChannelID, vs...))
+}
+
+// VideoChannelIDNotIn applies the NotIn predicate on the "video_channel_id" field.
+func VideoChannelIDNotIn(vs ...string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNotIn(FieldVideoChannelID, vs...))
+}
+
+// VideoChannelIDGT applies the GT predicate on the "video_channel_id" field.
+func VideoChannelIDGT(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldGT(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDGTE applies the GTE predicate on the "video_channel_id" field.
+func VideoChannelIDGTE(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldGTE(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDLT applies the LT predicate on the "video_channel_id" field.
+func VideoChannelIDLT(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldLT(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDLTE applies the LTE predicate on the "video_channel_id" field.
+func VideoChannelIDLTE(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldLTE(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDContains applies the Contains predicate on the "video_channel_id" field.
+func VideoChannelIDContains(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldContains(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDHasPrefix applies the HasPrefix predicate on the "video_channel_id" field.
+func VideoChannelIDHasPrefix(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldHasPrefix(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDHasSuffix applies the HasSuffix predicate on the "video_channel_id" field.
+func VideoChannelIDHasSuffix(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldHasSuffix(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDEqualFold applies the EqualFold predicate on the "video_channel_id" field.
+func VideoChannelIDEqualFold(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEqualFold(FieldVideoChannelID, v))
+}
+
+// VideoChannelIDContainsFold applies the ContainsFold predicate on the "video_channel_id" field.
+func VideoChannelIDContainsFold(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldContainsFold(FieldVideoChannelID, v))
+}
+
+// BillingUnitEQ applies the EQ predicate on the "billing_unit" field.
+func BillingUnitEQ(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldBillingUnit, v))
+}
+
+// BillingUnitNEQ applies the NEQ predicate on the "billing_unit" field.
+func BillingUnitNEQ(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNEQ(FieldBillingUnit, v))
+}
+
+// BillingUnitIn applies the In predicate on the "billing_unit" field.
+func BillingUnitIn(vs ...string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldIn(FieldBillingUnit, vs...))
+}
+
+// BillingUnitNotIn applies the NotIn predicate on the "billing_unit" field.
+func BillingUnitNotIn(vs ...string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNotIn(FieldBillingUnit, vs...))
+}
+
+// BillingUnitGT applies the GT predicate on the "billing_unit" field.
+func BillingUnitGT(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldGT(FieldBillingUnit, v))
+}
+
+// BillingUnitGTE applies the GTE predicate on the "billing_unit" field.
+func BillingUnitGTE(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldGTE(FieldBillingUnit, v))
+}
+
+// BillingUnitLT applies the LT predicate on the "billing_unit" field.
+func BillingUnitLT(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldLT(FieldBillingUnit, v))
+}
+
+// BillingUnitLTE applies the LTE predicate on the "billing_unit" field.
+func BillingUnitLTE(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldLTE(FieldBillingUnit, v))
+}
+
+// BillingUnitContains applies the Contains predicate on the "billing_unit" field.
+func BillingUnitContains(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldContains(FieldBillingUnit, v))
+}
+
+// BillingUnitHasPrefix applies the HasPrefix predicate on the "billing_unit" field.
+func BillingUnitHasPrefix(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldHasPrefix(FieldBillingUnit, v))
+}
+
+// BillingUnitHasSuffix applies the HasSuffix predicate on the "billing_unit" field.
+func BillingUnitHasSuffix(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldHasSuffix(FieldBillingUnit, v))
+}
+
+// BillingUnitEqualFold applies the EqualFold predicate on the "billing_unit" field.
+func BillingUnitEqualFold(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEqualFold(FieldBillingUnit, v))
+}
+
+// BillingUnitContainsFold applies the ContainsFold predicate on the "billing_unit" field.
+func BillingUnitContainsFold(v string) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldContainsFold(FieldBillingUnit, v))
+}
+
+// CreditsPerRequestEQ applies the EQ predicate on the "credits_per_request" field.
+func CreditsPerRequestEQ(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldEQ(FieldCreditsPerRequest, v))
+}
+
+// CreditsPerRequestNEQ applies the NEQ predicate on the "credits_per_request" field.
+func CreditsPerRequestNEQ(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNEQ(FieldCreditsPerRequest, v))
+}
+
+// CreditsPerRequestIn applies the In predicate on the "credits_per_request" field.
+func CreditsPerRequestIn(vs ...float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldIn(FieldCreditsPerRequest, vs...))
+}
+
+// CreditsPerRequestNotIn applies the NotIn predicate on the "credits_per_request" field.
+func CreditsPerRequestNotIn(vs ...float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldNotIn(FieldCreditsPerRequest, vs...))
+}
+
+// CreditsPerRequestGT applies the GT predicate on the "credits_per_request" field.
+func CreditsPerRequestGT(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldGT(FieldCreditsPerRequest, v))
+}
+
+// CreditsPerRequestGTE applies the GTE predicate on the "credits_per_request" field.
+func CreditsPerRequestGTE(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldGTE(FieldCreditsPerRequest, v))
+}
+
+// CreditsPerRequestLT applies the LT predicate on the "credits_per_request" field.
+func CreditsPerRequestLT(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldLT(FieldCreditsPerRequest, v))
+}
+
+// CreditsPerRequestLTE applies the LTE predicate on the "credits_per_request" field.
+func CreditsPerRequestLTE(v float64) predicate.VideoGroupPricingRule {
+	return predicate.VideoGroupPricingRule(sql.FieldLTE(FieldCreditsPerRequest, v))
 }
 
 // GroupIDEQ applies the EQ predicate on the "group_id" field.

@@ -1520,6 +1520,7 @@ func (r *videoTaskMemoryRepo) Create(ctx context.Context, input *VideoTaskCreate
 	r.next++
 	now := time.Now().UTC()
 	task := &VideoTask{
+		VideoChannelID: input.VideoChannelID, BillingUnit: input.BillingUnit, UnitPrice: input.UnitPrice,
 		ID:                       r.next,
 		PublicID:                 input.PublicID,
 		RequestID:                input.RequestID,

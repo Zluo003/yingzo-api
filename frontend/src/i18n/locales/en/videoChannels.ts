@@ -1,0 +1,22 @@
+export default {
+  "title": "Seedance channels",
+  "accountHint": "Accounts only serve their assigned model channel. Unassigned accounts use the default channel.",
+  "disabled": "Disabled",
+  "newName": "New channel name",
+  "create": "Create channel",
+  "saveFailed": "Unable to save channel",
+  "loadFailed": "Unable to load channels",
+  "default": "Default channel",
+  "manage": "Manage video channels",
+  "name": "Channel name",
+  "enabled": "Enabled",
+  "defaultHint": "Used by unassigned accounts and legacy requests",
+  "saved": "Saved",
+  "noAccounts": "No accounts",
+  "billing": "Billing unit",
+  "perSecond": "Per second",
+  "perRequest": "Per request",
+  "price": "Price (CNY)",
+  "requestHint": "One charge per generation task; reference videos and automatic retries do not add charges.",
+  "invalidPrice": "Enter a finite non-negative price for each enabled channel tier."
+}

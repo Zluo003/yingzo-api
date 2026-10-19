@@ -58010,6 +58010,10 @@ type VideoGroupPricingRuleMutation struct {
 	op                            Op
 	typ                           string
 	id                            *int64
+	video_channel_id              *string
+	billing_unit                  *string
+	credits_per_request           *float64
+	addcredits_per_request        *float64
 	model_code                    *string
 	resolution                    *string
 	credits_per_second            *float64
@@ -58127,6 +58131,134 @@ func (m *VideoGroupPricingRuleMutation) IDs(ctx context.Context) ([]int64, error
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
+}
+
+// SetVideoChannelID sets the "video_channel_id" field.
+func (m *VideoGroupPricingRuleMutation) SetVideoChannelID(s string) {
+	m.video_channel_id = &s
+}
+
+// VideoChannelID returns the value of the "video_channel_id" field in the mutation.
+func (m *VideoGroupPricingRuleMutation) VideoChannelID() (r string, exists bool) {
+	v := m.video_channel_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVideoChannelID returns the old "video_channel_id" field's value of the VideoGroupPricingRule entity.
+// If the VideoGroupPricingRule object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *VideoGroupPricingRuleMutation) OldVideoChannelID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVideoChannelID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVideoChannelID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVideoChannelID: %w", err)
+	}
+	return oldValue.VideoChannelID, nil
+}
+
+// ResetVideoChannelID resets all changes to the "video_channel_id" field.
+func (m *VideoGroupPricingRuleMutation) ResetVideoChannelID() {
+	m.video_channel_id = nil
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (m *VideoGroupPricingRuleMutation) SetBillingUnit(s string) {
+	m.billing_unit = &s
+}
+
+// BillingUnit returns the value of the "billing_unit" field in the mutation.
+func (m *VideoGroupPricingRuleMutation) BillingUnit() (r string, exists bool) {
+	v := m.billing_unit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingUnit returns the old "billing_unit" field's value of the VideoGroupPricingRule entity.
+// If the VideoGroupPricingRule object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *VideoGroupPricingRuleMutation) OldBillingUnit(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingUnit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingUnit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingUnit: %w", err)
+	}
+	return oldValue.BillingUnit, nil
+}
+
+// ResetBillingUnit resets all changes to the "billing_unit" field.
+func (m *VideoGroupPricingRuleMutation) ResetBillingUnit() {
+	m.billing_unit = nil
+}
+
+// SetCreditsPerRequest sets the "credits_per_request" field.
+func (m *VideoGroupPricingRuleMutation) SetCreditsPerRequest(f float64) {
+	m.credits_per_request = &f
+	m.addcredits_per_request = nil
+}
+
+// CreditsPerRequest returns the value of the "credits_per_request" field in the mutation.
+func (m *VideoGroupPricingRuleMutation) CreditsPerRequest() (r float64, exists bool) {
+	v := m.credits_per_request
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreditsPerRequest returns the old "credits_per_request" field's value of the VideoGroupPricingRule entity.
+// If the VideoGroupPricingRule object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *VideoGroupPricingRuleMutation) OldCreditsPerRequest(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreditsPerRequest is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreditsPerRequest requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreditsPerRequest: %w", err)
+	}
+	return oldValue.CreditsPerRequest, nil
+}
+
+// AddCreditsPerRequest adds f to the "credits_per_request" field.
+func (m *VideoGroupPricingRuleMutation) AddCreditsPerRequest(f float64) {
+	if m.addcredits_per_request != nil {
+		*m.addcredits_per_request += f
+	} else {
+		m.addcredits_per_request = &f
+	}
+}
+
+// AddedCreditsPerRequest returns the value that was added to the "credits_per_request" field in this mutation.
+func (m *VideoGroupPricingRuleMutation) AddedCreditsPerRequest() (r float64, exists bool) {
+	v := m.addcredits_per_request
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCreditsPerRequest resets all changes to the "credits_per_request" field.
+func (m *VideoGroupPricingRuleMutation) ResetCreditsPerRequest() {
+	m.credits_per_request = nil
+	m.addcredits_per_request = nil
 }
 
 // SetGroupID sets the "group_id" field.
@@ -58644,7 +58776,16 @@ func (m *VideoGroupPricingRuleMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *VideoGroupPricingRuleMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 13)
+	if m.video_channel_id != nil {
+		fields = append(fields, videogrouppricingrule.FieldVideoChannelID)
+	}
+	if m.billing_unit != nil {
+		fields = append(fields, videogrouppricingrule.FieldBillingUnit)
+	}
+	if m.credits_per_request != nil {
+		fields = append(fields, videogrouppricingrule.FieldCreditsPerRequest)
+	}
 	if m.group != nil {
 		fields = append(fields, videogrouppricingrule.FieldGroupID)
 	}
@@ -58683,6 +58824,12 @@ func (m *VideoGroupPricingRuleMutation) Fields() []string {
 // schema.
 func (m *VideoGroupPricingRuleMutation) Field(name string) (ent.Value, bool) {
 	switch name {
+	case videogrouppricingrule.FieldVideoChannelID:
+		return m.VideoChannelID()
+	case videogrouppricingrule.FieldBillingUnit:
+		return m.BillingUnit()
+	case videogrouppricingrule.FieldCreditsPerRequest:
+		return m.CreditsPerRequest()
 	case videogrouppricingrule.FieldGroupID:
 		return m.GroupID()
 	case videogrouppricingrule.FieldModelCode:
@@ -58712,6 +58859,12 @@ func (m *VideoGroupPricingRuleMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *VideoGroupPricingRuleMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
+	case videogrouppricingrule.FieldVideoChannelID:
+		return m.OldVideoChannelID(ctx)
+	case videogrouppricingrule.FieldBillingUnit:
+		return m.OldBillingUnit(ctx)
+	case videogrouppricingrule.FieldCreditsPerRequest:
+		return m.OldCreditsPerRequest(ctx)
 	case videogrouppricingrule.FieldGroupID:
 		return m.OldGroupID(ctx)
 	case videogrouppricingrule.FieldModelCode:
@@ -58741,6 +58894,27 @@ func (m *VideoGroupPricingRuleMutation) OldField(ctx context.Context, name strin
 // type.
 func (m *VideoGroupPricingRuleMutation) SetField(name string, value ent.Value) error {
 	switch name {
+	case videogrouppricingrule.FieldVideoChannelID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVideoChannelID(v)
+		return nil
+	case videogrouppricingrule.FieldBillingUnit:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingUnit(v)
+		return nil
+	case videogrouppricingrule.FieldCreditsPerRequest:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreditsPerRequest(v)
+		return nil
 	case videogrouppricingrule.FieldGroupID:
 		v, ok := value.(int64)
 		if !ok {
@@ -58819,6 +58993,9 @@ func (m *VideoGroupPricingRuleMutation) SetField(name string, value ent.Value) e
 // this mutation.
 func (m *VideoGroupPricingRuleMutation) AddedFields() []string {
 	var fields []string
+	if m.addcredits_per_request != nil {
+		fields = append(fields, videogrouppricingrule.FieldCreditsPerRequest)
+	}
 	if m.addcredits_per_second != nil {
 		fields = append(fields, videogrouppricingrule.FieldCreditsPerSecond)
 	}
@@ -58839,6 +59016,8 @@ func (m *VideoGroupPricingRuleMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *VideoGroupPricingRuleMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case videogrouppricingrule.FieldCreditsPerRequest:
+		return m.AddedCreditsPerRequest()
 	case videogrouppricingrule.FieldCreditsPerSecond:
 		return m.AddedCreditsPerSecond()
 	case videogrouppricingrule.FieldReferenceVideoMultiplier:
@@ -58856,6 +59035,13 @@ func (m *VideoGroupPricingRuleMutation) AddedField(name string) (ent.Value, bool
 // type.
 func (m *VideoGroupPricingRuleMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case videogrouppricingrule.FieldCreditsPerRequest:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCreditsPerRequest(v)
+		return nil
 	case videogrouppricingrule.FieldCreditsPerSecond:
 		v, ok := value.(float64)
 		if !ok {
@@ -58920,6 +59106,15 @@ func (m *VideoGroupPricingRuleMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *VideoGroupPricingRuleMutation) ResetField(name string) error {
 	switch name {
+	case videogrouppricingrule.FieldVideoChannelID:
+		m.ResetVideoChannelID()
+		return nil
+	case videogrouppricingrule.FieldBillingUnit:
+		m.ResetBillingUnit()
+		return nil
+	case videogrouppricingrule.FieldCreditsPerRequest:
+		m.ResetCreditsPerRequest()
+		return nil
 	case videogrouppricingrule.FieldGroupID:
 		m.ResetGroupID()
 		return nil
@@ -59034,6 +59229,10 @@ type VideoTaskMutation struct {
 	op                            Op
 	typ                           string
 	id                            *int64
+	video_channel_id              *string
+	billing_unit                  *string
+	unit_price                    *float64
+	addunit_price                 *float64
 	public_id                     *string
 	request_id                    *string
 	model                         *string
@@ -59172,6 +59371,134 @@ func (m *VideoTaskMutation) IDs(ctx context.Context) ([]int64, error) {
 	default:
 		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
 	}
+}
+
+// SetVideoChannelID sets the "video_channel_id" field.
+func (m *VideoTaskMutation) SetVideoChannelID(s string) {
+	m.video_channel_id = &s
+}
+
+// VideoChannelID returns the value of the "video_channel_id" field in the mutation.
+func (m *VideoTaskMutation) VideoChannelID() (r string, exists bool) {
+	v := m.video_channel_id
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldVideoChannelID returns the old "video_channel_id" field's value of the VideoTask entity.
+// If the VideoTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *VideoTaskMutation) OldVideoChannelID(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldVideoChannelID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldVideoChannelID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldVideoChannelID: %w", err)
+	}
+	return oldValue.VideoChannelID, nil
+}
+
+// ResetVideoChannelID resets all changes to the "video_channel_id" field.
+func (m *VideoTaskMutation) ResetVideoChannelID() {
+	m.video_channel_id = nil
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (m *VideoTaskMutation) SetBillingUnit(s string) {
+	m.billing_unit = &s
+}
+
+// BillingUnit returns the value of the "billing_unit" field in the mutation.
+func (m *VideoTaskMutation) BillingUnit() (r string, exists bool) {
+	v := m.billing_unit
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBillingUnit returns the old "billing_unit" field's value of the VideoTask entity.
+// If the VideoTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *VideoTaskMutation) OldBillingUnit(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBillingUnit is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBillingUnit requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBillingUnit: %w", err)
+	}
+	return oldValue.BillingUnit, nil
+}
+
+// ResetBillingUnit resets all changes to the "billing_unit" field.
+func (m *VideoTaskMutation) ResetBillingUnit() {
+	m.billing_unit = nil
+}
+
+// SetUnitPrice sets the "unit_price" field.
+func (m *VideoTaskMutation) SetUnitPrice(f float64) {
+	m.unit_price = &f
+	m.addunit_price = nil
+}
+
+// UnitPrice returns the value of the "unit_price" field in the mutation.
+func (m *VideoTaskMutation) UnitPrice() (r float64, exists bool) {
+	v := m.unit_price
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUnitPrice returns the old "unit_price" field's value of the VideoTask entity.
+// If the VideoTask object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *VideoTaskMutation) OldUnitPrice(ctx context.Context) (v float64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUnitPrice is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUnitPrice requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUnitPrice: %w", err)
+	}
+	return oldValue.UnitPrice, nil
+}
+
+// AddUnitPrice adds f to the "unit_price" field.
+func (m *VideoTaskMutation) AddUnitPrice(f float64) {
+	if m.addunit_price != nil {
+		*m.addunit_price += f
+	} else {
+		m.addunit_price = &f
+	}
+}
+
+// AddedUnitPrice returns the value that was added to the "unit_price" field in this mutation.
+func (m *VideoTaskMutation) AddedUnitPrice() (r float64, exists bool) {
+	v := m.addunit_price
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetUnitPrice resets all changes to the "unit_price" field.
+func (m *VideoTaskMutation) ResetUnitPrice() {
+	m.unit_price = nil
+	m.addunit_price = nil
 }
 
 // SetPublicID sets the "public_id" field.
@@ -60489,7 +60816,16 @@ func (m *VideoTaskMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *VideoTaskMutation) Fields() []string {
-	fields := make([]string, 0, 26)
+	fields := make([]string, 0, 29)
+	if m.video_channel_id != nil {
+		fields = append(fields, videotask.FieldVideoChannelID)
+	}
+	if m.billing_unit != nil {
+		fields = append(fields, videotask.FieldBillingUnit)
+	}
+	if m.unit_price != nil {
+		fields = append(fields, videotask.FieldUnitPrice)
+	}
 	if m.public_id != nil {
 		fields = append(fields, videotask.FieldPublicID)
 	}
@@ -60576,6 +60912,12 @@ func (m *VideoTaskMutation) Fields() []string {
 // schema.
 func (m *VideoTaskMutation) Field(name string) (ent.Value, bool) {
 	switch name {
+	case videotask.FieldVideoChannelID:
+		return m.VideoChannelID()
+	case videotask.FieldBillingUnit:
+		return m.BillingUnit()
+	case videotask.FieldUnitPrice:
+		return m.UnitPrice()
 	case videotask.FieldPublicID:
 		return m.PublicID()
 	case videotask.FieldRequestID:
@@ -60637,6 +60979,12 @@ func (m *VideoTaskMutation) Field(name string) (ent.Value, bool) {
 // database failed.
 func (m *VideoTaskMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
 	switch name {
+	case videotask.FieldVideoChannelID:
+		return m.OldVideoChannelID(ctx)
+	case videotask.FieldBillingUnit:
+		return m.OldBillingUnit(ctx)
+	case videotask.FieldUnitPrice:
+		return m.OldUnitPrice(ctx)
 	case videotask.FieldPublicID:
 		return m.OldPublicID(ctx)
 	case videotask.FieldRequestID:
@@ -60698,6 +61046,27 @@ func (m *VideoTaskMutation) OldField(ctx context.Context, name string) (ent.Valu
 // type.
 func (m *VideoTaskMutation) SetField(name string, value ent.Value) error {
 	switch name {
+	case videotask.FieldVideoChannelID:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetVideoChannelID(v)
+		return nil
+	case videotask.FieldBillingUnit:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBillingUnit(v)
+		return nil
+	case videotask.FieldUnitPrice:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUnitPrice(v)
+		return nil
 	case videotask.FieldPublicID:
 		v, ok := value.(string)
 		if !ok {
@@ -60888,6 +61257,9 @@ func (m *VideoTaskMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *VideoTaskMutation) AddedFields() []string {
 	var fields []string
+	if m.addunit_price != nil {
+		fields = append(fields, videotask.FieldUnitPrice)
+	}
 	if m.addduration_seconds != nil {
 		fields = append(fields, videotask.FieldDurationSeconds)
 	}
@@ -60914,6 +61286,8 @@ func (m *VideoTaskMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *VideoTaskMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case videotask.FieldUnitPrice:
+		return m.AddedUnitPrice()
 	case videotask.FieldDurationSeconds:
 		return m.AddedDurationSeconds()
 	case videotask.FieldReferenceDurationSeconds:
@@ -60935,6 +61309,13 @@ func (m *VideoTaskMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *VideoTaskMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case videotask.FieldUnitPrice:
+		v, ok := value.(float64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddUnitPrice(v)
+		return nil
 	case videotask.FieldDurationSeconds:
 		v, ok := value.(int)
 		if !ok {
@@ -61061,6 +61442,15 @@ func (m *VideoTaskMutation) ClearField(name string) error {
 // It returns an error if the field is not defined in the schema.
 func (m *VideoTaskMutation) ResetField(name string) error {
 	switch name {
+	case videotask.FieldVideoChannelID:
+		m.ResetVideoChannelID()
+		return nil
+	case videotask.FieldBillingUnit:
+		m.ResetBillingUnit()
+		return nil
+	case videotask.FieldUnitPrice:
+		m.ResetUnitPrice()
+		return nil
 	case videotask.FieldPublicID:
 		m.ResetPublicID()
 		return nil

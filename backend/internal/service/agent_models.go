@@ -50,11 +50,12 @@ var (
 )
 
 type AgentModelPrice struct {
-	ID           int64   `json:"id"`
-	AgentModelID int64   `json:"agent_model_id"`
-	Resolution   string  `json:"resolution"`
-	BillingUnit  string  `json:"billing_unit"`
-	UnitPrice    float64 `json:"unit_price"`
+	VideoChannelID string  `json:"video_channel_id"`
+	ID             int64   `json:"id"`
+	AgentModelID   int64   `json:"agent_model_id"`
+	Resolution     string  `json:"resolution"`
+	BillingUnit    string  `json:"billing_unit"`
+	UnitPrice      float64 `json:"unit_price"`
 	// Enabled is a per-resolution visibility switch. A nil value is treated as
 	// enabled for backwards compatibility with callers that construct prices
 	// before this field was introduced.
@@ -64,7 +65,8 @@ type AgentModelPrice struct {
 }
 
 type AgentGroupModel struct {
-	FreeInputImages *int `json:"free_input_images,omitempty"`
+	VideoChannels   []VideoChannel `json:"video_channels,omitempty"`
+	FreeInputImages *int           `json:"free_input_images,omitempty"`
 	// InputImageUnitPrice 是 MiniMax H3 超额输入图片的每张单价。nil 表示未配置，
 	// 此时超额图片沿用所选分辨率档位的单价计费。0 是合法值（超额图片免费）。
 	InputImageUnitPrice *float64          `json:"input_image_unit_price,omitempty"`
@@ -224,6 +226,9 @@ func (s *AgentModelCatalogService) GetConfig(ctx context.Context, groupID int64)
 	if models == nil {
 		models = []AgentGroupModel{}
 	}
+	if err := s.attachVideoChannels(ctx, groupID, models); err != nil {
+		return nil, err
+	}
 	return &AgentModelCatalogConfig{Models: models}, nil
 }
 
@@ -318,6 +323,21 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 	prices, err := normalizeAgentModelPricesForModel(model.ModelCode, mediaType, input.Prices)
 	if err != nil {
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", err.Error())
+	}
+	if IsSeedanceModel(model.ModelCode) {
+		channels, chErr := s.ListVideoChannels(ctx)
+		if chErr != nil {
+			return nil, chErr
+		}
+		known := map[string]bool{}
+		for _, ch := range channels {
+			known[ch.ID] = true
+		}
+		for _, p := range prices {
+			if !known[p.VideoChannelID] {
+				return nil, infraerrors.BadRequest("invalid_video_channel", "Price refers to an unknown video channel")
+			}
+		}
 	}
 	rate, err := normalizeAgentModelRate(mediaType, input.Enabled, input.RateMultiplier)
 	if err != nil {
@@ -504,7 +524,7 @@ func (s *AgentModelCatalogService) ResolveMediaPrice(
 			continue
 		}
 		for _, price := range model.Prices {
-			if price.Resolution == resolution && price.BillingUnit == billingUnitForAgentModel(modelCode, mediaType) && price.UnitPrice >= 0 && agentModelPriceEnabled(price) {
+			if price.VideoChannelID == "" && price.Resolution == resolution && price.BillingUnit == billingUnitForAgentModel(modelCode, mediaType) && price.UnitPrice >= 0 && agentModelPriceEnabled(price) {
 				return &price, model, nil
 			}
 		}

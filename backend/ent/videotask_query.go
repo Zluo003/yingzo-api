@@ -408,12 +408,12 @@ func (_q *VideoTaskQuery) WithAccount(opts ...func(*AccountQuery)) *VideoTaskQue
 // Example:
 //
 //	var v []struct {
-//		PublicID string `json:"public_id,omitempty"`
+//		VideoChannelID string `json:"video_channel_id,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.VideoTask.Query().
-//		GroupBy(videotask.FieldPublicID).
+//		GroupBy(videotask.FieldVideoChannelID).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (_q *VideoTaskQuery) GroupBy(field string, fields ...string) *VideoTaskGroupBy {
@@ -431,11 +431,11 @@ func (_q *VideoTaskQuery) GroupBy(field string, fields ...string) *VideoTaskGrou
 // Example:
 //
 //	var v []struct {
-//		PublicID string `json:"public_id,omitempty"`
+//		VideoChannelID string `json:"video_channel_id,omitempty"`
 //	}
 //
 //	client.VideoTask.Query().
-//		Select(videotask.FieldPublicID).
+//		Select(videotask.FieldVideoChannelID).
 //		Scan(ctx, &v)
 func (_q *VideoTaskQuery) Select(fields ...string) *VideoTaskSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)

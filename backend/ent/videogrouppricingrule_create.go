@@ -23,6 +23,48 @@ type VideoGroupPricingRuleCreate struct {
 	conflict []sql.ConflictOption
 }
 
+// SetVideoChannelID sets the "video_channel_id" field.
+func (_c *VideoGroupPricingRuleCreate) SetVideoChannelID(v string) *VideoGroupPricingRuleCreate {
+	_c.mutation.SetVideoChannelID(v)
+	return _c
+}
+
+// SetNillableVideoChannelID sets the "video_channel_id" field if the given value is not nil.
+func (_c *VideoGroupPricingRuleCreate) SetNillableVideoChannelID(v *string) *VideoGroupPricingRuleCreate {
+	if v != nil {
+		_c.SetVideoChannelID(*v)
+	}
+	return _c
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (_c *VideoGroupPricingRuleCreate) SetBillingUnit(v string) *VideoGroupPricingRuleCreate {
+	_c.mutation.SetBillingUnit(v)
+	return _c
+}
+
+// SetNillableBillingUnit sets the "billing_unit" field if the given value is not nil.
+func (_c *VideoGroupPricingRuleCreate) SetNillableBillingUnit(v *string) *VideoGroupPricingRuleCreate {
+	if v != nil {
+		_c.SetBillingUnit(*v)
+	}
+	return _c
+}
+
+// SetCreditsPerRequest sets the "credits_per_request" field.
+func (_c *VideoGroupPricingRuleCreate) SetCreditsPerRequest(v float64) *VideoGroupPricingRuleCreate {
+	_c.mutation.SetCreditsPerRequest(v)
+	return _c
+}
+
+// SetNillableCreditsPerRequest sets the "credits_per_request" field if the given value is not nil.
+func (_c *VideoGroupPricingRuleCreate) SetNillableCreditsPerRequest(v *float64) *VideoGroupPricingRuleCreate {
+	if v != nil {
+		_c.SetCreditsPerRequest(*v)
+	}
+	return _c
+}
+
 // SetGroupID sets the "group_id" field.
 func (_c *VideoGroupPricingRuleCreate) SetGroupID(v int64) *VideoGroupPricingRuleCreate {
 	_c.mutation.SetGroupID(v)
@@ -171,6 +213,18 @@ func (_c *VideoGroupPricingRuleCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *VideoGroupPricingRuleCreate) defaults() {
+	if _, ok := _c.mutation.VideoChannelID(); !ok {
+		v := videogrouppricingrule.DefaultVideoChannelID
+		_c.mutation.SetVideoChannelID(v)
+	}
+	if _, ok := _c.mutation.BillingUnit(); !ok {
+		v := videogrouppricingrule.DefaultBillingUnit
+		_c.mutation.SetBillingUnit(v)
+	}
+	if _, ok := _c.mutation.CreditsPerRequest(); !ok {
+		v := videogrouppricingrule.DefaultCreditsPerRequest
+		_c.mutation.SetCreditsPerRequest(v)
+	}
 	if _, ok := _c.mutation.ReferenceVideoMultiplier(); !ok {
 		v := videogrouppricingrule.DefaultReferenceVideoMultiplier
 		_c.mutation.SetReferenceVideoMultiplier(v)
@@ -195,6 +249,30 @@ func (_c *VideoGroupPricingRuleCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *VideoGroupPricingRuleCreate) check() error {
+	if _, ok := _c.mutation.VideoChannelID(); !ok {
+		return &ValidationError{Name: "video_channel_id", err: errors.New(`ent: missing required field "VideoGroupPricingRule.video_channel_id"`)}
+	}
+	if v, ok := _c.mutation.VideoChannelID(); ok {
+		if err := videogrouppricingrule.VideoChannelIDValidator(v); err != nil {
+			return &ValidationError{Name: "video_channel_id", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.video_channel_id": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.BillingUnit(); !ok {
+		return &ValidationError{Name: "billing_unit", err: errors.New(`ent: missing required field "VideoGroupPricingRule.billing_unit"`)}
+	}
+	if v, ok := _c.mutation.BillingUnit(); ok {
+		if err := videogrouppricingrule.BillingUnitValidator(v); err != nil {
+			return &ValidationError{Name: "billing_unit", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.billing_unit": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CreditsPerRequest(); !ok {
+		return &ValidationError{Name: "credits_per_request", err: errors.New(`ent: missing required field "VideoGroupPricingRule.credits_per_request"`)}
+	}
+	if v, ok := _c.mutation.CreditsPerRequest(); ok {
+		if err := videogrouppricingrule.CreditsPerRequestValidator(v); err != nil {
+			return &ValidationError{Name: "credits_per_request", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.credits_per_request": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.GroupID(); !ok {
 		return &ValidationError{Name: "group_id", err: errors.New(`ent: missing required field "VideoGroupPricingRule.group_id"`)}
 	}
@@ -272,6 +350,18 @@ func (_c *VideoGroupPricingRuleCreate) createSpec() (*VideoGroupPricingRule, *sq
 		_spec = sqlgraph.NewCreateSpec(videogrouppricingrule.Table, sqlgraph.NewFieldSpec(videogrouppricingrule.FieldID, field.TypeInt64))
 	)
 	_spec.OnConflict = _c.conflict
+	if value, ok := _c.mutation.VideoChannelID(); ok {
+		_spec.SetField(videogrouppricingrule.FieldVideoChannelID, field.TypeString, value)
+		_node.VideoChannelID = value
+	}
+	if value, ok := _c.mutation.BillingUnit(); ok {
+		_spec.SetField(videogrouppricingrule.FieldBillingUnit, field.TypeString, value)
+		_node.BillingUnit = value
+	}
+	if value, ok := _c.mutation.CreditsPerRequest(); ok {
+		_spec.SetField(videogrouppricingrule.FieldCreditsPerRequest, field.TypeFloat64, value)
+		_node.CreditsPerRequest = value
+	}
 	if value, ok := _c.mutation.ModelCode(); ok {
 		_spec.SetField(videogrouppricingrule.FieldModelCode, field.TypeString, value)
 		_node.ModelCode = value
@@ -332,7 +422,7 @@ func (_c *VideoGroupPricingRuleCreate) createSpec() (*VideoGroupPricingRule, *sq
 // of the `INSERT` statement. For example:
 //
 //	client.VideoGroupPricingRule.Create().
-//		SetGroupID(v).
+//		SetVideoChannelID(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -341,7 +431,7 @@ func (_c *VideoGroupPricingRuleCreate) createSpec() (*VideoGroupPricingRule, *sq
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.VideoGroupPricingRuleUpsert) {
-//			SetGroupID(v+v).
+//			SetVideoChannelID(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *VideoGroupPricingRuleCreate) OnConflict(opts ...sql.ConflictOption) *VideoGroupPricingRuleUpsertOne {
@@ -376,6 +466,48 @@ type (
 		*sql.UpdateSet
 	}
 )
+
+// SetVideoChannelID sets the "video_channel_id" field.
+func (u *VideoGroupPricingRuleUpsert) SetVideoChannelID(v string) *VideoGroupPricingRuleUpsert {
+	u.Set(videogrouppricingrule.FieldVideoChannelID, v)
+	return u
+}
+
+// UpdateVideoChannelID sets the "video_channel_id" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsert) UpdateVideoChannelID() *VideoGroupPricingRuleUpsert {
+	u.SetExcluded(videogrouppricingrule.FieldVideoChannelID)
+	return u
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (u *VideoGroupPricingRuleUpsert) SetBillingUnit(v string) *VideoGroupPricingRuleUpsert {
+	u.Set(videogrouppricingrule.FieldBillingUnit, v)
+	return u
+}
+
+// UpdateBillingUnit sets the "billing_unit" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsert) UpdateBillingUnit() *VideoGroupPricingRuleUpsert {
+	u.SetExcluded(videogrouppricingrule.FieldBillingUnit)
+	return u
+}
+
+// SetCreditsPerRequest sets the "credits_per_request" field.
+func (u *VideoGroupPricingRuleUpsert) SetCreditsPerRequest(v float64) *VideoGroupPricingRuleUpsert {
+	u.Set(videogrouppricingrule.FieldCreditsPerRequest, v)
+	return u
+}
+
+// UpdateCreditsPerRequest sets the "credits_per_request" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsert) UpdateCreditsPerRequest() *VideoGroupPricingRuleUpsert {
+	u.SetExcluded(videogrouppricingrule.FieldCreditsPerRequest)
+	return u
+}
+
+// AddCreditsPerRequest adds v to the "credits_per_request" field.
+func (u *VideoGroupPricingRuleUpsert) AddCreditsPerRequest(v float64) *VideoGroupPricingRuleUpsert {
+	u.Add(videogrouppricingrule.FieldCreditsPerRequest, v)
+	return u
+}
 
 // SetGroupID sets the "group_id" field.
 func (u *VideoGroupPricingRuleUpsert) SetGroupID(v int64) *VideoGroupPricingRuleUpsert {
@@ -558,6 +690,55 @@ func (u *VideoGroupPricingRuleUpsertOne) Update(set func(*VideoGroupPricingRuleU
 		set(&VideoGroupPricingRuleUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetVideoChannelID sets the "video_channel_id" field.
+func (u *VideoGroupPricingRuleUpsertOne) SetVideoChannelID(v string) *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.SetVideoChannelID(v)
+	})
+}
+
+// UpdateVideoChannelID sets the "video_channel_id" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsertOne) UpdateVideoChannelID() *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.UpdateVideoChannelID()
+	})
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (u *VideoGroupPricingRuleUpsertOne) SetBillingUnit(v string) *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.SetBillingUnit(v)
+	})
+}
+
+// UpdateBillingUnit sets the "billing_unit" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsertOne) UpdateBillingUnit() *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.UpdateBillingUnit()
+	})
+}
+
+// SetCreditsPerRequest sets the "credits_per_request" field.
+func (u *VideoGroupPricingRuleUpsertOne) SetCreditsPerRequest(v float64) *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.SetCreditsPerRequest(v)
+	})
+}
+
+// AddCreditsPerRequest adds v to the "credits_per_request" field.
+func (u *VideoGroupPricingRuleUpsertOne) AddCreditsPerRequest(v float64) *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.AddCreditsPerRequest(v)
+	})
+}
+
+// UpdateCreditsPerRequest sets the "credits_per_request" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsertOne) UpdateCreditsPerRequest() *VideoGroupPricingRuleUpsertOne {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.UpdateCreditsPerRequest()
+	})
 }
 
 // SetGroupID sets the "group_id" field.
@@ -856,7 +1037,7 @@ func (_c *VideoGroupPricingRuleCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.VideoGroupPricingRuleUpsert) {
-//			SetGroupID(v+v).
+//			SetVideoChannelID(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *VideoGroupPricingRuleCreateBulk) OnConflict(opts ...sql.ConflictOption) *VideoGroupPricingRuleUpsertBulk {
@@ -930,6 +1111,55 @@ func (u *VideoGroupPricingRuleUpsertBulk) Update(set func(*VideoGroupPricingRule
 		set(&VideoGroupPricingRuleUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetVideoChannelID sets the "video_channel_id" field.
+func (u *VideoGroupPricingRuleUpsertBulk) SetVideoChannelID(v string) *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.SetVideoChannelID(v)
+	})
+}
+
+// UpdateVideoChannelID sets the "video_channel_id" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsertBulk) UpdateVideoChannelID() *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.UpdateVideoChannelID()
+	})
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (u *VideoGroupPricingRuleUpsertBulk) SetBillingUnit(v string) *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.SetBillingUnit(v)
+	})
+}
+
+// UpdateBillingUnit sets the "billing_unit" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsertBulk) UpdateBillingUnit() *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.UpdateBillingUnit()
+	})
+}
+
+// SetCreditsPerRequest sets the "credits_per_request" field.
+func (u *VideoGroupPricingRuleUpsertBulk) SetCreditsPerRequest(v float64) *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.SetCreditsPerRequest(v)
+	})
+}
+
+// AddCreditsPerRequest adds v to the "credits_per_request" field.
+func (u *VideoGroupPricingRuleUpsertBulk) AddCreditsPerRequest(v float64) *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.AddCreditsPerRequest(v)
+	})
+}
+
+// UpdateCreditsPerRequest sets the "credits_per_request" field to the value that was provided on create.
+func (u *VideoGroupPricingRuleUpsertBulk) UpdateCreditsPerRequest() *VideoGroupPricingRuleUpsertBulk {
+	return u.Update(func(s *VideoGroupPricingRuleUpsert) {
+		s.UpdateCreditsPerRequest()
+	})
 }
 
 // SetGroupID sets the "group_id" field.

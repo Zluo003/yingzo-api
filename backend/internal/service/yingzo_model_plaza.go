@@ -11,14 +11,16 @@ import (
 // YingzoModelPrice contains final customer prices only: no account, channel or
 // supplier-cost metadata. Token prices are CNY per million tokens.
 type YingzoModelPrice struct {
-	Unit         string   `json:"unit"`
-	Resolution   string   `json:"resolution,omitempty"`
-	UnitPrice    *float64 `json:"unit_price,omitempty"`
-	InputPrice   *float64 `json:"input_price,omitempty"`
-	OutputPrice  *float64 `json:"output_price,omitempty"`
-	CacheRead    *float64 `json:"cache_read_price,omitempty"`
-	CacheWrite   *float64 `json:"cache_write_price,omitempty"`
-	CacheWrite1h *float64 `json:"cache_write_1h_price,omitempty"`
+	VideoChannelID   string   `json:"video_channel_id,omitempty"`
+	VideoChannelName string   `json:"video_channel_name,omitempty"`
+	Unit             string   `json:"unit"`
+	Resolution       string   `json:"resolution,omitempty"`
+	UnitPrice        *float64 `json:"unit_price,omitempty"`
+	InputPrice       *float64 `json:"input_price,omitempty"`
+	OutputPrice      *float64 `json:"output_price,omitempty"`
+	CacheRead        *float64 `json:"cache_read_price,omitempty"`
+	CacheWrite       *float64 `json:"cache_write_price,omitempty"`
+	CacheWrite1h     *float64 `json:"cache_write_1h_price,omitempty"`
 }
 
 type YingzoPlazaModel struct {
@@ -53,6 +55,9 @@ func (s *ModelPlazaService) ListYingzoModels(ctx context.Context, catalog *Agent
 	if err != nil {
 		return nil, err
 	}
+	if err := catalog.attachVideoChannels(ctx, groupID, models); err != nil {
+		return nil, err
+	}
 	byModel := make(map[string][]*Account)
 	for i := range accounts {
 		for key := range agentDiscoverySet(discoverAgentModels([]Account{accounts[i]})) {
@@ -67,6 +72,13 @@ func (s *ModelPlazaService) ListYingzoModels(ctx context.Context, catalog *Agent
 		entry := YingzoPlazaModel{ModelCode: model.ModelCode, Platform: model.Platform, MediaType: model.MediaType, PricingStatus: "unavailable", Prices: []YingzoModelPrice{}}
 		if model.MediaType == AgentMediaTypeText {
 			entry.Prices = s.yingzoTextPrices(ctx, groupID, model, byModel[agentModelKey(model.Platform, model.ModelCode)], result.AsOf)
+		} else if IsSeedanceModel(model.ModelCode) && model.MediaType == AgentMediaTypeVideo {
+			for _, ch := range PublicVideoChannels(model.VideoChannels) {
+				for _, p := range ch.Prices {
+					value := p.UnitPrice
+					entry.Prices = append(entry.Prices, YingzoModelPrice{VideoChannelID: ch.ID, VideoChannelName: ch.Name, Unit: p.BillingUnit, Resolution: p.Resolution, UnitPrice: &value})
+				}
+			}
 		} else {
 			unit := billingUnitForAgentModel(model.ModelCode, model.MediaType)
 			for _, price := range model.Prices {

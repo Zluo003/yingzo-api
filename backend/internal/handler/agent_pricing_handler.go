@@ -37,6 +37,21 @@ func (h *AgentHandler) GetAgentPricingCompatibility(c *gin.Context) {
 		resolutions := make([]string, 0, len(model.Prices))
 		seen := map[string]struct{}{}
 		for _, price := range model.Prices {
+			if price.VideoChannelID != "" && c.Query("video_channels") != "1" {
+				continue
+			}
+			if service.IsSeedanceModel(model.ModelCode) {
+				available := false
+				for _, ch := range service.PublicVideoChannels(model.VideoChannels) {
+					if ch.ID == price.VideoChannelID {
+						available = true
+						break
+					}
+				}
+				if !available {
+					continue
+				}
+			}
 			if !agentModelPriceEnabled(price) {
 				continue
 			}
@@ -64,6 +79,7 @@ func (h *AgentHandler) GetAgentPricingCompatibility(c *gin.Context) {
 }
 
 type agentPricingSnapshotRule struct {
+	VideoChannelID      string  `json:"video_channel_id"`
 	Model               string  `json:"model"`
 	Platform            string  `json:"platform"`
 	MediaType           string  `json:"media_type"`
@@ -126,7 +142,7 @@ func (h *AgentHandler) GetAgentPricingSnapshot(c *gin.Context) {
 			}
 			rules = append(rules, agentPricingSnapshotRule{
 				Model: model.ModelCode, Platform: model.Platform, MediaType: model.MediaType,
-				Resolution: price.Resolution, UnitKind: price.BillingUnit,
+				VideoChannelID: price.VideoChannelID, Resolution: price.Resolution, UnitKind: price.BillingUnit,
 				UnitPrice: price.UnitPrice, EffectiveUnitPrice: price.UnitPrice,
 				BillingMultiplier: 1,
 			})
@@ -138,6 +154,9 @@ func (h *AgentHandler) GetAgentPricingSnapshot(c *gin.Context) {
 		}
 		if rules[i].Model != rules[j].Model {
 			return rules[i].Model < rules[j].Model
+		}
+		if rules[i].VideoChannelID != rules[j].VideoChannelID {
+			return rules[i].VideoChannelID < rules[j].VideoChannelID
 		}
 		return rules[i].Resolution < rules[j].Resolution
 	})

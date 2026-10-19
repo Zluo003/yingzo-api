@@ -29,6 +29,55 @@ func (_u *VideoGroupPricingRuleUpdate) Where(ps ...predicate.VideoGroupPricingRu
 	return _u
 }
 
+// SetVideoChannelID sets the "video_channel_id" field.
+func (_u *VideoGroupPricingRuleUpdate) SetVideoChannelID(v string) *VideoGroupPricingRuleUpdate {
+	_u.mutation.SetVideoChannelID(v)
+	return _u
+}
+
+// SetNillableVideoChannelID sets the "video_channel_id" field if the given value is not nil.
+func (_u *VideoGroupPricingRuleUpdate) SetNillableVideoChannelID(v *string) *VideoGroupPricingRuleUpdate {
+	if v != nil {
+		_u.SetVideoChannelID(*v)
+	}
+	return _u
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (_u *VideoGroupPricingRuleUpdate) SetBillingUnit(v string) *VideoGroupPricingRuleUpdate {
+	_u.mutation.SetBillingUnit(v)
+	return _u
+}
+
+// SetNillableBillingUnit sets the "billing_unit" field if the given value is not nil.
+func (_u *VideoGroupPricingRuleUpdate) SetNillableBillingUnit(v *string) *VideoGroupPricingRuleUpdate {
+	if v != nil {
+		_u.SetBillingUnit(*v)
+	}
+	return _u
+}
+
+// SetCreditsPerRequest sets the "credits_per_request" field.
+func (_u *VideoGroupPricingRuleUpdate) SetCreditsPerRequest(v float64) *VideoGroupPricingRuleUpdate {
+	_u.mutation.ResetCreditsPerRequest()
+	_u.mutation.SetCreditsPerRequest(v)
+	return _u
+}
+
+// SetNillableCreditsPerRequest sets the "credits_per_request" field if the given value is not nil.
+func (_u *VideoGroupPricingRuleUpdate) SetNillableCreditsPerRequest(v *float64) *VideoGroupPricingRuleUpdate {
+	if v != nil {
+		_u.SetCreditsPerRequest(*v)
+	}
+	return _u
+}
+
+// AddCreditsPerRequest adds value to the "credits_per_request" field.
+func (_u *VideoGroupPricingRuleUpdate) AddCreditsPerRequest(v float64) *VideoGroupPricingRuleUpdate {
+	_u.mutation.AddCreditsPerRequest(v)
+	return _u
+}
+
 // SetGroupID sets the "group_id" field.
 func (_u *VideoGroupPricingRuleUpdate) SetGroupID(v int64) *VideoGroupPricingRuleUpdate {
 	_u.mutation.SetGroupID(v)
@@ -235,6 +284,21 @@ func (_u *VideoGroupPricingRuleUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *VideoGroupPricingRuleUpdate) check() error {
+	if v, ok := _u.mutation.VideoChannelID(); ok {
+		if err := videogrouppricingrule.VideoChannelIDValidator(v); err != nil {
+			return &ValidationError{Name: "video_channel_id", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.video_channel_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BillingUnit(); ok {
+		if err := videogrouppricingrule.BillingUnitValidator(v); err != nil {
+			return &ValidationError{Name: "billing_unit", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.billing_unit": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CreditsPerRequest(); ok {
+		if err := videogrouppricingrule.CreditsPerRequestValidator(v); err != nil {
+			return &ValidationError{Name: "credits_per_request", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.credits_per_request": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ModelCode(); ok {
 		if err := videogrouppricingrule.ModelCodeValidator(v); err != nil {
 			return &ValidationError{Name: "model_code", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.model_code": %w`, err)}
@@ -272,6 +336,18 @@ func (_u *VideoGroupPricingRuleUpdate) sqlSave(ctx context.Context) (_node int, 
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.VideoChannelID(); ok {
+		_spec.SetField(videogrouppricingrule.FieldVideoChannelID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BillingUnit(); ok {
+		_spec.SetField(videogrouppricingrule.FieldBillingUnit, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CreditsPerRequest(); ok {
+		_spec.SetField(videogrouppricingrule.FieldCreditsPerRequest, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedCreditsPerRequest(); ok {
+		_spec.AddField(videogrouppricingrule.FieldCreditsPerRequest, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.ModelCode(); ok {
 		_spec.SetField(videogrouppricingrule.FieldModelCode, field.TypeString, value)
@@ -359,6 +435,55 @@ type VideoGroupPricingRuleUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *VideoGroupPricingRuleMutation
+}
+
+// SetVideoChannelID sets the "video_channel_id" field.
+func (_u *VideoGroupPricingRuleUpdateOne) SetVideoChannelID(v string) *VideoGroupPricingRuleUpdateOne {
+	_u.mutation.SetVideoChannelID(v)
+	return _u
+}
+
+// SetNillableVideoChannelID sets the "video_channel_id" field if the given value is not nil.
+func (_u *VideoGroupPricingRuleUpdateOne) SetNillableVideoChannelID(v *string) *VideoGroupPricingRuleUpdateOne {
+	if v != nil {
+		_u.SetVideoChannelID(*v)
+	}
+	return _u
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (_u *VideoGroupPricingRuleUpdateOne) SetBillingUnit(v string) *VideoGroupPricingRuleUpdateOne {
+	_u.mutation.SetBillingUnit(v)
+	return _u
+}
+
+// SetNillableBillingUnit sets the "billing_unit" field if the given value is not nil.
+func (_u *VideoGroupPricingRuleUpdateOne) SetNillableBillingUnit(v *string) *VideoGroupPricingRuleUpdateOne {
+	if v != nil {
+		_u.SetBillingUnit(*v)
+	}
+	return _u
+}
+
+// SetCreditsPerRequest sets the "credits_per_request" field.
+func (_u *VideoGroupPricingRuleUpdateOne) SetCreditsPerRequest(v float64) *VideoGroupPricingRuleUpdateOne {
+	_u.mutation.ResetCreditsPerRequest()
+	_u.mutation.SetCreditsPerRequest(v)
+	return _u
+}
+
+// SetNillableCreditsPerRequest sets the "credits_per_request" field if the given value is not nil.
+func (_u *VideoGroupPricingRuleUpdateOne) SetNillableCreditsPerRequest(v *float64) *VideoGroupPricingRuleUpdateOne {
+	if v != nil {
+		_u.SetCreditsPerRequest(*v)
+	}
+	return _u
+}
+
+// AddCreditsPerRequest adds value to the "credits_per_request" field.
+func (_u *VideoGroupPricingRuleUpdateOne) AddCreditsPerRequest(v float64) *VideoGroupPricingRuleUpdateOne {
+	_u.mutation.AddCreditsPerRequest(v)
+	return _u
 }
 
 // SetGroupID sets the "group_id" field.
@@ -580,6 +705,21 @@ func (_u *VideoGroupPricingRuleUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *VideoGroupPricingRuleUpdateOne) check() error {
+	if v, ok := _u.mutation.VideoChannelID(); ok {
+		if err := videogrouppricingrule.VideoChannelIDValidator(v); err != nil {
+			return &ValidationError{Name: "video_channel_id", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.video_channel_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.BillingUnit(); ok {
+		if err := videogrouppricingrule.BillingUnitValidator(v); err != nil {
+			return &ValidationError{Name: "billing_unit", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.billing_unit": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CreditsPerRequest(); ok {
+		if err := videogrouppricingrule.CreditsPerRequestValidator(v); err != nil {
+			return &ValidationError{Name: "credits_per_request", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.credits_per_request": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ModelCode(); ok {
 		if err := videogrouppricingrule.ModelCodeValidator(v); err != nil {
 			return &ValidationError{Name: "model_code", err: fmt.Errorf(`ent: validator failed for field "VideoGroupPricingRule.model_code": %w`, err)}
@@ -634,6 +774,18 @@ func (_u *VideoGroupPricingRuleUpdateOne) sqlSave(ctx context.Context) (_node *V
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := _u.mutation.VideoChannelID(); ok {
+		_spec.SetField(videogrouppricingrule.FieldVideoChannelID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BillingUnit(); ok {
+		_spec.SetField(videogrouppricingrule.FieldBillingUnit, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.CreditsPerRequest(); ok {
+		_spec.SetField(videogrouppricingrule.FieldCreditsPerRequest, field.TypeFloat64, value)
+	}
+	if value, ok := _u.mutation.AddedCreditsPerRequest(); ok {
+		_spec.AddField(videogrouppricingrule.FieldCreditsPerRequest, field.TypeFloat64, value)
 	}
 	if value, ok := _u.mutation.ModelCode(); ok {
 		_spec.SetField(videogrouppricingrule.FieldModelCode, field.TypeString, value)

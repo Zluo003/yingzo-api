@@ -2090,6 +2090,9 @@ var (
 	// VideoGroupPricingRulesColumns holds the columns for the "video_group_pricing_rules" table.
 	VideoGroupPricingRulesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "video_channel_id", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "billing_unit", Type: field.TypeString, Size: 16, Default: "second"},
+		{Name: "credits_per_request", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
 		{Name: "model_code", Type: field.TypeString, Size: 100},
 		{Name: "resolution", Type: field.TypeString, Size: 16},
 		{Name: "credits_per_second", Type: field.TypeFloat64, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
@@ -2109,7 +2112,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "video_group_pricing_rules_groups_video_pricing_rules",
-				Columns:    []*schema.Column{VideoGroupPricingRulesColumns[10]},
+				Columns:    []*schema.Column{VideoGroupPricingRulesColumns[13]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -2118,23 +2121,26 @@ var (
 			{
 				Name:    "videogrouppricingrule_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{VideoGroupPricingRulesColumns[10]},
+				Columns: []*schema.Column{VideoGroupPricingRulesColumns[13]},
 			},
 			{
 				Name:    "videogrouppricingrule_model_code_resolution",
 				Unique:  false,
-				Columns: []*schema.Column{VideoGroupPricingRulesColumns[1], VideoGroupPricingRulesColumns[2]},
+				Columns: []*schema.Column{VideoGroupPricingRulesColumns[4], VideoGroupPricingRulesColumns[5]},
 			},
 			{
-				Name:    "videogrouppricingrule_group_id_model_code_resolution",
+				Name:    "videogrouppricingrule_group_id_model_code_video_channel_id_resolution",
 				Unique:  true,
-				Columns: []*schema.Column{VideoGroupPricingRulesColumns[10], VideoGroupPricingRulesColumns[1], VideoGroupPricingRulesColumns[2]},
+				Columns: []*schema.Column{VideoGroupPricingRulesColumns[13], VideoGroupPricingRulesColumns[4], VideoGroupPricingRulesColumns[1], VideoGroupPricingRulesColumns[5]},
 			},
 		},
 	}
 	// VideoTasksColumns holds the columns for the "video_tasks" table.
 	VideoTasksColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "video_channel_id", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "billing_unit", Type: field.TypeString, Size: 16, Default: "second"},
+		{Name: "unit_price", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,10)"}},
 		{Name: "public_id", Type: field.TypeString, Unique: true, Size: 64},
 		{Name: "request_id", Type: field.TypeString, Nullable: true, Size: 128},
 		{Name: "model", Type: field.TypeString, Size: 100},
@@ -2170,25 +2176,25 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "video_tasks_api_keys_video_tasks",
-				Columns:    []*schema.Column{VideoTasksColumns[23]},
+				Columns:    []*schema.Column{VideoTasksColumns[26]},
 				RefColumns: []*schema.Column{APIKeysColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "video_tasks_accounts_video_tasks",
-				Columns:    []*schema.Column{VideoTasksColumns[24]},
+				Columns:    []*schema.Column{VideoTasksColumns[27]},
 				RefColumns: []*schema.Column{AccountsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "video_tasks_groups_video_tasks",
-				Columns:    []*schema.Column{VideoTasksColumns[25]},
+				Columns:    []*schema.Column{VideoTasksColumns[28]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "video_tasks_users_video_tasks",
-				Columns:    []*schema.Column{VideoTasksColumns[26]},
+				Columns:    []*schema.Column{VideoTasksColumns[29]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -2197,42 +2203,42 @@ var (
 			{
 				Name:    "videotask_public_id",
 				Unique:  true,
-				Columns: []*schema.Column{VideoTasksColumns[1]},
+				Columns: []*schema.Column{VideoTasksColumns[4]},
 			},
 			{
 				Name:    "videotask_user_id",
 				Unique:  false,
-				Columns: []*schema.Column{VideoTasksColumns[26]},
+				Columns: []*schema.Column{VideoTasksColumns[29]},
 			},
 			{
 				Name:    "videotask_api_key_id",
 				Unique:  false,
-				Columns: []*schema.Column{VideoTasksColumns[23]},
+				Columns: []*schema.Column{VideoTasksColumns[26]},
 			},
 			{
 				Name:    "videotask_group_id",
 				Unique:  false,
-				Columns: []*schema.Column{VideoTasksColumns[25]},
+				Columns: []*schema.Column{VideoTasksColumns[28]},
 			},
 			{
 				Name:    "videotask_account_id",
 				Unique:  false,
-				Columns: []*schema.Column{VideoTasksColumns[24]},
+				Columns: []*schema.Column{VideoTasksColumns[27]},
 			},
 			{
 				Name:    "videotask_status",
 				Unique:  false,
-				Columns: []*schema.Column{VideoTasksColumns[12]},
+				Columns: []*schema.Column{VideoTasksColumns[15]},
 			},
 			{
 				Name:    "videotask_upstream_task_id",
 				Unique:  false,
-				Columns: []*schema.Column{VideoTasksColumns[13]},
+				Columns: []*schema.Column{VideoTasksColumns[16]},
 			},
 			{
 				Name:    "videotask_created_at",
 				Unique:  false,
-				Columns: []*schema.Column{VideoTasksColumns[18]},
+				Columns: []*schema.Column{VideoTasksColumns[21]},
 			},
 		},
 	}

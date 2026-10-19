@@ -14,6 +14,12 @@ const (
 	Label = "video_task"
 	// FieldID holds the string denoting the id field in the database.
 	FieldID = "id"
+	// FieldVideoChannelID holds the string denoting the video_channel_id field in the database.
+	FieldVideoChannelID = "video_channel_id"
+	// FieldBillingUnit holds the string denoting the billing_unit field in the database.
+	FieldBillingUnit = "billing_unit"
+	// FieldUnitPrice holds the string denoting the unit_price field in the database.
+	FieldUnitPrice = "unit_price"
 	// FieldPublicID holds the string denoting the public_id field in the database.
 	FieldPublicID = "public_id"
 	// FieldRequestID holds the string denoting the request_id field in the database.
@@ -109,6 +115,9 @@ const (
 // Columns holds all SQL columns for videotask fields.
 var Columns = []string{
 	FieldID,
+	FieldVideoChannelID,
+	FieldBillingUnit,
+	FieldUnitPrice,
 	FieldPublicID,
 	FieldRequestID,
 	FieldUserID,
@@ -148,6 +157,16 @@ func ValidColumn(column string) bool {
 }
 
 var (
+	// DefaultVideoChannelID holds the default value on creation for the "video_channel_id" field.
+	DefaultVideoChannelID string
+	// VideoChannelIDValidator is a validator for the "video_channel_id" field. It is called by the builders before save.
+	VideoChannelIDValidator func(string) error
+	// DefaultBillingUnit holds the default value on creation for the "billing_unit" field.
+	DefaultBillingUnit string
+	// BillingUnitValidator is a validator for the "billing_unit" field. It is called by the builders before save.
+	BillingUnitValidator func(string) error
+	// DefaultUnitPrice holds the default value on creation for the "unit_price" field.
+	DefaultUnitPrice float64
 	// PublicIDValidator is a validator for the "public_id" field. It is called by the builders before save.
 	PublicIDValidator func(string) error
 	// RequestIDValidator is a validator for the "request_id" field. It is called by the builders before save.
@@ -190,6 +209,21 @@ type OrderOption func(*sql.Selector)
 // ByID orders the results by the id field.
 func ByID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByVideoChannelID orders the results by the video_channel_id field.
+func ByVideoChannelID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldVideoChannelID, opts...).ToFunc()
+}
+
+// ByBillingUnit orders the results by the billing_unit field.
+func ByBillingUnit(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBillingUnit, opts...).ToFunc()
+}
+
+// ByUnitPrice orders the results by the unit_price field.
+func ByUnitPrice(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldUnitPrice, opts...).ToFunc()
 }
 
 // ByPublicID orders the results by the public_id field.

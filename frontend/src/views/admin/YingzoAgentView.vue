@@ -115,6 +115,7 @@
       </p>
     </div>
 
+    <VideoChannelManager @changed="refreshChannelMetadata" />
     <!-- 按媒体类型分区 -->
     <div class="card p-6">
       <div class="flex flex-wrap items-center gap-2 border-b border-gray-200 dark:border-dark-600">
@@ -186,7 +187,7 @@
                   {{
                     activeTab === 'audio' ? t(`suno.prices.${resolution}`) : activeTab === 'image'
                       ? (MIDJOURNEY_PRICE_TIERS.includes(resolution) ? t(`midjourney.prices.${resolution}`) : t('admin.yingzoAgent.columns.pricePerImage', { resolution }))
-                      : t('admin.yingzoAgent.columns.pricePerSecond', { resolution })
+                      : resolution
                   }}
                 </th>
               </template>
@@ -256,6 +257,9 @@
                   />
                 </td>
               </template>
+              <td v-else-if="isSeedance(model)" :colspan="resolutionColumns.length" class="py-3 pr-3">
+                <SeedanceChannelPrices v-model="drafts[model.id].channelPrices" :channels="model.video_channels ?? [{id: '', name: t('videoChannels.default'), enabled:true, available:model.available}]" :resolutions="resolutionColumnsForDraft(model)" />
+              </td>
               <template v-else>
                 <td
                   v-for="resolution in (activeTab === 'text' ? resolutionColumnsForDraft(model) : resolutionColumns)"
@@ -315,6 +319,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import VideoChannelManager from '@/components/admin/VideoChannelManager.vue'
+import SeedanceChannelPrices from '@/components/admin/SeedanceChannelPrices.vue'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import { adminAPI } from '@/api'
 import {
@@ -333,6 +339,7 @@ import { SUNO_BILLING_TIERS } from '@/components/account/suno'
 const IMAGE_RESOLUTIONS = ['1K', '2K', '4K']
 
 interface ModelDraft {
+  channelPrices: AgentModelPrice[]
   enabled: boolean
   /** 草稿里的媒体类型：目录识别不准时管理员可以在这里改，保存后立即生效。 */
   mediaType: AgentMediaType
@@ -414,6 +421,8 @@ function hasInputImagePricing(model: AgentGroupModel): boolean {
 }
 function defaultFreeImages(model: AgentGroupModel): number { return model.model_code === 'minimax-h3' ? 5 : 2 }
 
+function isSeedance(model: AgentGroupModel): boolean { return (drafts[model.id]?.mediaType ?? model.media_type) === 'video' && model.model_code.startsWith('seedance-') }
+function channelPriceKey(prices: AgentModelPrice[]): string { return JSON.stringify(prices.map(p => [p.video_channel_id || '',p.resolution,p.billing_unit || 'second',p.unit_price,p.enabled !== false]).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))) }
 function isDirty(model: AgentGroupModel): boolean {
   const draft = drafts[model.id]
   if (!draft) {
@@ -422,6 +431,7 @@ function isDirty(model: AgentGroupModel): boolean {
   if (draft.enabled !== model.enabled || draft.mediaType !== model.media_type) {
     return true
   }
+  if (isSeedance(model)) return channelPriceKey(draft.channelPrices) !== channelPriceKey(model.prices)
   if (draft.mediaType === 'text') {
     return normalizeNumber(draft.rateMultiplier) !== (model.rate_multiplier ?? null)
   }
@@ -486,6 +496,7 @@ function buildDrafts(): void {
       resolutionEnabled[price.resolution] = price.enabled !== false
     }
     drafts[model.id] = {
+      channelPrices: model.prices.map(p => ({...p})),
       enabled: model.enabled,
       mediaType: model.media_type,
       rateMultiplier: model.rate_multiplier === null ? '' : String(model.rate_multiplier),
@@ -518,6 +529,20 @@ async function loadGroup(): Promise<void> {
     // 系统分组由迁移种入。真找不到时要说清楚，否则页面只会显示一个空目录，
     // 让人误以为"还没有模型"而不是"分组不存在"。
     errorMessage.value = t('admin.yingzoAgent.groupMissing')
+  }
+}
+
+async function refreshChannelMetadata(): Promise<void> {
+  if (!agentGroupId.value) return
+  try {
+    const config = await agentModelsAPI.getAgentModels(agentGroupId.value)
+    // Keep unsaved pricing drafts when only channel names/statuses change.
+    models.value = models.value.map(model => {
+      const updated = config.models.find(entry => entry.id === model.id)
+      return updated ? { ...model, video_channels: updated.video_channels } : model
+    })
+  } catch (error) {
+    errorMessage.value = extractError(error, t('admin.yingzoAgent.loadFailed'))
   }
 }
 
@@ -560,6 +585,10 @@ async function syncModels(): Promise<void> {
 
 function buildPrices(model: AgentGroupModel): AgentModelPrice[] {
   const draft = drafts[model.id]
+  if (isSeedance(model)) {
+    if (draft.channelPrices.some(p => p.enabled !== false && (!Number.isFinite(p.unit_price) || p.unit_price < 0))) throw new Error(t('videoChannels.invalidPrice'))
+    return draft.channelPrices.filter(p => Number.isFinite(p.unit_price) && p.unit_price >= 0)
+  }
   const prices: AgentModelPrice[] = []
   for (const resolution of resolutionColumnsForDraft(model)) {
     const value = normalizeNumber(draft.prices[resolution])

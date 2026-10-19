@@ -192,6 +192,12 @@ func (s *VideoService) createTask(ctx context.Context, input *VideoCreateInput) 
 	if err != nil {
 		return nil, err
 	}
+	if input.Request.ExpectedUnitPrice != nil && (*input.Request.ExpectedUnitPrice != estimate.UnitPrice || input.Request.ExpectedBillingUnit != estimate.BillingUnit) {
+		return nil, videoBadRequest("video_price_changed", "Video price changed; refresh the estimate before submitting")
+	}
+	if input.Request.ExpectedUnitPrice == nil && input.Request.ExpectedBillingUnit != "" {
+		return nil, videoBadRequest("invalid_video_quote", "Expected unit price is required")
+	}
 	totalCost := estimate.TotalCost
 	actualCost := estimate.ActualCost
 	if err := validateVideoEstimatedCost(input.APIKey, input.Subscription, actualCost); err != nil {
@@ -211,7 +217,8 @@ func (s *VideoService) createTask(ctx context.Context, input *VideoCreateInput) 
 
 	publicID := generateVideoPublicID()
 	task, err := s.taskRepo.Create(ctx, &VideoTaskCreateInput{
-		PublicID:                 publicID,
+		PublicID:       publicID,
+		VideoChannelID: normalized.VideoChannelID, BillingUnit: estimate.BillingUnit, UnitPrice: estimate.UnitPrice,
 		RequestID:                optionalTrimmedPtr(input.RequestID),
 		UserID:                   input.APIKey.User.ID,
 		APIKeyID:                 input.APIKey.ID,
@@ -269,7 +276,11 @@ func videoIdempotencyPayload(input *VideoCreateInput) any {
 		hash = HashUsageRequestPayload(input.RawBody)
 	}
 	if hash != "" {
-		return map[string]string{"request_sha256": hash}
+		channelID := ""
+		if input.Request != nil {
+			channelID = input.Request.VideoChannelID
+		}
+		return map[string]string{"request_sha256": hash, "video_channel_id": channelID}
 	}
 	return input.Request
 }
@@ -349,19 +360,15 @@ func (s *VideoService) estimateGenerationCost(
 		if s.agentModels == nil {
 			return nil, nil, nil, videoBadRequest("video_pricing_rule_not_found", "Video pricing rule is not configured")
 		}
-		price, agentModel, priceErr := s.agentModels.ResolveMediaPrice(
-			ctx,
-			apiKey.Group.ID,
-			PlatformVideo,
-			AgentMediaTypeVideo,
-			normalized.Resolution,
-			normalized.Model,
-		)
+		price, agentModel, priceErr := s.agentModels.ResolveVideoChannelPrice(ctx, apiKey.Group.ID, normalized.Model, normalized.Resolution, normalized.VideoChannelID)
 		if priceErr != nil {
 			return nil, nil, nil, videoBadRequest("video_pricing_rule_not_found", "Video pricing rule is not configured")
 		}
 		agentInputImagePrice = agentModel.InputImageUnitPrice
 		rule = &VideoGroupPricingRule{
+			VideoChannelID:       normalized.VideoChannelID,
+			BillingUnit:          price.BillingUnit,
+			CreditsPerRequest:    price.UnitPrice,
 			GroupID:              apiKey.Group.ID,
 			ModelCode:            agentModel.ModelCode,
 			Resolution:           normalized.Resolution,
@@ -372,7 +379,20 @@ func (s *VideoService) estimateGenerationCost(
 			Enabled:              true,
 		}
 	} else {
-		rule, err = s.pricingRepo.GetEnabledRule(ctx, apiKey.Group.ID, normalized.Model, normalized.Resolution)
+		if IsSeedanceModel(normalized.Model) {
+			if channelErr := s.agentModels.requireVideoChannel(ctx, normalized.VideoChannelID); channelErr != nil {
+				return nil, nil, nil, channelErr
+			}
+		}
+		if repo, ok := s.pricingRepo.(interface {
+			GetEnabledChannelRule(context.Context, int64, string, string, string) (*VideoGroupPricingRule, error)
+		}); ok {
+			rule, err = repo.GetEnabledChannelRule(ctx, apiKey.Group.ID, normalized.Model, normalized.Resolution, normalized.VideoChannelID)
+		} else if normalized.VideoChannelID == "" {
+			rule, err = s.pricingRepo.GetEnabledRule(ctx, apiKey.Group.ID, normalized.Model, normalized.Resolution)
+		} else {
+			err = ErrVideoPricingRuleNotFound
+		}
 		if err != nil {
 			if errors.Is(err, ErrVideoPricingRuleNotFound) {
 				return nil, nil, nil, videoBadRequest("video_pricing_rule_not_found", "Video pricing rule is not configured")
@@ -421,8 +441,28 @@ func (s *VideoService) estimateGenerationCost(
 	if apiKey.Group.IsAgent() {
 		rateMultiplier = 1
 	}
+	billingUnit := rule.BillingUnit
+	if billingUnit == "" {
+		billingUnit = "second"
+	}
+	unitPrice := rule.CreditsPerSecond
+	if billingUnit == "request" && IsSeedanceModel(normalized.Model) {
+		unitPrice = rule.CreditsPerRequest
+		rule.CreditsPerSecond = 0
+		perOutputCost = unitPrice
+		referenceMultiplier = 0
+		billableSecondsPerOutput = 0
+		imageCost = 0
+		billableImages = 0
+	} else if billingUnit != "second" {
+		return nil, nil, nil, videoBadRequest("invalid_video_billing_unit", "Invalid video billing unit")
+	}
+	if unitPrice < 0 || math.IsNaN(unitPrice) || math.IsInf(unitPrice, 0) {
+		return nil, nil, nil, ErrVideoPricingRuleNotFound
+	}
 	totalCost := perOutputCost * float64(count)
 	estimate := &VideoCostEstimate{
+		VideoChannelID: normalized.VideoChannelID, BillingUnit: billingUnit, UnitPrice: unitPrice,
 		InputImages:              inputImages,
 		FreeInputImages:          freeImages,
 		BillableInputImages:      billableImages * count,
@@ -504,6 +544,11 @@ func (s *VideoService) selectAccountForRequestWithExclusion(
 		return nil, ErrVideoAccountNotFound
 	}
 	model := normalized.Model
+	if IsSeedanceModel(model) {
+		if err := s.agentModels.requireVideoChannel(ctx, normalized.VideoChannelID); err != nil {
+			return nil, err
+		}
+	}
 	accounts, err := s.accountRepo.ListSchedulableByGroupIDAndPlatform(ctx, groupID, PlatformVideo)
 	if err != nil {
 		return nil, err
@@ -517,6 +562,9 @@ func (s *VideoService) selectAccountForRequestWithExclusion(
 			continue
 		}
 		if _, skip := excluded[account.ID]; skip {
+			continue
+		}
+		if videoAccountChannel(&account, model) != normalized.VideoChannelID {
 			continue
 		}
 		if !account.IsModelSupported(model) {
@@ -1218,6 +1266,9 @@ func buildVideoUsageLog(task *VideoTask, apiKey *APIKey, subscription *UserSubsc
 		return nil, false
 	}
 	billingMode := string(BillingModeVideoDuration)
+	if task.BillingUnit == "request" {
+		billingMode = string(BillingModeVideo)
+	}
 	createdAt := opts.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = time.Now().UTC()
@@ -1288,6 +1339,9 @@ func (s *VideoService) applyVideoUsageBilling(ctx context.Context, usageLog *Usa
 		return errors.New("video refund requires usage billing repository")
 	}
 	billingMode := string(BillingModeVideoDuration)
+	if task.BillingUnit == "request" {
+		billingMode = string(BillingModeVideo)
+	}
 	applied, billingErr := applyUsageBilling(ctx, usageLog.RequestID, usageLog, &postUsageBillingParams{
 		Cost:                  &CostBreakdown{OutputCost: usageLog.OutputCost, TotalCost: usageLog.TotalCost, ActualCost: usageLog.ActualCost, BillingMode: billingMode},
 		User:                  apiKey.User,
@@ -1368,6 +1422,7 @@ func videoTaskDurationMs(task *VideoTask) *int {
 }
 
 type normalizedVideoRequest struct {
+	VideoChannelID        string
 	Model                 string
 	Prompt                string
 	Content               []VideoContent
@@ -1395,6 +1450,9 @@ func normalizeAgentVideoCreateRequest(req *VideoCreateRequest) (*normalizedVideo
 
 func normalizeVideoCreateRequestWithDynamicModel(req *VideoCreateRequest, dynamicModel bool) (*normalizedVideoRequest, error) {
 	model := strings.TrimSpace(req.Model)
+	if !validVideoChannelID(req.VideoChannelID) || (req.VideoChannelID != "" && !IsSeedanceModel(model)) {
+		return nil, videoBadRequest("invalid_video_channel", "Invalid video channel")
+	}
 	spec, knownModel := videoSpecForModel(model)
 	if model == "" || (!dynamicModel && !knownModel) {
 		return nil, videoBadRequest("invalid_video_model", "Invalid video model")
@@ -1481,6 +1539,7 @@ func normalizeVideoCreateRequestWithDynamicModel(req *VideoCreateRequest, dynami
 		ratio = "16:9"
 	}
 	return &normalizedVideoRequest{
+		VideoChannelID:        req.VideoChannelID,
 		Model:                 model,
 		Prompt:                prompt,
 		Content:               content,
@@ -1952,12 +2011,13 @@ func videoResponseFromTask(task *VideoTask) *VideoResponse {
 		return nil
 	}
 	resp := &VideoResponse{
-		ID:           task.PublicID,
-		Object:       videoObject,
-		Model:        task.Model,
-		Status:       task.Status,
-		RefundStatus: videoRefundStatus(task),
-		CreatedAt:    task.CreatedAt.Unix(),
+		VideoChannelID: task.VideoChannelID,
+		ID:             task.PublicID,
+		Object:         videoObject,
+		Model:          task.Model,
+		Status:         task.Status,
+		RefundStatus:   videoRefundStatus(task),
+		CreatedAt:      task.CreatedAt.Unix(),
 	}
 	if task.Status == VideoTaskStatusCompleted {
 		resp.VideoURL = task.ResultVideoURL

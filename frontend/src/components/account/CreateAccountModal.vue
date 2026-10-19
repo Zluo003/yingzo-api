@@ -676,6 +676,7 @@
           </div>
           <p class="input-hint">{{ t('admin.accounts.video.durationsHint') }}</p>
         </div>
+        <VideoModelChannelsField v-model="selectedVideoChannels" :models="selectedVideoModels" />
         <VideoModelCapabilitiesField
           v-if="selectedVideoModels.length > 0"
           v-model="selectedVideoCapabilities"
@@ -4148,6 +4149,8 @@ import {
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
+import VideoModelChannelsField from './VideoModelChannelsField.vue'
+import { serializeVideoModelChannels } from './videoModelChannels'
 import VideoModelCapabilitiesField from './VideoModelCapabilitiesField.vue'
 import VideoModelMappingField from './VideoModelMappingField.vue'
 import { buildVideoModelMapping } from './videoModelMapping'
@@ -4677,6 +4680,7 @@ const selectedVideoResolutions = ref<Record<string, string[]>>(
 const selectedVideoDurations = ref<Record<string, number[]>>(
   defaultVideoModelDurations()
 )
+const selectedVideoChannels = ref<Record<string, string>>({})
 const selectedVideoCapabilities = ref(parseVideoModelCapabilities(undefined))
 
 /** 上游平台与模型联动：下拉里只保留能服务当前所选全部模型的平台。 */
@@ -5304,6 +5308,7 @@ watch(
       form.concurrency = 1
       form.load_factor = null
       videoProvider.value = 'aigod'
+      selectedVideoChannels.value = {}
       selectedVideoModels.value = [...initialVideoModels]
       videoUpstreamModels.value = {}
       selectedVideoResolutions.value = defaultVideoModelResolutions()
@@ -5812,7 +5817,8 @@ const resetForm = () => {
   videoPollTimeoutMs.value = videoProviderDefaultsMap.aigod.pollTimeoutMs
   videoRequestTimeoutMs.value = videoProviderDefaultsMap.aigod.requestTimeoutMs
   videoConnectTimeoutMs.value = videoProviderDefaultsMap.aigod.connectTimeoutMs
-  selectedVideoModels.value = [...initialVideoModels]
+  selectedVideoChannels.value = {}
+      selectedVideoModels.value = [...initialVideoModels]
   videoUpstreamModels.value = {}
   selectedVideoCapabilities.value = parseVideoModelCapabilities(undefined)
   selectedVideoResolutions.value = defaultVideoModelResolutions()
@@ -6385,6 +6391,7 @@ const handleSubmit = async () => {
   const extra = form.platform === 'video'
     ? {
         video_provider: videoProvider.value,
+        video_model_channels: serializeVideoModelChannels(selectedVideoChannels.value, selectedVideoModels.value),
         video_result_delivery: videoResultDelivery.value,
         base_url: apiKeyBaseUrl.value.trim() || defaultBaseUrl,
         api_path: resolvedVideoAPIPath.value,

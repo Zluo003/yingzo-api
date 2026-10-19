@@ -224,6 +224,13 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 		streaming = false
 		asynchronous = true
 		capabilities["supported_video_resolutions"] = configuredAgentModelResolutions(entry, config, service.AgentMediaTypeVideo)
+		if service.IsSeedanceModel(entry.ID) && config != nil {
+			for _, m := range config.Models {
+				if m.ModelCode == entry.ID && m.Platform == service.PlatformVideo {
+					capabilities["video_channels"] = service.PublicVideoChannels(m.VideoChannels)
+				}
+			}
+		}
 		// Duration is a per-model upstream constraint, not a fixed three-tier
 		// menu: the 2.0 family accepts 4-15s and 2.5 accepts 4-30s. Deriving it
 		// from the video spec keeps the catalog aligned with request validation.
@@ -610,18 +617,23 @@ func (h *AgentHandler) calculateGenerationQuote(ctx context.Context, apiKey *ser
 		if err != nil {
 			return nil, err
 		}
-		quote.UnitKind = "second"
+		quote.UnitKind = estimate.BillingUnit
 		quote.Units = float64(estimate.BillableSeconds)
-		quote.UnitPrice = estimate.CreditsPerSecond
+		if estimate.BillingUnit == "request" {
+			quote.Units = float64(input.Count)
+		}
+		quote.UnitPrice = estimate.UnitPrice
 		quote.TotalPrice = estimate.TotalCost
 		quote.ActualPrice = estimate.ActualCost
 		quote.Details = map[string]any{
+			"video_channel_id": estimate.VideoChannelID, "billing_unit": estimate.BillingUnit,
 			"count": input.Count, "resolution": estimate.Resolution, "ability_code": estimate.AbilityCode,
 			"generated_seconds": estimate.GeneratedSeconds, "reference_video_seconds": estimate.ReferenceVideoSeconds,
 			"input_images": estimate.InputImages, "free_input_images": estimate.FreeInputImages, "billable_input_images": estimate.BillableInputImages, "credits_per_input_image": estimate.CreditsPerInputImage, "input_image_cost": estimate.InputImageCost,
 			"billable_seconds": estimate.BillableSeconds, "reference_video_multiplier": estimate.ReferenceVideoMultiplier,
 		}
 		quote.RequestHash = hashJSON(map[string]any{
+			"video_channel_id": estimate.VideoChannelID, "billing_unit": estimate.BillingUnit,
 			"kind": input.Kind, "model": estimate.Model, "resolution": estimate.Resolution,
 			"ability_code": estimate.AbilityCode, "count": input.Count,
 			"generated_seconds": estimate.GeneratedSeconds, "reference_video_seconds": estimate.ReferenceVideoSeconds,

@@ -26,6 +26,48 @@ type VideoTaskCreate struct {
 	conflict []sql.ConflictOption
 }
 
+// SetVideoChannelID sets the "video_channel_id" field.
+func (_c *VideoTaskCreate) SetVideoChannelID(v string) *VideoTaskCreate {
+	_c.mutation.SetVideoChannelID(v)
+	return _c
+}
+
+// SetNillableVideoChannelID sets the "video_channel_id" field if the given value is not nil.
+func (_c *VideoTaskCreate) SetNillableVideoChannelID(v *string) *VideoTaskCreate {
+	if v != nil {
+		_c.SetVideoChannelID(*v)
+	}
+	return _c
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (_c *VideoTaskCreate) SetBillingUnit(v string) *VideoTaskCreate {
+	_c.mutation.SetBillingUnit(v)
+	return _c
+}
+
+// SetNillableBillingUnit sets the "billing_unit" field if the given value is not nil.
+func (_c *VideoTaskCreate) SetNillableBillingUnit(v *string) *VideoTaskCreate {
+	if v != nil {
+		_c.SetBillingUnit(*v)
+	}
+	return _c
+}
+
+// SetUnitPrice sets the "unit_price" field.
+func (_c *VideoTaskCreate) SetUnitPrice(v float64) *VideoTaskCreate {
+	_c.mutation.SetUnitPrice(v)
+	return _c
+}
+
+// SetNillableUnitPrice sets the "unit_price" field if the given value is not nil.
+func (_c *VideoTaskCreate) SetNillableUnitPrice(v *float64) *VideoTaskCreate {
+	if v != nil {
+		_c.SetUnitPrice(*v)
+	}
+	return _c
+}
+
 // SetPublicID sets the "public_id" field.
 func (_c *VideoTaskCreate) SetPublicID(v string) *VideoTaskCreate {
 	_c.mutation.SetPublicID(v)
@@ -357,6 +399,18 @@ func (_c *VideoTaskCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (_c *VideoTaskCreate) defaults() {
+	if _, ok := _c.mutation.VideoChannelID(); !ok {
+		v := videotask.DefaultVideoChannelID
+		_c.mutation.SetVideoChannelID(v)
+	}
+	if _, ok := _c.mutation.BillingUnit(); !ok {
+		v := videotask.DefaultBillingUnit
+		_c.mutation.SetBillingUnit(v)
+	}
+	if _, ok := _c.mutation.UnitPrice(); !ok {
+		v := videotask.DefaultUnitPrice
+		_c.mutation.SetUnitPrice(v)
+	}
 	if _, ok := _c.mutation.DurationSeconds(); !ok {
 		v := videotask.DefaultDurationSeconds
 		_c.mutation.SetDurationSeconds(v)
@@ -397,6 +451,25 @@ func (_c *VideoTaskCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_c *VideoTaskCreate) check() error {
+	if _, ok := _c.mutation.VideoChannelID(); !ok {
+		return &ValidationError{Name: "video_channel_id", err: errors.New(`ent: missing required field "VideoTask.video_channel_id"`)}
+	}
+	if v, ok := _c.mutation.VideoChannelID(); ok {
+		if err := videotask.VideoChannelIDValidator(v); err != nil {
+			return &ValidationError{Name: "video_channel_id", err: fmt.Errorf(`ent: validator failed for field "VideoTask.video_channel_id": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.BillingUnit(); !ok {
+		return &ValidationError{Name: "billing_unit", err: errors.New(`ent: missing required field "VideoTask.billing_unit"`)}
+	}
+	if v, ok := _c.mutation.BillingUnit(); ok {
+		if err := videotask.BillingUnitValidator(v); err != nil {
+			return &ValidationError{Name: "billing_unit", err: fmt.Errorf(`ent: validator failed for field "VideoTask.billing_unit": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.UnitPrice(); !ok {
+		return &ValidationError{Name: "unit_price", err: errors.New(`ent: missing required field "VideoTask.unit_price"`)}
+	}
 	if _, ok := _c.mutation.PublicID(); !ok {
 		return &ValidationError{Name: "public_id", err: errors.New(`ent: missing required field "VideoTask.public_id"`)}
 	}
@@ -522,6 +595,18 @@ func (_c *VideoTaskCreate) createSpec() (*VideoTask, *sqlgraph.CreateSpec) {
 		_spec = sqlgraph.NewCreateSpec(videotask.Table, sqlgraph.NewFieldSpec(videotask.FieldID, field.TypeInt64))
 	)
 	_spec.OnConflict = _c.conflict
+	if value, ok := _c.mutation.VideoChannelID(); ok {
+		_spec.SetField(videotask.FieldVideoChannelID, field.TypeString, value)
+		_node.VideoChannelID = value
+	}
+	if value, ok := _c.mutation.BillingUnit(); ok {
+		_spec.SetField(videotask.FieldBillingUnit, field.TypeString, value)
+		_node.BillingUnit = value
+	}
+	if value, ok := _c.mutation.UnitPrice(); ok {
+		_spec.SetField(videotask.FieldUnitPrice, field.TypeFloat64, value)
+		_node.UnitPrice = value
+	}
 	if value, ok := _c.mutation.PublicID(); ok {
 		_spec.SetField(videotask.FieldPublicID, field.TypeString, value)
 		_node.PublicID = value
@@ -685,7 +770,7 @@ func (_c *VideoTaskCreate) createSpec() (*VideoTask, *sqlgraph.CreateSpec) {
 // of the `INSERT` statement. For example:
 //
 //	client.VideoTask.Create().
-//		SetPublicID(v).
+//		SetVideoChannelID(v).
 //		OnConflict(
 //			// Update the row with the new values
 //			// the was proposed for insertion.
@@ -694,7 +779,7 @@ func (_c *VideoTaskCreate) createSpec() (*VideoTask, *sqlgraph.CreateSpec) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.VideoTaskUpsert) {
-//			SetPublicID(v+v).
+//			SetVideoChannelID(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *VideoTaskCreate) OnConflict(opts ...sql.ConflictOption) *VideoTaskUpsertOne {
@@ -729,6 +814,48 @@ type (
 		*sql.UpdateSet
 	}
 )
+
+// SetVideoChannelID sets the "video_channel_id" field.
+func (u *VideoTaskUpsert) SetVideoChannelID(v string) *VideoTaskUpsert {
+	u.Set(videotask.FieldVideoChannelID, v)
+	return u
+}
+
+// UpdateVideoChannelID sets the "video_channel_id" field to the value that was provided on create.
+func (u *VideoTaskUpsert) UpdateVideoChannelID() *VideoTaskUpsert {
+	u.SetExcluded(videotask.FieldVideoChannelID)
+	return u
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (u *VideoTaskUpsert) SetBillingUnit(v string) *VideoTaskUpsert {
+	u.Set(videotask.FieldBillingUnit, v)
+	return u
+}
+
+// UpdateBillingUnit sets the "billing_unit" field to the value that was provided on create.
+func (u *VideoTaskUpsert) UpdateBillingUnit() *VideoTaskUpsert {
+	u.SetExcluded(videotask.FieldBillingUnit)
+	return u
+}
+
+// SetUnitPrice sets the "unit_price" field.
+func (u *VideoTaskUpsert) SetUnitPrice(v float64) *VideoTaskUpsert {
+	u.Set(videotask.FieldUnitPrice, v)
+	return u
+}
+
+// UpdateUnitPrice sets the "unit_price" field to the value that was provided on create.
+func (u *VideoTaskUpsert) UpdateUnitPrice() *VideoTaskUpsert {
+	u.SetExcluded(videotask.FieldUnitPrice)
+	return u
+}
+
+// AddUnitPrice adds v to the "unit_price" field.
+func (u *VideoTaskUpsert) AddUnitPrice(v float64) *VideoTaskUpsert {
+	u.Add(videotask.FieldUnitPrice, v)
+	return u
+}
 
 // SetPublicID sets the "public_id" field.
 func (u *VideoTaskUpsert) SetPublicID(v string) *VideoTaskUpsert {
@@ -1163,6 +1290,55 @@ func (u *VideoTaskUpsertOne) Update(set func(*VideoTaskUpsert)) *VideoTaskUpsert
 		set(&VideoTaskUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetVideoChannelID sets the "video_channel_id" field.
+func (u *VideoTaskUpsertOne) SetVideoChannelID(v string) *VideoTaskUpsertOne {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.SetVideoChannelID(v)
+	})
+}
+
+// UpdateVideoChannelID sets the "video_channel_id" field to the value that was provided on create.
+func (u *VideoTaskUpsertOne) UpdateVideoChannelID() *VideoTaskUpsertOne {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.UpdateVideoChannelID()
+	})
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (u *VideoTaskUpsertOne) SetBillingUnit(v string) *VideoTaskUpsertOne {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.SetBillingUnit(v)
+	})
+}
+
+// UpdateBillingUnit sets the "billing_unit" field to the value that was provided on create.
+func (u *VideoTaskUpsertOne) UpdateBillingUnit() *VideoTaskUpsertOne {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.UpdateBillingUnit()
+	})
+}
+
+// SetUnitPrice sets the "unit_price" field.
+func (u *VideoTaskUpsertOne) SetUnitPrice(v float64) *VideoTaskUpsertOne {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.SetUnitPrice(v)
+	})
+}
+
+// AddUnitPrice adds v to the "unit_price" field.
+func (u *VideoTaskUpsertOne) AddUnitPrice(v float64) *VideoTaskUpsertOne {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.AddUnitPrice(v)
+	})
+}
+
+// UpdateUnitPrice sets the "unit_price" field to the value that was provided on create.
+func (u *VideoTaskUpsertOne) UpdateUnitPrice() *VideoTaskUpsertOne {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.UpdateUnitPrice()
+	})
 }
 
 // SetPublicID sets the "public_id" field.
@@ -1755,7 +1931,7 @@ func (_c *VideoTaskCreateBulk) ExecX(ctx context.Context) {
 //		// Override some of the fields with custom
 //		// update values.
 //		Update(func(u *ent.VideoTaskUpsert) {
-//			SetPublicID(v+v).
+//			SetVideoChannelID(v+v).
 //		}).
 //		Exec(ctx)
 func (_c *VideoTaskCreateBulk) OnConflict(opts ...sql.ConflictOption) *VideoTaskUpsertBulk {
@@ -1829,6 +2005,55 @@ func (u *VideoTaskUpsertBulk) Update(set func(*VideoTaskUpsert)) *VideoTaskUpser
 		set(&VideoTaskUpsert{UpdateSet: update})
 	}))
 	return u
+}
+
+// SetVideoChannelID sets the "video_channel_id" field.
+func (u *VideoTaskUpsertBulk) SetVideoChannelID(v string) *VideoTaskUpsertBulk {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.SetVideoChannelID(v)
+	})
+}
+
+// UpdateVideoChannelID sets the "video_channel_id" field to the value that was provided on create.
+func (u *VideoTaskUpsertBulk) UpdateVideoChannelID() *VideoTaskUpsertBulk {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.UpdateVideoChannelID()
+	})
+}
+
+// SetBillingUnit sets the "billing_unit" field.
+func (u *VideoTaskUpsertBulk) SetBillingUnit(v string) *VideoTaskUpsertBulk {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.SetBillingUnit(v)
+	})
+}
+
+// UpdateBillingUnit sets the "billing_unit" field to the value that was provided on create.
+func (u *VideoTaskUpsertBulk) UpdateBillingUnit() *VideoTaskUpsertBulk {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.UpdateBillingUnit()
+	})
+}
+
+// SetUnitPrice sets the "unit_price" field.
+func (u *VideoTaskUpsertBulk) SetUnitPrice(v float64) *VideoTaskUpsertBulk {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.SetUnitPrice(v)
+	})
+}
+
+// AddUnitPrice adds v to the "unit_price" field.
+func (u *VideoTaskUpsertBulk) AddUnitPrice(v float64) *VideoTaskUpsertBulk {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.AddUnitPrice(v)
+	})
+}
+
+// UpdateUnitPrice sets the "unit_price" field to the value that was provided on create.
+func (u *VideoTaskUpsertBulk) UpdateUnitPrice() *VideoTaskUpsertBulk {
+	return u.Update(func(s *VideoTaskUpsert) {
+		s.UpdateUnitPrice()
+	})
 }
 
 // SetPublicID sets the "public_id" field.

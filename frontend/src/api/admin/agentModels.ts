@@ -14,6 +14,7 @@ export type AgentBillingUnit = 'image' | 'second' | 'request'
 
 /** 图片按 1K/2K/4K 每张计价；视频按分辨率每秒计价。 */
 export interface AgentModelPrice {
+  video_channel_id?: string
   id?: number
   agent_model_id?: number
   resolution: string
@@ -26,6 +27,7 @@ export interface AgentModelPrice {
 }
 
 export interface AgentGroupModel {
+  video_channels?: import('./videoChannels').VideoChannel[]
   free_input_images?: number | null
   /** MiniMax H3 超额输入图片的每张单价；null 表示按所选分辨率单价计费。 */
   input_image_unit_price?: number | null

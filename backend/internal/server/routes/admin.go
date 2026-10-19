@@ -369,6 +369,9 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 }
 
 func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	admin.GET("/video-channels", h.Admin.Group.ListVideoChannels)
+	admin.POST("/video-channels", h.Admin.Group.CreateVideoChannel)
+	admin.PUT("/video-channels", h.Admin.Group.UpdateVideoChannel)
 	groups := admin.Group("/groups")
 	{
 		groups.GET("", h.Admin.Group.List)
