@@ -294,7 +294,10 @@ func (s *AgentModelCatalogService) attachVideoChannels(ctx context.Context, grou
 						if account.Platform != PlatformVideo || !account.IsModelSupported(model.ModelCode) || videoAccountChannel(account, model.ModelCode) != channel.ID {
 							continue
 						}
-						if videoAccountSupportsResolution(account, model.ModelCode, price.Resolution) && videoAccountSupportsDuration(account, model.ModelCode, duration) && videoProviderAdapterForAccount(account).CompatibleRequest(&normalizedVideoRequest{Model: model.ModelCode, Resolution: price.Resolution, GeneratedSeconds: duration, Duration: float64(duration), Ratio: "16:9", AbilityCode: videoAbilityTextToVideo}) {
+						// Use a valid text request for the local capability probe. Some
+						// adapters reject empty prompts before checking model specs.
+						// This request is never submitted to the upstream provider.
+						if videoAccountSupportsResolution(account, model.ModelCode, price.Resolution) && videoAccountSupportsDuration(account, model.ModelCode, duration) && videoProviderAdapterForAccount(account).CompatibleRequest(&normalizedVideoRequest{Model: model.ModelCode, Resolution: price.Resolution, Prompt: "Video capability probe", GeneratedSeconds: duration, Duration: float64(duration), Ratio: "16:9", AbilityCode: videoAbilityTextToVideo}) {
 							channel.DurationsByResolution[price.Resolution] = append(channel.DurationsByResolution[price.Resolution], duration)
 							allDurations[duration] = true
 							break

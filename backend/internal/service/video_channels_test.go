@@ -38,6 +38,43 @@ func channelAccount(id int64, priority int, url, channel string) Account {
 	return newVideoFailoverAccount(id, priority, url, map[string]any{VideoModelChannelsExtraKey: map[string]any{VideoModelSeedance20: channel}, "poll_interval_ms": 1})
 }
 
+func TestVideoChannelCatalogIncludesXingguangChannels(t *testing.T) {
+	for _, model := range []string{VideoModelSeedance20, VideoModelSeedance25} {
+		t.Run(model, func(t *testing.T) {
+			ids := []string{channelA, channelB, "00000000-0000-4000-8000-000000000003", "00000000-0000-4000-8000-000000000004"}
+			providers := []string{videoProviderNewtoken, videoProviderNewtoken, videoProviderXingguang, videoProviderXingguang}
+			accounts := []Account{}
+			prices := []AgentModelPrice{}
+			channels := []VideoChannel{}
+			for i, id := range ids {
+				account := channelAccount(int64(i+1), 0, "", id)
+				account.Extra["video_provider"] = providers[i]
+				account.Extra[VideoModelChannelsExtraKey] = map[string]any{model: id}
+				account.Credentials["model_mapping"] = map[string]any{model: model}
+				accounts = append(accounts, account)
+				unit := "second"
+				if i == 2 {
+					unit = "request"
+				}
+				prices = append(prices, AgentModelPrice{VideoChannelID: id, Resolution: "720p", BillingUnit: unit, UnitPrice: float64(i + 1)})
+				channels = append(channels, VideoChannel{ID: id, Name: id, Enabled: true})
+			}
+			catalog, repo := channelCatalog(accounts, prices)
+			repo.channels = channels
+			models := []AgentGroupModel{{ModelCode: model, MediaType: AgentMediaTypeVideo, Prices: prices}}
+			require.NoError(t, catalog.attachVideoChannels(context.Background(), 20, models))
+			public := PublicVideoChannels(models[0].VideoChannels)
+			require.Len(t, public, 4)
+			for i, ch := range public {
+				require.Equal(t, ids[i], ch.ID)
+				require.Equal(t, []string{"720p"}, ch.Resolutions)
+				require.Equal(t, SupportedVideoDurations(model), ch.DurationsByResolution["720p"])
+				require.Equal(t, prices[i].BillingUnit, ch.Prices[0].BillingUnit)
+			}
+		})
+	}
+}
+
 func TestVideoChannelPriceIsolationAndUnits(t *testing.T) {
 	accounts := []Account{channelAccount(1, 0, "", ""), channelAccount(2, 0, "", channelA), channelAccount(3, 0, "", channelB)}
 	catalog, repo := channelCatalog(accounts, []AgentModelPrice{
