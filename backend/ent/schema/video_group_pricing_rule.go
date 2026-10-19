@@ -25,9 +25,9 @@ func (VideoGroupPricingRule) Annotations() []schema.Annotation {
 
 func (VideoGroupPricingRule) Fields() []ent.Field {
 	return []ent.Field{
-        field.String("video_channel_id").MaxLen(64).Default(""),
-        field.String("billing_unit").MaxLen(16).Default("second"),
-        field.Float("credits_per_request").Default(0).Min(0).SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
+		field.String("video_channel_id").MaxLen(64).Default(""),
+		field.String("billing_unit").MaxLen(16).Default("second"),
+		field.Float("credits_per_request").Default(0).Min(0).SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 		field.Int64("group_id"),
 		field.String("model_code").MaxLen(100).NotEmpty(),
 		field.String("resolution").MaxLen(16).NotEmpty(),

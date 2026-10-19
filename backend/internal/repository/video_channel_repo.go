@@ -5,12 +5,16 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-func (r *agentModelRepository) ListVideoChannels(ctx context.Context) ([]service.VideoChannel, error) {
+func (r *agentModelRepository) ListVideoChannels(ctx context.Context) (channels []service.VideoChannel, retErr error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT id, name, enabled FROM video_channels ORDER BY id <> '', name`)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); retErr == nil {
+			retErr = closeErr
+		}
+	}()
 	out := []service.VideoChannel{}
 	for rows.Next() {
 		var channel service.VideoChannel

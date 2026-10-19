@@ -196,7 +196,10 @@ func (s *adminServiceImpl) validateVideoChannelBindings(ctx context.Context, pla
 		}
 		found := rows.Next()
 		scanErr := rows.Err()
-		rows.Close()
+		closeErr := rows.Close()
+		if closeErr != nil {
+			return closeErr
+		}
 		if scanErr != nil {
 			return scanErr
 		}

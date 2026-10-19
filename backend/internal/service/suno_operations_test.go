@@ -100,9 +100,12 @@ func TestSunoResultPreservesMetadataAndIndexes(t *testing.T) {
 	require.Len(t, calls, 3)
 	var result map[string]any
 	require.NoError(t, json.Unmarshal(out, &result))
-	tracks := result["music"].([]any)
+	tracks, ok := result["music"].([]any)
+	require.True(t, ok)
 	require.Len(t, tracks, 2)
-	require.Equal(t, float64(0), tracks[1].(map[string]any)["style_weight"])
+	track, ok := tracks[1].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, float64(0), track["style_weight"])
 	for _, op := range []string{"lyrics", "midi", "bpm", "alignedLyrics", "createVoice"} {
 		require.NoError(t, validateSunoResult(op, json.RawMessage(`{"text":"result"}`)))
 	}

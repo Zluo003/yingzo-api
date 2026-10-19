@@ -83,9 +83,17 @@ func (s *MusicTaskService) resolveSunoSources(ctx context.Context, owner MusicTa
 		for i, id := range ids {
 			index := 1
 			if len(indexes) > i {
-				index = int(indexes[i].(float64))
+				value, ok := indexes[i].(float64)
+				if !ok {
+					return nil, 0, sunoSourceError(fmt.Errorf("invalid source audio_index"))
+				}
+				index = int(value)
 			}
-			upstream, err := resolve(id.(string), index)
+			taskID, ok := id.(string)
+			if !ok {
+				return nil, 0, sunoSourceError(fmt.Errorf("invalid source task_id"))
+			}
+			upstream, err := resolve(taskID, index)
 			if err != nil {
 				return nil, 0, sunoSourceError(err)
 			}

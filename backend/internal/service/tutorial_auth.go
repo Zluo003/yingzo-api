@@ -150,9 +150,9 @@ func tutorialFeishuPost(ctx context.Context, endpoint string, body []byte, token
 	if err != nil {
 		return err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("Feishu status %d", res.StatusCode)
+		return fmt.Errorf("feishu status %d", res.StatusCode)
 	}
 	return json.NewDecoder(io.LimitReader(res.Body, 64<<10)).Decode(out)
 }

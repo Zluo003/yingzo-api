@@ -205,7 +205,11 @@ func ParseSunoOperation(operation string, body []byte) (*SunoRequest, error) {
 		if _, ok := f["persona_id"]; ok {
 			return nil, fmt.Errorf("custom_model_id and persona_id are mutually exclusive")
 		}
-		if _, err := uuid.Parse(f["custom_model_id"].(string)); err != nil {
+		modelID, ok := f["custom_model_id"].(string)
+		if !ok {
+			return nil, fmt.Errorf("custom_model_id must be a UUID")
+		}
+		if _, err := uuid.Parse(modelID); err != nil {
 			return nil, fmt.Errorf("custom_model_id must be a UUID")
 		}
 	} else if _, ok := spec.Fields["version"]; ok {
@@ -269,7 +273,7 @@ func ParseSunoOperation(operation string, body []byte) (*SunoRequest, error) {
 			}
 		}
 		if !custom && (f["max_mode"] == true || f["duration"] != nil || f["duration_s"] != nil) {
-			return nil, fmt.Errorf("Max and target duration require custom=true")
+			return nil, fmt.Errorf("max and target duration require custom=true")
 		}
 	}
 	limits := map[string]int{"prompt": 5000, "gpt_description": 3000, "style": 1000, "tags": 1000, "title": 80, "infill_lyrics": 5000}
@@ -323,8 +327,8 @@ func ParseSunoOperation(operation string, body []byte) (*SunoRequest, error) {
 		}
 	}
 	if operation == "mashup" {
-		ids := f["task_ids"].([]any)
-		if len(ids) != 2 {
+		ids, ok := f["task_ids"].([]any)
+		if !ok || len(ids) != 2 {
 			return nil, fmt.Errorf("task_ids requires exactly two tasks")
 		}
 		if indexes, ok := f["audio_indexes"].([]any); ok && len(indexes) != 2 {
@@ -345,7 +349,8 @@ func ParseSunoOperation(operation string, body []byte) (*SunoRequest, error) {
 			return nil, fmt.Errorf("audio_urls requires %d-%d URLs", min, max)
 		}
 		for _, v := range values {
-			if !sunoPublicURL(v.(string)) {
+			audioURL, ok := v.(string)
+			if !ok || !sunoPublicURL(audioURL) {
 				return nil, fmt.Errorf("invalid audio URL")
 			}
 		}
@@ -364,7 +369,11 @@ func ParseSunoOperation(operation string, body []byte) (*SunoRequest, error) {
 		out := []any{}
 		seen := map[string]bool{}
 		for _, v := range values {
-			value := strings.ToLower(v.(string))
+			format, ok := v.(string)
+			if !ok {
+				return nil, fmt.Errorf("invalid download format")
+			}
+			value := strings.ToLower(format)
 			if value != "mp3" && value != "wav" && value != "m4a" {
 				return nil, fmt.Errorf("invalid download format")
 			}

@@ -333,15 +333,16 @@ func mikuapiKlingV4CreateBody(normalized *normalizedVideoRequest, upstreamModel 
 		body["enable_audio"] = *normalized.GenerateAudio
 	}
 	for field, urls := range mikuapiMediaReferences(normalized.Content) {
-		if field == mikuapiFieldFirstFrame || field == mikuapiFieldLastFrame {
+		switch field {
+		case mikuapiFieldFirstFrame, mikuapiFieldLastFrame:
 			body[field] = urls[0]
-		} else if field == "reference_images" {
+		case "reference_images":
 			refs := make([]map[string]any, 0, len(urls))
 			for _, url := range urls {
 				refs = append(refs, map[string]any{"url": url})
 			}
 			body[field] = refs
-		} else {
+		default:
 			body[field] = urls
 		}
 	}

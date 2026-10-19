@@ -25,9 +25,9 @@ func (VideoTask) Annotations() []schema.Annotation {
 
 func (VideoTask) Fields() []ent.Field {
 	return []ent.Field{
-        field.String("video_channel_id").MaxLen(64).Default(""),
-        field.String("billing_unit").MaxLen(16).Default("second"),
-        field.Float("unit_price").Default(0).SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
+		field.String("video_channel_id").MaxLen(64).Default(""),
+		field.String("billing_unit").MaxLen(16).Default("second"),
+		field.Float("unit_price").Default(0).SchemaType(map[string]string{dialect.Postgres: "decimal(20,10)"}),
 		field.String("public_id").MaxLen(64).NotEmpty().Unique(),
 		field.String("request_id").MaxLen(128).Optional().Nillable(),
 		field.Int64("user_id"),

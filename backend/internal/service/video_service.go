@@ -1665,7 +1665,7 @@ func validateVideoAbilityInput(model, ability, prompt string, stats videoContent
 			return videoBadRequest("invalid_video_content", "Text-to-video requests cannot include media references")
 		}
 	case videoAbilityImageToVideo:
-		if stats.ImageCount != 1 || (stats.FirstFrameCount != 1 && !(isMinimaxH3Model(model) && stats.LastFrameCount == 1)) {
+		if stats.ImageCount != 1 || (stats.FirstFrameCount != 1 && (!isMinimaxH3Model(model) || stats.LastFrameCount != 1)) {
 			return videoBadRequest("invalid_video_content", "Image-to-video requires exactly one first frame image")
 		}
 		if stats.VideoCount > 0 || stats.AudioCount > 0 {

@@ -62,7 +62,7 @@ func ValidateTutorialURL(raw string) bool {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())
-	if !(strings.HasSuffix(host, ".feishu.cn") || strings.HasSuffix(host, ".larksuite.com")) {
+	if !strings.HasSuffix(host, ".feishu.cn") && !strings.HasSuffix(host, ".larksuite.com") {
 		return false
 	}
 	return u.RawPath == "" && tutorialDocumentPathPattern.MatchString(u.Path)
@@ -119,7 +119,7 @@ func (s *SettingService) SaveTutorialConfig(ctx context.Context, cfg *TutorialCo
 	}
 	for i, origin := range cfg.AllowedOrigins {
 		u, err := url.Parse(strings.TrimSpace(origin))
-		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || (u.Scheme != "https" && !(u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))) {
+		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Path != "" && u.Path != "/") || (u.Scheme != "https" && (u.Scheme != "http" || (u.Hostname() != "localhost" && u.Hostname() != "127.0.0.1"))) {
 			return infraerrors.BadRequest("INVALID_TUTORIAL_CONFIG", "阅读站点需填写完整 HTTPS 域名（本地调试允许 HTTP）")
 		}
 		cfg.AllowedOrigins[i] = u.Scheme + "://" + u.Host
