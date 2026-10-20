@@ -113,10 +113,12 @@ func ProvideGatewayHandler(
 	cfg *config.Config,
 	settingService *service.SettingService,
 	coordinator *securityaudit.Coordinator,
+	mediaAudit *service.MediaAuditService,
 ) *GatewayHandler {
 	h := NewGatewayHandler(gatewayService, openAIGatewayService, geminiCompatService, antigravityGatewayService,
 		userService, concurrencyService, billingCacheService, usageService, apiKeyService, usageRecordWorkerPool,
 		errorPassthroughService, contentModerationService, userMsgQueueService, cfg, settingService)
+	h.mediaAuditService = mediaAudit
 	h.securityAuditCoordinator = coordinator
 	return h
 }
@@ -135,10 +137,12 @@ func ProvideOpenAIGatewayHandler(
 	imagePublisher service.OpenAIImageResultPublisher,
 	cfg *config.Config,
 	coordinator *securityaudit.Coordinator,
+	mediaAudit *service.MediaAuditService,
 ) *OpenAIGatewayHandler {
 	gatewayService.SetPluginManager(pluginManager)
 	h := NewOpenAIGatewayHandler(gatewayService, concurrencyService, billingCacheService, apiKeyService,
 		usageRecordWorkerPool, errorPassthroughService, contentModerationService, opsService, imagePublisher, cfg)
+	h.mediaAuditService = mediaAudit
 	h.securityAuditCoordinator = coordinator
 	h.grokMediaEligibilityProber = grokQuotaService
 	return h
@@ -294,7 +298,7 @@ var ProviderSet = wire.NewSet(
 	admin.NewChannelHandler,
 	admin.NewChannelMonitorHandler,
 	admin.NewChannelMonitorRequestTemplateHandler,
-	admin.NewContentModerationHandler,
+	ProvideContentModerationHandler,
 	admin.NewPaymentHandler,
 	admin.NewAffiliateHandler,
 	admin.NewComplianceHandler,
@@ -304,3 +308,9 @@ var ProviderSet = wire.NewSet(
 	ProvideAdminHandlers,
 	ProvideHandlers,
 )
+
+func ProvideContentModerationHandler(svc *service.ContentModerationService, mediaAudit *service.MediaAuditService) *admin.ContentModerationHandler {
+	h := admin.NewContentModerationHandler(svc)
+	h.SetMediaAuditService(mediaAudit)
+	return h
+}

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -82,6 +83,8 @@ type BatchImageOwner struct {
 }
 
 type BatchImagePublicService struct {
+	mediaAudit        *MediaAuditService
+	mediaAuditUsers   UserRepository
 	Repo              BatchImageRepository
 	AccountRepo       BatchImageAccountSelectionRepository
 	GroupRepo         BatchImageGroupPricingRepository
@@ -234,6 +237,33 @@ func (s *BatchImagePublicService) Submit(ctx context.Context, owner BatchImageOw
 	provider, account, err := s.selectProviderAndAccount(ctx, owner, normalized.Provider, normalized.Model)
 	if err != nil {
 		return nil, err
+	}
+	if AccountNeedsMediaAudit(account) {
+		email := ""
+		if s.mediaAuditUsers != nil {
+			if user, loadErr := s.mediaAuditUsers.GetByID(ctx, owner.UserID); loadErr == nil && user != nil {
+				email = user.Email
+			}
+		}
+		for _, item := range normalized.Items {
+			in := MediaAuditInput{UserID: owner.UserID, UserEmail: email, APIKeyID: owner.APIKeyID, Model: normalized.Model, MediaType: "image", Prompt: item.Prompt}
+			for _, ref := range item.ReferenceImages {
+				if len(ref.Data) > 0 {
+					in.Images = append(in.Images, "data:"+ref.MimeType+";base64,"+base64.StdEncoding.EncodeToString(ref.Data))
+				} else if ref.FileURI != "" {
+					in.Images = append(in.Images, ref.FileURI)
+				} else {
+					in.UnsupportedMedia = true
+				}
+			}
+			if auditErr := s.mediaAudit.Check(ctx, account, in); auditErr != nil {
+				var failure *MediaAuditError
+				if errors.As(auditErr, &failure) {
+					return nil, infraerrors.New(failure.StatusCode(), failure.Code(), failure.Error()).WithMetadata(map[string]string{"event_id": failure.EventID})
+				}
+				return nil, auditErr
+			}
+		}
 	}
 	pricingSnapshot, err := s.resolvePricingSnapshot(ctx, owner, normalized, provider.Name(), account)
 	if err != nil {

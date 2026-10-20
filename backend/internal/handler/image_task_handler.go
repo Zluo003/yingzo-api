@@ -21,6 +21,7 @@ import (
 )
 
 type AsyncImageHandler struct {
+	gateway *GatewayHandler
 	durable *service.DurableImageService
 	tasks   *service.ImageTaskService
 	openAI  *OpenAIGatewayHandler
@@ -107,6 +108,9 @@ func (h *AsyncImageHandler) Submit(c *gin.Context) {
 		return
 	}
 	if !h.checkSecurityAuditBeforeSubmit(c, apiKey, platform, body) {
+		return
+	}
+	if !h.preflightMediaAudit(c, platform, body) {
 		return
 	}
 

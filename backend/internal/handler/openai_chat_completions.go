@@ -215,6 +215,14 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 			return
 		}
 		account := selection.Account
+		if service.MediaAuditImageRequest(reqModel, body, account) {
+			if !runAccountMediaAudit(c, h.mediaAuditService, account, reqModel, "image", body) {
+				if selection.ReleaseFunc != nil {
+					selection.ReleaseFunc()
+				}
+				return
+			}
+		}
 		sessionHash = ensureOpenAIPoolModeSessionHash(sessionHash, account)
 		reqLog.Debug("openai_chat_completions.account_selected", zap.Int64("account_id", account.ID), zap.String("account_name", account.Name))
 		_ = scheduleDecision

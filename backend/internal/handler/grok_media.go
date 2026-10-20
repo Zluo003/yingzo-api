@@ -284,6 +284,21 @@ func (h *OpenAIGatewayHandler) handleGrokMedia(c *gin.Context, endpoint service.
 
 		account := selection.Account
 		if endpoint.IsGenerationRequest() {
+			auditBody := requestInfo.ModerationBody()
+			if !strings.HasPrefix(strings.ToLower(contentType), "multipart/") {
+				auditBody = body
+			}
+			if endpoint == service.GrokMediaEndpointVideosEdits || endpoint == service.GrokMediaEndpointVideosExtensions {
+				auditBody = []byte(`{"video_url":"unreadable video reference"}`)
+			}
+			if !runAccountMediaAudit(c, h.mediaAuditService, account, requestModel, "media", auditBody) {
+				if selection.ReleaseFunc != nil {
+					selection.ReleaseFunc()
+				}
+				return
+			}
+		}
+		if endpoint.IsGenerationRequest() {
 			eligible, eligibilityReason, eligibilityErr := h.ensureGrokMediaAccountEligibility(requestCtx, account)
 			if !eligible {
 				mediaEligibilityRejected = true

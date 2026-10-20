@@ -39,6 +39,7 @@ type OpenAIGatewayHandler struct {
 	apiKeyService              *service.APIKeyService
 	usageRecordWorkerPool      *service.UsageRecordWorkerPool
 	errorPassthroughService    *service.ErrorPassthroughService
+	mediaAuditService          *service.MediaAuditService
 	contentModerationService   *service.ContentModerationService
 	securityAuditCoordinator   *securityaudit.Coordinator
 	grokMediaEligibilityProber grokMediaEligibilityProber
@@ -726,6 +727,14 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			zap.Float64("load_skew", scheduleDecision.LoadSkew),
 		)
 		account := selection.Account
+		if service.MediaAuditImageRequest(reqModel, body, account) {
+			if !runAccountMediaAudit(c, h.mediaAuditService, account, reqModel, "image", body) {
+				if selection.ReleaseFunc != nil {
+					selection.ReleaseFunc()
+				}
+				return
+			}
+		}
 		if previousResponseID != "" && requestPlatform == service.PlatformOpenAI && !account.IsOpenAIApiKey() {
 			// The public Responses HTTP API supports previous_response_id on API-key
 			// accounts. OAuth/SetupToken upstreams do not, so keep searching instead
@@ -2793,6 +2802,18 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 			ReasoningEffortMappings:     reasoningEffortMappings,
 			TurnStarted:                 recordTurnStart,
 			BeforeRequest: func(turn int, payload []byte, originalModel string) error {
+				if service.AccountNeedsMediaAudit(account) && service.MediaAuditImageRequest(originalModel, payload, account) {
+					if c.GetHeader("X-Yingzo-Audit-Request") != "" {
+						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, "media_audit_recursion", nil)
+					}
+					input := accountMediaAuditInput(c, originalModel, "image", payload)
+					// Later turns can reference hidden upstream conversation state.
+					// Require a new request carrying the full input for audited generation.
+					input.UnsupportedMedia = input.UnsupportedMedia || turn > 1
+					if err := h.mediaAuditService.Check(ctx, account, input); err != nil {
+						return service.NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, err.Error(), err)
+					}
+				}
 				c.Set(securityAuditWSTurnContextKey, turn)
 				service.BeginOpsStreamTurn(c, turn)
 				setCyberTurnBody(turn, payload)

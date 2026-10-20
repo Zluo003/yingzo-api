@@ -57,6 +57,8 @@ func TestAsyncImageHandlerSubmitAndPoll(t *testing.T) {
 
 	router := gin.New()
 	router.Use(func(c *gin.Context) {
+		// This lifecycle test uses a synthetic executor without account selection.
+		c.Set(mediaAuditPreflightDoneKey, true)
 		groupID := int64(3)
 		c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{
 			ID:      9,

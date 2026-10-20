@@ -250,6 +250,9 @@ func (s *DurableImageService) prepareMidjourney(ctx context.Context, key *APIKey
 		return nil, err
 	}
 	if len(accounts) > 0 {
+		if auditErr := s.auditMidjourneyInput(ctx, key, &accounts[0], r); auditErr != nil {
+			return nil, auditErr
+		}
 		return snapshot, nil
 	}
 	return nil, infraerrors.New(http.StatusServiceUnavailable, "MIDJOURNEY_ACCOUNT_UNAVAILABLE", "No available Midjourney account for this task")
@@ -332,6 +335,13 @@ func (s *DurableImageService) executeMidjourney(ctx context.Context, snapshot *M
 				return 503, nil, err
 			}
 		}
+	}
+	if auditErr := s.auditMidjourneyInput(ctx, key, a, &snapshot.Request); auditErr != nil {
+		var failure *MediaAuditError
+		if errors.As(auditErr, &failure) {
+			return failure.StatusCode(), nil, auditErr
+		}
+		return 503, nil, auditErr
 	}
 	r := snapshot.Request
 	r.Speed = "fast"
@@ -521,4 +531,25 @@ func normalizeAgentModelPricesForModel(model, mediaType string, prices []AgentMo
 		out = append(out, p)
 	}
 	return out, nil
+}
+
+func (s *DurableImageService) auditMidjourneyInput(ctx context.Context, key *APIKey, account *Account, r *MidjourneyRequest) error {
+	if !AccountNeedsMediaAudit(account) {
+		return nil
+	}
+	in := MediaAuditInput{UserID: key.UserID, APIKeyID: key.ID, Model: MidjourneyModel, MediaType: "image", Prompt: r.Prompt + "\n" + r.NegativePrompt, Images: append([]string(nil), r.ImageURLs...)}
+	if key.User != nil {
+		in.UserEmail = key.User.Email
+	}
+	if r.StyleReference != "" {
+		in.Images = append(in.Images, r.StyleReference)
+	}
+	// Parent references are opaque upstream IDs; do not silently audit an empty request.
+	in.UnsupportedMedia = r.TaskID != ""
+	err := s.mediaAudit.Check(ctx, account, in)
+	var failure *MediaAuditError
+	if errors.As(err, &failure) {
+		return infraerrors.New(failure.StatusCode(), failure.Code(), failure.Error()).WithCause(failure)
+	}
+	return err
 }

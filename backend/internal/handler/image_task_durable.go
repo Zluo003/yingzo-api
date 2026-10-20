@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"time"
 
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -22,9 +23,10 @@ import (
 	"github.com/tidwall/sjson"
 )
 
-func ProvideAsyncImageHandler(tasks *service.ImageTaskService, openAI *OpenAIGatewayHandler, durable *service.DurableImageService) *AsyncImageHandler {
+func ProvideAsyncImageHandler(tasks *service.ImageTaskService, openAI *OpenAIGatewayHandler, durable *service.DurableImageService, gateway *GatewayHandler) *AsyncImageHandler {
 	h := NewAsyncImageHandler(tasks, openAI)
 	h.durable = durable
+	h.gateway = gateway
 	return h
 }
 func (h *AsyncImageHandler) Start(router http.Handler) {
@@ -125,6 +127,9 @@ func (h *AsyncImageHandler) Prefer(c *gin.Context, platform string) bool {
 }
 func (h *AsyncImageHandler) submitDurable(c *gin.Context, key *service.APIKey, platform string, body []byte) {
 	c.Set(ctxKeyLocalImageTaskAdmission, true)
+	if !h.preflightMediaAudit(c, platform, body) {
+		return
+	}
 	model, size, count := "", "", 1
 	switch platform {
 	case service.PlatformGemini:
@@ -291,4 +296,46 @@ func canonicalImageParameters(value any) any {
 		}
 	}
 	return value
+}
+
+// Resolve and audit the actual selected account before creating/precharging an async task.
+// This dry run stops at the selected-account guard; it cannot submit upstream media.
+func (h *AsyncImageHandler) preflightMediaAudit(c *gin.Context, platform string, body []byte) bool {
+	if c.GetBool(mediaAuditPreflightDoneKey) {
+		return true
+	}
+	if h.openAI == nil {
+		imageTaskJSONError(c, 503, "media_audit_unavailable", "图片审核入口不可用")
+		return false
+	}
+	probe, recorder, cancel := newAsyncImageContext(c, body, 6*time.Minute)
+	defer cancel()
+	probe.Request = probe.Request.WithContext(c.Request.Context())
+	probe.Set(mediaAuditPreflightKey, true)
+	if platform == service.PlatformGemini {
+		if h.gateway == nil {
+			imageTaskJSONError(c, 503, "media_audit_unavailable", "图片审核入口不可用")
+			return false
+		}
+		h.gateway.GeminiV1BetaModels(probe)
+	} else {
+		h.executeWithGateway(platform, probe)
+	}
+	if !probe.GetBool(mediaAuditPreflightDoneKey) {
+		status := recorder.Code
+		if status < 400 {
+			status = 503
+		}
+		if recorder.Body.Len() > 0 {
+			c.Data(status, "application/json", recorder.Body.Bytes())
+		} else {
+			imageTaskJSONError(c, 503, "media_audit_unavailable", "无法完成图片账号审核")
+		}
+		return false
+	}
+	c.Set(mediaAuditPreflightDoneKey, true)
+	if hash := probe.GetString(mediaAuditPassKey); hash != "" {
+		c.Set(mediaAuditPassKey, hash)
+	}
+	return true
 }

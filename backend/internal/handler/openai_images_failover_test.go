@@ -88,6 +88,19 @@ func (u *openAIImagesFailoverHTTPUpstream) calls() []int64 {
 }
 
 func TestOpenAIGatewayHandlerImages_ServerErrorFailsOverAndReturnsClearErrorWhenExhausted(t *testing.T) {
+	runMediaAuditImagesSchedulingCase(t, false, false)
+}
+
+func TestMediaAuditImagesRefusalNeverDispatchesOrFailsOver(t *testing.T) {
+	runMediaAuditImagesSchedulingCase(t, true, false)
+}
+
+func TestMediaAuditImagesAsyncPreflightNeverDispatches(t *testing.T) {
+	runMediaAuditImagesSchedulingCase(t, false, true)
+}
+
+func runMediaAuditImagesSchedulingCase(t *testing.T, audited, preflight bool) {
+	t.Helper()
 	gin.SetMode(gin.TestMode)
 	groupID := int64(3130)
 	accounts := []service.Account{
@@ -114,6 +127,7 @@ func TestOpenAIGatewayHandlerImages_ServerErrorFailsOverAndReturnsClearErrorWhen
 			Credentials: map[string]any{"access_token": "token-2"},
 		},
 	}
+	accounts[0].Extra = map[string]any{service.MediaInputAuditExtraKey: audited}
 	accountRepo := openAIImagesFailoverAccountRepo{accounts: accounts}
 	upstream := &openAIImagesFailoverHTTPUpstream{}
 	cfg := &config.Config{RunMode: config.RunModeSimple}
@@ -176,7 +190,20 @@ func TestOpenAIGatewayHandlerImages_ServerErrorFailsOverAndReturnsClearErrorWhen
 	})
 	c.Set(string(middleware2.ContextKeyUser), middleware2.AuthSubject{UserID: 100, Concurrency: 0})
 
+	if preflight {
+		c.Set(mediaAuditPreflightKey, true)
+	}
 	handler.Images(c)
+	if audited || preflight {
+		require.Empty(t, upstream.calls())
+		if audited {
+			require.Equal(t, http.StatusServiceUnavailable, rec.Code)
+			require.Equal(t, "media_audit_unavailable", gjson.GetBytes(rec.Body.Bytes(), "error.code").String())
+		} else {
+			require.True(t, c.GetBool(mediaAuditPreflightDoneKey))
+		}
+		return
+	}
 
 	accountSelectingLogs := observedLogs.FilterMessage("openai.images.account_selecting").All()
 	require.NotEmpty(t, accountSelectingLogs)

@@ -221,6 +221,7 @@ describe('admin RiskControlView', () => {
     const wrapper = mount(RiskControlView, {
       global: {
         stubs: {
+          MediaInputAuditCard: true,
           AppLayout: AppLayoutStub,
           BaseDialog: BaseDialogStub,
           Icon: true,
@@ -255,6 +256,7 @@ describe('admin RiskControlView', () => {
     const wrapper = mount(RiskControlView, {
       global: {
         stubs: {
+          MediaInputAuditCard: true,
           AppLayout: AppLayoutStub,
           BaseDialog: BaseDialogStub,
           Icon: true,
@@ -296,6 +298,7 @@ describe('admin RiskControlView', () => {
     const wrapper = mount(RiskControlView, {
       global: {
         stubs: {
+          MediaInputAuditCard: true,
           AppLayout: AppLayoutStub,
           BaseDialog: BaseDialogStub,
           Icon: true,
@@ -364,6 +367,7 @@ describe('admin RiskControlView', () => {
     const wrapper = mount(RiskControlView, {
       global: {
         stubs: {
+          MediaInputAuditCard: true,
           AppLayout: AppLayoutStub,
           BaseDialog: BaseDialogStub,
           Icon: true,

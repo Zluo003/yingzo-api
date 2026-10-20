@@ -1,3 +1,4 @@
+import mediaInputAudit from './mediaInputAudit'
 import videoChannels from './videoChannels'
 import midjourney from './midjourney'
 import landing from './landing'
@@ -23,6 +24,7 @@ export default deepMergeMessages(
     admin,
     midjourney,
     videoChannels,
+    mediaInputAudit,
     suno,
     ...misc,
   },

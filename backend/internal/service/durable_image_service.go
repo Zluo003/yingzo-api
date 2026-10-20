@@ -18,20 +18,21 @@ import (
 )
 
 type DurableImageService struct {
-	ledger    ImageTaskLedger
-	encryptor SecretEncryptor
-	files     *FileStorageService
-	legacy    *ImageStorageSettingService
-	publisher *TemporaryAssetPublisher
-	billing   *BillingService
-	resolver  *ModelPricingResolver
-	rates     UserGroupRateRepository
-	keys      *APIKeyService
-	cache     *BillingCacheService
-	openAI    *OpenAIGatewayService
-	gateway   *GatewayService
-	once      sync.Once
-	cancel    context.CancelFunc
+	mediaAudit *MediaAuditService
+	ledger     ImageTaskLedger
+	encryptor  SecretEncryptor
+	files      *FileStorageService
+	legacy     *ImageStorageSettingService
+	publisher  *TemporaryAssetPublisher
+	billing    *BillingService
+	resolver   *ModelPricingResolver
+	rates      UserGroupRateRepository
+	keys       *APIKeyService
+	cache      *BillingCacheService
+	openAI     *OpenAIGatewayService
+	gateway    *GatewayService
+	once       sync.Once
+	cancel     context.CancelFunc
 }
 
 func NewDurableImageService(ledger ImageTaskLedger, encryptor SecretEncryptor, files *FileStorageService, legacy *ImageStorageSettingService, publisher *TemporaryAssetPublisher, billing *BillingService, resolver *ModelPricingResolver, rates UserGroupRateRepository, keys *APIKeyService, cache *BillingCacheService, openAI *OpenAIGatewayService, gateway *GatewayService) *DurableImageService {

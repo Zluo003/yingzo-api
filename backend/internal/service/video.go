@@ -422,6 +422,8 @@ type VideoTaskUpdateInput struct {
 }
 
 type VideoTaskLifecycleInput struct {
+	MediaAuditInput     MediaAuditInput
+	MediaAuditPassed    bool
 	PublicID            string
 	Account             *Account
 	APIKey              *APIKey

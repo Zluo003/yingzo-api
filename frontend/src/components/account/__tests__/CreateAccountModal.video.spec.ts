@@ -268,6 +268,19 @@ describe('CreateAccountModal video mode', () => {
     })
   })
 
+  it('enables media review only for an explicitly checked account', async () => {
+    const normal = await mountVideoModal()
+    const ordinary = await submitVideoAccount(normal)
+    expect(ordinary.extra.media_input_audit_enabled).toBeUndefined()
+    normal.unmount()
+    createAccountMock.mockClear()
+    const audited = await mountVideoModal()
+    await audited.get('[data-testid="media-input-audit-enabled"]').setValue(true)
+    const payload = await submitVideoAccount(audited)
+    expect(payload.extra.media_input_audit_enabled).toBe(true)
+    expect(payload.extra.video_provider).toBeTruthy()
+  })
+
   it('never sends the upstream billing probe flag for video accounts', async () => {
     const wrapper = await mountVideoModal()
 

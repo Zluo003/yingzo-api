@@ -95,6 +95,7 @@ type VideoService struct {
 	cfg                  *config.Config
 	agentModels          *AgentModelCatalogService
 	videoResultPublisher VideoResultPublisher
+	mediaAudit           *MediaAuditService
 	apiKeyLoader         *APIKeyService
 
 	startLifecycleFunc func(VideoTaskLifecycleInput)
@@ -208,6 +209,25 @@ func (s *VideoService) createTask(ctx context.Context, input *VideoCreateInput) 
 	if err != nil {
 		return nil, err
 	}
+	auditBody, _ := json.Marshal(input.Request)
+	if len(input.Request.Raw) > 0 {
+		auditBody, _ = json.Marshal(input.Request.Raw)
+	}
+	auditInput := ExtractMediaAuditInput(auditBody)
+	auditInput.UserID = input.APIKey.UserID
+	auditInput.UserEmail = input.APIKey.User.Email
+	auditInput.APIKeyID = input.APIKey.ID
+	auditInput.RequestID = input.RequestID
+	auditInput.Model = normalized.Model
+	auditInput.MediaType = "video"
+	auditInput.VideoChannelID = normalized.VideoChannelID
+	if auditErr := s.mediaAudit.Check(ctx, account, auditInput); auditErr != nil {
+		var failure *MediaAuditError
+		if errors.As(auditErr, &failure) {
+			return nil, infraerrors.New(failure.StatusCode(), failure.Code(), failure.Error()).WithMetadata(map[string]string{"event_id": failure.EventID})
+		}
+		return nil, auditErr
+	}
 	upstreamModel := videoUpstreamModelForAccount(account, normalized)
 	upstreamBody := videoUpstreamBodyForAccount(account, normalized, upstreamModel)
 	upstreamEndpoint := normalizedVideoEndpoint(input.UpstreamEndpoint)
@@ -244,6 +264,8 @@ func (s *VideoService) createTask(ctx context.Context, input *VideoCreateInput) 
 	}
 
 	lifecycleInput := VideoTaskLifecycleInput{
+		MediaAuditInput:     auditInput,
+		MediaAuditPassed:    AccountNeedsMediaAudit(account),
 		PublicID:            task.PublicID,
 		Account:             account,
 		APIKey:              input.APIKey,
@@ -785,6 +807,13 @@ func (s *VideoService) runLifecycle(input VideoTaskLifecycleInput) {
 	var upstreamTaskID string
 	for attempt := 1; ; attempt++ {
 		upstreamTaskID = ""
+		if AccountNeedsMediaAudit(account) && !input.MediaAuditPassed {
+			if auditErr := s.mediaAudit.Check(context.Background(), account, input.MediaAuditInput); auditErr != nil {
+				lastErr = auditErr
+				break
+			}
+			input.MediaAuditPassed = true
+		}
 		created, err := s.createUpstreamTask(context.Background(), account, upstreamBody)
 		if err == nil {
 			upstreamTaskID = created.ID
@@ -1923,6 +1952,11 @@ type mappedVideoClientError struct {
 }
 
 func mapVideoUpstreamError(err error, polling bool) mappedVideoClientError {
+	var auditErr *MediaAuditError
+	if errors.As(err, &auditErr) {
+		return mappedVideoClientError{VideoClientError: videoClientError(auditErr.Code(), auditErr.Error()), StatusCode: auditErr.StatusCode()}
+	}
+
 	var upstreamErr *videoUpstreamError
 	if errors.As(err, &upstreamErr) {
 		switch upstreamErr.StatusCode {

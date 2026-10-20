@@ -759,6 +759,7 @@ func ProvideVideoService(
 	cfg *config.Config,
 	agentModels *AgentModelCatalogService,
 	videoResultPublisher VideoResultPublisher,
+	mediaAudit *MediaAuditService,
 ) *VideoService {
 	videoService := NewVideoService(
 		accountRepo,
@@ -776,6 +777,7 @@ func ProvideVideoService(
 		httpUpstream,
 		cfg,
 	)
+	videoService.mediaAudit = mediaAudit
 	videoService.SetAgentModelCatalog(agentModels)
 	videoService.SetVideoResultPublisher(videoResultPublisher)
 	return videoService
@@ -787,6 +789,7 @@ func ProvidePluginHostInfo(buildInfo BuildInfo) PluginHostInfo {
 
 // ProviderSet is the Wire provider set for all services
 var ProviderSet = wire.NewSet(
+	ProvideMediaAuditService,
 	// Core services
 	ProvideAuthService,
 	NewPasskeyService,
@@ -813,10 +816,10 @@ var ProviderSet = wire.NewSet(
 	ProvideVideoService,
 	ProvideImageStorageSettingService,
 	ProvideImageTaskService,
-	NewDurableImageService,
+	ProvideDurableImageService,
 	NewMusicTaskService,
 	ProvideBatchImageModelPricingResolver,
-	NewBatchImagePublicService,
+	ProvideBatchImagePublicService,
 	NewBatchImageDownloadService,
 	ProvideBatchImageCleanupService,
 	ProvideBatchImageWorkerRuntime,
@@ -1048,4 +1051,17 @@ func ProvideCNProviderBalanceCheckService(
 	svc := NewCNProviderBalanceCheckService(accountRepo, balanceService, quotaService, cfg, time.Duration(minutes)*time.Minute)
 	svc.Start()
 	return svc
+}
+
+func ProvideBatchImagePublicService(repo BatchImageRepository, accountRepo AccountRepository, groupRepo GroupRepository, rates UserGroupRateRepository, queue BatchImageQueue, pricing *BatchImageModelPricingResolver, billing UsageBillingRepository, cache APIKeyAuthCacheInvalidator, cfg *config.Config, mediaAudit *MediaAuditService, users UserRepository) *BatchImagePublicService {
+	s := NewBatchImagePublicService(repo, accountRepo, groupRepo, rates, queue, pricing, billing, cache, cfg)
+	s.mediaAudit = mediaAudit
+	s.mediaAuditUsers = users
+	return s
+}
+
+func ProvideDurableImageService(ledger ImageTaskLedger, encryptor SecretEncryptor, files *FileStorageService, legacy *ImageStorageSettingService, publisher *TemporaryAssetPublisher, billing *BillingService, resolver *ModelPricingResolver, rates UserGroupRateRepository, keys *APIKeyService, cache *BillingCacheService, openAI *OpenAIGatewayService, gateway *GatewayService, mediaAudit *MediaAuditService) *DurableImageService {
+	s := NewDurableImageService(ledger, encryptor, files, legacy, publisher, billing, resolver, rates, keys, cache, openAI, gateway)
+	s.mediaAudit = mediaAudit
+	return s
 }

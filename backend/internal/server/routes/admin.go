@@ -214,6 +214,12 @@ func registerAdminComplianceRoutes(admin *gin.RouterGroup, h *handler.Handlers) 
 func registerContentModerationRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	risk := admin.Group("/risk-control")
 	{
+		risk.GET("/media-input/config", h.Admin.ContentModeration.GetMediaAuditConfig)
+		risk.PUT("/media-input/config", h.Admin.ContentModeration.SaveMediaAuditConfig)
+		risk.POST("/media-input/probe", h.Admin.ContentModeration.ProbeMediaAudit)
+		risk.GET("/media-input/events", h.Admin.ContentModeration.ListMediaAuditEvents)
+		risk.GET("/media-input/events/:id", h.Admin.ContentModeration.GetMediaAuditEvent)
+		risk.GET("/media-input/events/:id/assets/:index", h.Admin.ContentModeration.GetMediaAuditAsset)
 		risk.GET("/config", h.Admin.ContentModeration.GetConfig)
 		risk.PUT("/config", h.Admin.ContentModeration.UpdateConfig)
 		risk.POST("/api-keys/test", h.Admin.ContentModeration.TestAPIKeys)

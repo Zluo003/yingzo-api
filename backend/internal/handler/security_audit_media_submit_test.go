@@ -52,6 +52,9 @@ func (e *handlerPromptEngine) snapshot() (evaluated, enqueued int, requests []se
 }
 
 func securityAuditMediaTestMiddleware(c *gin.Context) {
+	// These coordinator tests replace the upstream executor. Account selection and
+	// the account audit guard are covered by the image scheduling tests.
+	c.Set(mediaAuditPreflightDoneKey, true)
 	groupID := int64(3)
 	user := &service.User{ID: 7, Username: "media-user", Email: "media@example.test"}
 	c.Set(string(middleware2.ContextKeyAPIKey), &service.APIKey{

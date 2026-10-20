@@ -12,7 +12,8 @@ import (
 )
 
 type ContentModerationHandler struct {
-	service *service.ContentModerationService
+	mediaAudit *service.MediaAuditService
+	service    *service.ContentModerationService
 }
 
 func NewContentModerationHandler(svc *service.ContentModerationService) *ContentModerationHandler {

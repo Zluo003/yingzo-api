@@ -136,6 +136,17 @@ describe('EditAccountModal video resolutions', () => {
     showErrorMock.mockReset()
   })
 
+  it('restores and disables media review while preserving provider settings', async () => {
+    const wrapper = mountModal(buildVideoAccount({ media_input_audit_enabled: true }))
+    await flushPromises()
+    const toggle = wrapper.get('[data-testid="media-input-audit-enabled"]')
+    expect((toggle.element as HTMLInputElement).checked).toBe(true)
+    await toggle.setValue(false)
+    const payload = await submitEdit(wrapper)
+    expect(payload.extra.media_input_audit_enabled).toBeUndefined()
+    expect(payload.extra.video_provider).toBe('newtoken')
+  })
+
   it.each([
     { 'seedance-2.0': 'seedance-2.0', 'seedance-2.5': 'seedance-2.5' },
     { 'seedance-2.0': 'seedance2.0-933-2', 'seedance-2.5': 'seedance2.5' },

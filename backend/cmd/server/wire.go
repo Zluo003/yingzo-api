@@ -75,6 +75,7 @@ func provideServiceBuildInfo(buildInfo handler.BuildInfo) service.BuildInfo {
 }
 
 func provideCleanup(
+	mediaAudit *service.MediaAuditService,
 	durableImages *service.DurableImageService,
 	musicTasks *service.MusicTaskService,
 	entClient *ent.Client,
@@ -132,6 +133,7 @@ func provideCleanup(
 
 		// 应用层清理步骤可并行执行，基础设施资源（Redis/Ent）最后按顺序关闭。
 		parallelSteps := []cleanupStep{
+			{"MediaAuditService", func() error { mediaAudit.Stop(); return nil }},
 			{"MusicTaskService", func() error {
 				if musicTasks != nil {
 					musicTasks.Stop()

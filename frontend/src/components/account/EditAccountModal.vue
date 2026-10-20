@@ -11,6 +11,7 @@
       @submit.prevent="handleSubmit"
       class="space-y-5"
     >
+      <MediaInputAuditField v-if="['video', 'openai', 'gemini', 'antigravity', 'grok', 'image'].includes(account.platform)" v-model="mediaInputAuditEnabled" />
       <div>
         <label class="input-label">{{ t('common.name') }}</label>
         <input v-model="form.name" type="text" required class="input" data-tour="edit-account-form-name" />
@@ -3132,6 +3133,7 @@ import CnBaseUrlPresets from '@/components/account/CnBaseUrlPresets.vue'
 import HeaderOverrideEditor from '@/components/account/HeaderOverrideEditor.vue'
 import OllamaCloudUsageSettings from '@/components/account/OllamaCloudUsageSettings.vue'
 import VideoModelChannelsField from '@/components/account/VideoModelChannelsField.vue'
+import MediaInputAuditField from '@/components/account/MediaInputAuditField.vue'
 import { parseVideoModelChannels, serializeVideoModelChannels } from '@/components/account/videoModelChannels'
 import VideoModelCapabilitiesField from '@/components/account/VideoModelCapabilitiesField.vue'
 import VideoModelMappingField from '@/components/account/VideoModelMappingField.vue'
@@ -3647,6 +3649,7 @@ const editPlanType = ref<string>('')
 const openAICompactMode = ref<OpenAICompactMode>('auto')
 const openAIResponsesMode = ref<OpenAIResponsesMode>('auto')
 // Images 非流式响应缺 b64_json 时由网关下载 url 回填（仅 OpenAI API Key）。
+const mediaInputAuditEnabled = ref(false)
 const openAIImagesUrlToB64JsonEnabled = ref(false)
 const openAIEndpointCapabilities = ref<OpenAIEndpointCapability[]>(['chat_completions', 'embeddings'])
 const openaiOAuthResponsesWebSocketV2Mode = ref<OpenAIWSMode>(OPENAI_WS_MODE_OFF)
@@ -4140,6 +4143,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
 	upstreamRequestIdHeader.value = readUpstreamRequestIdHeader(extra)
+	mediaInputAuditEnabled.value = extra?.media_input_audit_enabled === true
 	openAIImagesUrlToB64JsonEnabled.value = extra?.images_url_to_b64_json === true
 	autoPause5hThreshold.value = typeof extra?.auto_pause_5h_threshold === 'number' ? extra.auto_pause_5h_threshold * 100 : null
 	autoPause7dThreshold.value = typeof extra?.auto_pause_7d_threshold === 'number' ? extra.auto_pause_7d_threshold * 100 : null
@@ -5125,6 +5129,13 @@ const persistGrokMediaEligibility = async (accountID: number, updatedAccount: Ac
 }
 
 const submitUpdateAccount = async (accountID: number, updatePayload: Record<string, unknown>) => {
+  if (mediaInputAuditEnabled.value !== (props.account?.extra?.media_input_audit_enabled === true)) {
+    const extra = { ...((updatePayload.extra || props.account?.extra || {}) as Record<string, unknown>) }
+    if (mediaInputAuditEnabled.value) extra.media_input_audit_enabled = true
+    else delete extra.media_input_audit_enabled
+    updatePayload.extra = extra
+  }
+
   submitting.value = true
   try {
     let updatedAccount = await adminAPI.accounts.update(accountID, withAntigravityConfirmFlag(updatePayload))

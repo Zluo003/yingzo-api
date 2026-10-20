@@ -49,6 +49,7 @@ type GatewayHandler struct {
 	apiKeyService             *service.APIKeyService
 	usageRecordWorkerPool     *service.UsageRecordWorkerPool
 	errorPassthroughService   *service.ErrorPassthroughService
+	mediaAuditService         *service.MediaAuditService
 	contentModerationService  *service.ContentModerationService
 	securityAuditCoordinator  *securityaudit.Coordinator
 	concurrencyHelper         *ConcurrencyHelper
@@ -456,6 +457,14 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			account = latest
 			selection.Account = latest
+			if service.MediaAuditImageRequest(reqModel, body, account) {
+				if !runAccountMediaAudit(c, h.mediaAuditService, account, reqModel, "image", body) {
+					if accountReleaseFunc != nil {
+						accountReleaseFunc()
+					}
+					return
+				}
+			}
 			// 等待路径保持既有 eager 绑定（无门时 helper 直接绑定）；调度器已
 			// 抢槽的直达路径无门时由选号内部绑定，这里只在门下补准入后绑定。
 			if selection.ProfitGateActive() || !selection.Acquired {
@@ -814,6 +823,14 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			account = latest
 			selection.Account = latest
+			if service.MediaAuditImageRequest(reqModel, body, account) {
+				if !runAccountMediaAudit(c, h.mediaAuditService, account, reqModel, "image", body) {
+					if accountReleaseFunc != nil {
+						accountReleaseFunc()
+					}
+					return
+				}
+			}
 			// 记录本请求注册过会话槽的账号（profit 准入后账号已定）
 			sessionSlotAccounts[account.ID] = account
 			// 等待路径保持既有 eager 绑定（无门时 helper 直接绑定）；调度器已

@@ -51,6 +51,7 @@
       @submit.prevent="handleSubmit"
       class="space-y-5"
     >
+      <MediaInputAuditField v-if="['video', 'openai', 'gemini', 'antigravity', 'grok', 'image'].includes(form.platform)" v-model="mediaInputAuditEnabled" />
       <div>
         <label class="input-label">{{ t('admin.accounts.accountName') }}</label>
         <input
@@ -4150,6 +4151,7 @@ import {
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
 import VideoModelChannelsField from './VideoModelChannelsField.vue'
+import MediaInputAuditField from './MediaInputAuditField.vue'
 import { serializeVideoModelChannels } from './videoModelChannels'
 import VideoModelCapabilitiesField from './VideoModelCapabilitiesField.vue'
 import VideoModelMappingField from './VideoModelMappingField.vue'
@@ -4181,11 +4183,13 @@ const authStore = useAuthStore()
 const browserTimeZone = getBrowserTimeZone()
 
 // 上游请求标识响应头：上游供应商用它回传请求 ID，留空则不记录。
+const mediaInputAuditEnabled = ref(false)
 const upstreamRequestIdHeader = ref('')
 const withUpstreamRequestIdHeader = <T extends Record<string, unknown> | undefined>(
   extra: T
 ): T | Record<string, unknown> => {
   const name = upstreamRequestIdHeader.value.trim()
+  if (mediaInputAuditEnabled.value) return { ...(extra || {}), media_input_audit_enabled: true, ...(name ? { upstream_request_id_header: name } : {}) }
   if (!name) return extra
   return { ...(extra || {}), upstream_request_id_header: name }
 }
@@ -5725,6 +5729,7 @@ const ensureAntigravityMixedChannelConfirmed = async (onConfirm: () => Promise<v
 }
 
 const submitCreateAccount = async (payload: CreateAccountRequest) => {
+  if (mediaInputAuditEnabled.value) payload.extra = { ...(payload.extra || {}), media_input_audit_enabled: true }
   submitting.value = true
   try {
     const account = await adminAPI.accounts.create(withAntigravityConfirmFlag(payload))
@@ -5912,6 +5917,7 @@ const resetForm = () => {
   zhipuProject.value = ''
   upstreamRequestIdHeader.value = ''
   upstreamModelsPreviewed.value = false
+  mediaInputAuditEnabled.value = false
   openAIImagesUrlToB64JsonEnabled.value = false
   oauth.resetState()
   openaiOAuth.resetState()
