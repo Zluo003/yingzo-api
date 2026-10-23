@@ -121,6 +121,34 @@ func TestGetAgentPricingSnapshotReturnsOnlyConfiguredPrices(t *testing.T) {
 	require.Equal(t, service.ImageBillingSize1K, snapshot.Rules[0].Resolution)
 }
 
+func TestGetAgentPricingSnapshotDisplaysSeedreamLowTierAs1Point5K(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, model := range []string{service.SeedreamProModel, service.SeedreamFlashModel} {
+		t.Run(model, func(t *testing.T) {
+			groupID := int64(19)
+			h := newAgentPricingHandlerForTest(groupID, []service.AgentGroupModel{{
+				ID: 1, GroupID: groupID, Platform: service.PlatformOpenAI, ModelCode: model,
+				MediaType: service.AgentMediaTypeImage, Enabled: true, Available: true,
+				Prices: []service.AgentModelPrice{
+					{Resolution: "1K", BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0.1},
+					{Resolution: "2K", BillingUnit: service.AgentBillingUnitImage, UnitPrice: 0.2},
+				},
+			}})
+			c, recorder := agentPricingRequestContext(groupID)
+			h.GetAgentPricingSnapshot(c)
+			require.Equal(t, http.StatusOK, recorder.Code)
+			var snapshot agentPricingSnapshot
+			require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &snapshot))
+			require.Len(t, snapshot.Rules, 2)
+			require.Equal(t, "1.5K", snapshot.Rules[0].Resolution)
+			require.Equal(t, "2K", snapshot.Rules[1].Resolution)
+			require.InDelta(t, 0.1, snapshot.Rules[0].UnitPrice, 1e-9)
+			require.Equal(t, 1, *snapshot.Rules[0].FreeInputImages)
+			require.Zero(t, *snapshot.Rules[0].InputImageUnitPrice)
+		})
+	}
+}
+
 func TestGetAgentPricingCompatibilitySkipsDisabledVideoResolution(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	groupID := int64(21)

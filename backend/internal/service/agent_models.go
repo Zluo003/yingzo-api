@@ -502,7 +502,9 @@ func (s *AgentModelCatalogService) ResolveMediaPrice(
 	}
 	platform = normalizeAgentPlatform(platform)
 	var err error
-	if mediaType != AgentMediaTypeImage || len(models) != 1 || models[0] != MidjourneyModel || !IsMidjourneyPriceTier(resolution) {
+	if mediaType == AgentMediaTypeImage && len(models) == 1 && IsSeedreamModel(models[0]) {
+		resolution, err = normalizeSeedreamPriceTier(resolution)
+	} else if mediaType != AgentMediaTypeImage || len(models) != 1 || models[0] != MidjourneyModel || !IsMidjourneyPriceTier(resolution) {
 		resolution, err = normalizeAgentPriceResolution(mediaType, resolution)
 	}
 	if err != nil {

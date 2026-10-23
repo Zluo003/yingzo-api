@@ -66,7 +66,7 @@ func TestSeedreamFrozenAreaBillingAndReservation(t *testing.T) {
 	config, err := catalog.GetConfig(ctx, gid)
 	require.NoError(t, err)
 	free, price := 1, 0.03
-	_, err = catalog.UpdateModel(ctx, gid, config.Models[0].ID, AgentModelConfigInput{MediaType: AgentMediaTypeImage, Enabled: true, FreeInputImages: &free, InputImageUnitPrice: &price, Prices: []AgentModelPrice{{Resolution: "1K", UnitPrice: 0.1}, {Resolution: "2K", UnitPrice: 0.2}}})
+	_, err = catalog.UpdateModel(ctx, gid, config.Models[0].ID, AgentModelConfigInput{MediaType: AgentMediaTypeImage, Enabled: true, FreeInputImages: &free, InputImageUnitPrice: &price, Prices: []AgentModelPrice{{Resolution: "1.5K", UnitPrice: 0.1}, {Resolution: "2K", UnitPrice: 0.2}}})
 	require.NoError(t, err)
 	key := &APIKey{ID: 2, UserID: 1, GroupID: &gid, Group: &Group{ID: gid, Kind: "agent", SystemCode: "yingzo"}}
 	r, err := ParseSeedreamRequest([]byte(`{"model":"seedream-5-0-pro","prompt":"combine","size":"1.5K","image_urls":["https://image.example/a.png","https://image.example/b.png","https://image.example/c.png"]}`))
@@ -98,8 +98,33 @@ func TestSeedreamFrozenAreaBillingAndReservation(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 17, q.Count)
 	require.InDelta(t, 170, q.Charge.BalanceCost, 1e-9)
+	// Layer billing sums the actual base image and layers, with reference cost once per task.
+	cost, err = q.Seedream.cost([]int64{2048 * 2048, 492 * 98, 100 * 100})
+	require.NoError(t, err)
+	require.InDelta(t, 20, cost.ActualCost, 1e-9)
 	_, err = normalizeAgentModelPricesForModel(SeedreamProModel, AgentMediaTypeImage, []AgentModelPrice{{Resolution: "4K", UnitPrice: 1}})
 	require.Error(t, err)
+}
+
+func TestSeedreamPriceTierAliases(t *testing.T) {
+	ctx := context.Background()
+	for _, model := range []string{SeedreamProModel, SeedreamFlashModel} {
+		t.Run(model, func(t *testing.T) {
+			catalog, _ := configuredAgentCatalogForEstimateTest(t, 9, PlatformOpenAI, model, AgentMediaTypeImage, "1.5K", 0.15)
+			for _, resolution := range []string{"1K", "1.5K", " 1.5k "} {
+				price, _, err := catalog.ResolveMediaPrice(ctx, 9, PlatformOpenAI, AgentMediaTypeImage, resolution, model)
+				require.NoError(t, err)
+				require.Equal(t, "1K", price.Resolution)
+				require.InDelta(t, 0.15, price.UnitPrice, 1e-9)
+			}
+			_, err := normalizeAgentModelPricesForModel(model, AgentMediaTypeImage, []AgentModelPrice{
+				{Resolution: "1K", UnitPrice: 0.1}, {Resolution: "1.5K", UnitPrice: 0.15},
+			})
+			require.ErrorContains(t, err, "duplicate price resolution")
+			_, _, err = catalog.ResolveMediaPrice(ctx, 9, PlatformOpenAI, AgentMediaTypeImage, "4K", model)
+			require.Error(t, err)
+		})
+	}
 }
 
 func seedreamTestAccount() Account {

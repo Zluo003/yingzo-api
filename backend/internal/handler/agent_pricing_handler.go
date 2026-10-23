@@ -154,10 +154,14 @@ func (h *AgentHandler) GetAgentPricingSnapshot(c *gin.Context) {
 			if !agentModelPriceEnabled(price) {
 				continue
 			}
+			resolution := price.Resolution
+			if service.IsSeedreamModel(model.ModelCode) && resolution == "1K" {
+				resolution = "1.5K"
+			}
 			rules = append(rules, agentPricingSnapshotRule{
 				Model: model.ModelCode, Platform: model.Platform, MediaType: model.MediaType,
 				FreeInputImages: free, InputImageUnitPrice: inputPrice,
-				VideoChannelID: price.VideoChannelID, Resolution: price.Resolution, UnitKind: price.BillingUnit,
+				VideoChannelID: price.VideoChannelID, Resolution: resolution, UnitKind: price.BillingUnit,
 				UnitPrice: price.UnitPrice, EffectiveUnitPrice: price.UnitPrice,
 				BillingMultiplier: 1,
 			})

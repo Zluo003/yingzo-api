@@ -522,11 +522,16 @@ func normalizeAgentModelPricesForModel(model, mediaType string, prices []AgentMo
 		if mediaType != AgentMediaTypeImage {
 			return nil, errors.New("seedream is an image model")
 		}
-		for _, p := range prices {
-			if p.Resolution != "1K" && p.Resolution != "2K" {
-				return nil, errors.New("seedream prices use 1K (including 1.5K) and 2K only")
+		normalized := make([]AgentModelPrice, len(prices))
+		for i, price := range prices {
+			resolution, err := normalizeSeedreamPriceTier(price.Resolution)
+			if err != nil {
+				return nil, err
 			}
+			price.Resolution = resolution
+			normalized[i] = price
 		}
+		return normalizeAgentModelPrices(mediaType, normalized)
 	}
 	if model != MidjourneyModel {
 		return normalizeAgentModelPrices(mediaType, prices)

@@ -128,7 +128,7 @@ export default {
         },
         image: {
           title: 'Image models',
-          hint: 'Images are billed per image: fill in the 1K/2K/4K unit price for each model. A price tier doubles as the capability switch: configured tiers are advertised downstream; empty tiers stay disabled and are never sent.',
+          hint: 'Images are billed per image: configure unit prices for the tiers supported by each model. A price tier doubles as the capability switch: configured tiers are advertised downstream; empty tiers stay disabled and are never sent.',
         },
         video: {
           title: 'Video models',

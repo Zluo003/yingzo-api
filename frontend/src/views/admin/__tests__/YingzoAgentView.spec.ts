@@ -165,18 +165,22 @@ describe('admin YingzoAgentView', () => {
     expect(updateAgentModel).toHaveBeenCalledWith(7, 9, expect.objectContaining({ prices: expect.arrayContaining(tiers.map((resolution, index) => ({ resolution, unit_price: index + 2 }))) }))
   })
 
-  it('limits Seedream output tiers and saves reference pricing independently', async () => {
-    getAgentModels.mockResolvedValue({ models: [model({ id: 8, model_code: 'seedream-5-0-pro', media_type: 'image', prices: [{ resolution: '1K', billing_unit: 'image', unit_price: 0.1 }, { resolution: '2K', billing_unit: 'image', unit_price: 0.2 }] })] })
+  it.each(['seedream-5-0-pro', 'seedream-5-0-flash'])('shows 1.5K for legacy 1K pricing and saves reference pricing independently for %s', async (modelCode) => {
+    getAgentModels.mockResolvedValue({ models: [model({ id: 8, model_code: modelCode, media_type: 'image', prices: [{ resolution: '1K', billing_unit: 'image', unit_price: 0.1 }, { resolution: '2K', billing_unit: 'image', unit_price: 0.2 }] })] })
     const wrapper = await mountView()
     await wrapper.get('[data-testid="yingzo-agent-tab-image"]').trigger('click')
     expect(wrapper.find('[data-testid="yingzo-agent-price-8-4K"]').exists()).toBe(false)
-    expect(wrapper.find('[data-testid="yingzo-agent-price-8-1.5K"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="yingzo-agent-price-8-1K"]').exists()).toBe(false)
+    expect(inputValue(wrapper, 'yingzo-agent-price-8-1.5K')).toBe('0.1')
+    expect(wrapper.get('[data-testid="yingzo-agent-save"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="yingzo-agent-layer-billing-8"]').text()).toBe('seedream.layerBillingHint')
     expect(wrapper.get('[data-testid="yingzo-agent-input-image-price-8"]').attributes('placeholder')).toBe('0')
+    await wrapper.get('[data-testid="yingzo-agent-price-8-1.5K"]').setValue('0.15')
     await wrapper.get('[data-testid="yingzo-agent-free-images-8"]').setValue('1')
     await wrapper.get('[data-testid="yingzo-agent-input-image-price-8"]').setValue('0.03')
     await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
     await flushPromises()
-    expect(updateAgentModel).toHaveBeenCalledWith(7, 8, expect.objectContaining({ media_type: 'image', free_input_images: 1, input_image_unit_price: 0.03, prices: [{ resolution: '1K', unit_price: 0.1 }, { resolution: '2K', unit_price: 0.2 }] }))
+    expect(updateAgentModel).toHaveBeenCalledWith(7, 8, expect.objectContaining({ media_type: 'image', free_input_images: 1, input_image_unit_price: 0.03, prices: [{ resolution: '1K', unit_price: 0.15 }, { resolution: '2K', unit_price: 0.2 }] }))
   })
 
   it('saves a minimax free input image count typed into the number input', async () => {

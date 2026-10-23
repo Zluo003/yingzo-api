@@ -31,6 +31,16 @@ func IsSeedreamModel(model string) bool {
 	return model == SeedreamProModel || model == SeedreamFlashModel
 }
 func CanonicalSeedreamModel(model string) string { return strings.ReplaceAll(model, "5.0", "5-0") }
+func normalizeSeedreamPriceTier(resolution string) (string, error) {
+	switch strings.ToUpper(strings.TrimSpace(resolution)) {
+	case "1K", "1.5K":
+		return "1K", nil
+	case "2K":
+		return "2K", nil
+	default:
+		return "", errors.New("seedream prices use 1.5K (including 1K) and 2K only")
+	}
+}
 func (a *Account) IsSeedream() bool {
 	return a != nil && a.Platform == PlatformOpenAI && a.Type == AccountTypeAPIKey && a.Extra["image_provider"] == SeedreamProvider
 }

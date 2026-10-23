@@ -15,7 +15,7 @@
 2. 系统设置 → 素材存储 → 生成结果，配置本地或对象存储，并开启异步图片任务。关闭时新请求返回 `503 image_tasks_disabled`，已接受任务仍能轮询、结算和退款。
 3. 账户管理 → 添加图片模型 → **Seedream 5.0 Pro / Flash · APIMart**。填写 APIMart API Key，Base URL 默认 `https://api.apimart.ai`，也支持末尾 `/v1`。可配置并发、优先级、代理及绑定分组。
 4. 专用账户同时声明两个模型，不参与文本或普通同步 OpenAI 图片调度。编辑时 API Key 留空保留旧值；测试账户只请求 `/v1/models` 检查连接和鉴权，不创建付费图片。
-5. Yingzo Agent → 图片计费，同步模型后，分别为两个模型配置并启用 **1K、2K 两个输出价格**，再启用模型。1.5K 共用 1K 价格，不填写独立 1.5K 或 4K 价格。
+5. Yingzo Agent → 图片计费，同步模型后，分别为两个模型配置并启用 **1.5K、2K 两个输出价格**，再启用模型。1K 与 1.5K 共用 1.5K 价格，不填写独立 1K 或 4K 价格。
 6. 同一表格可设置免费参考图数量和超额输入图片单价。默认首张参考图免费；免费数量 `0` 表示全部收费；超额单价留空或 `0` 表示下游免费。请根据实际采购成本设置，系统不会自动套用 APIMart 的标价。
 
 账户保存为 `platform=openai`、`type=apikey`、`extra.image_account=true`、`extra.image_provider=apimart_seedream`，模型映射固定为上述两个 ID。
@@ -51,7 +51,7 @@ Agent API Key 调用 `GET /v1/models`。已配置两个计费档位后，能力�
 
 `asynchronous` 同时受系统异步开关控制。缺少任一输出档位时 `supported_image_sizes` 为空，应提示管理员补齐价格。`max_output_images=1` 表示正常生图只能一张，拆图单独使用 `max_layer_outputs`。
 
-`GET /api/v1/agent/pricing` 的模型价格规则仍为 `unit_kind=image`，`resolution` 仅 `1K`、`2K`，并附带 `free_input_images` 与 `input_image_unit_price`。1.5K 映射到 1K。显示实际 `effective_unit_price`，不要把上游文档美元标价作为 Yingzo 单价。
+`GET /api/v1/agent/pricing` 的模型价格规则仍为 `unit_kind=image`，`resolution` 为 `1.5K`、`2K`，并附带 `free_input_images` 与 `input_image_unit_price`。请求 `1K` 或 `1.5K` 都使用 `1.5K` 单价。显示实际 `effective_unit_price`，不要把上游文档美元标价作为 Yingzo 单价。
 
 Agent 可调用 `POST /api/v1/agent/generation/estimates` 获取提交时的预扣金额：
 
@@ -185,14 +185,14 @@ Seedream 始终异步，成功提交返回 **HTTP 202**。客户端应发送 `Pr
 
 结果经过网关验证并转存，URL 为 Yingzo 素材地址或对象存储 URL。不要调用 APIMart 的 `/v1/tasks`，下游不持有上游任务 ID 或密钥。对象存储签名链接过期可重新查询刷新；素材有保留期限，应及时下载持久化。
 
-计费规则：每张实际输出图片总像素 **≤ 2,601,124 用 1K 单价，否则用 2K 单价**；不是按最长边分档，1.5K 的所有内置比例都归 1K。参考图加价单独计一次：
+计费规则：每张实际输出图片总像素 **≤ 2,601,124 用 1.5K 单价，否则用 2K 单价**；不是按最长边分档，1K 与 1.5K 请求都共用 1.5K 单价。拆图按实际返回的图片数量逐张计费，底图也计为一张；每张图片按自身总像素选择 1.5K 或 2K 单价。参考图加价单独计一次：
 
 ```text
 最终费用 = 各输出图片按实际面积分档的单价之和
          + max(0, 输入参考图数量 - 配置免费数量) × 超额参考图单价
 ```
 
-提交时普通生图按 **max(1K 单价, 2K 单价)** 预扣一张；拆图按该单价预扣 **17 张**，再加参考图费用。成功后退还预扣差额，失败全额退款；`refund_status=refunded` 表示退款事务已提交。价格在接受任务时冻结，排队期间改价不会追溯影响已接受任务。退款明细遵循现有异步图片账本。
+提交时普通生图按 **max(1.5K 单价, 2K 单价)** 预扣一张；拆图按该单价预扣 **17 张**，再加参考图费用。成功后退还预扣差额，失败全额退款；`refund_status=refunded` 表示退款事务已提交。价格在接受任务时冻结，排队期间改价不会追溯影响已接受任务。退款明细遵循现有异步图片账本。
 
 提交连接中断时，先用同一 API Key 查询 `GET /v1/images/tasks/by-idempotency/{原幂等键}`，或用原幂等键和相同请求重放。不要生成新幂等键重复购买。不同参数复用同一键返回 `409 idempotency_conflict`。同一用户的另一把 Key 不能读取本任务。
 

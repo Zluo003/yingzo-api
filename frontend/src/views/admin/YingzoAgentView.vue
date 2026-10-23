@@ -208,6 +208,9 @@
             >
               <td class="py-2 pr-3 font-medium text-gray-900 dark:text-white">
                 {{ model.model_code }}
+                <p v-if="isSeedreamModel(model.model_code)" class="mt-1 max-w-xs text-xs font-normal text-gray-500 dark:text-gray-400" :data-testid="`yingzo-agent-layer-billing-${model.id}`">
+                  {{ t('seedream.layerBillingHint') }}
+                </p>
               </td>
               <td class="py-2 pr-3 text-gray-500 dark:text-gray-400">{{ model.platform }}</td>
               <td class="py-2 pr-3">
@@ -389,9 +392,9 @@ const enabledCount = computed(
   () => models.value.filter((model) => drafts[model.id]?.enabled).length,
 )
 
-/** 图片固定 1K/2K/4K；视频按该模型官方支持的档位，避免让管理员配出永远用不上的价。 */
+/** 按当前模型的计费档位生成表头，Seedream 和 Midjourney 使用各自的档位。 */
 const resolutionColumns = computed(() => {
-  const union = new Set<string>(activeTab.value === 'image' ? IMAGE_RESOLUTIONS : [])
+  const union = new Set<string>()
   for (const model of modelsByTab.value[activeTab.value]) {
     const mediaType = drafts[model.id]?.mediaType ?? model.media_type
     if (mediaType === 'text') continue
@@ -408,7 +411,7 @@ function resolutionColumnsForType(mediaType: AgentMediaType, modelCode: string):
   if (mediaType === 'audio') return SUNO_BILLING_TIERS
   if (mediaType === 'image') {
     if (modelCode === MIDJOURNEY_MODEL) return MIDJOURNEY_PRICE_TIERS
-    if (isSeedreamModel(modelCode)) return ['1K', '2K']
+    if (isSeedreamModel(modelCode)) return ['1.5K', '2K']
     return IMAGE_RESOLUTIONS
   }
   const spec = VIDEO_MODEL_RESOLUTIONS.find((entry) => entry.model === modelCode)
@@ -424,6 +427,14 @@ function hasInputImagePricing(model: AgentGroupModel): boolean {
   return (mediaType === 'video' && ['minimax-h3', 'minimax-h3-max'].includes(model.model_code)) || (mediaType === 'image' && isSeedreamModel(model.model_code))
 }
 function defaultFreeImages(model: AgentGroupModel): number { return isSeedreamModel(model.model_code) ? 1 : model.model_code === 'minimax-h3' ? 5 : 2 }
+
+function displayedPriceResolution(model: AgentGroupModel, resolution: string): string {
+  return isSeedreamModel(model.model_code) && resolution === '1K' ? '1.5K' : resolution
+}
+
+function storedPriceResolution(model: AgentGroupModel, resolution: string): string {
+  return isSeedreamModel(model.model_code) && resolution === '1.5K' ? '1K' : resolution
+}
 
 function isSeedance(model: AgentGroupModel): boolean { return (drafts[model.id]?.mediaType ?? model.media_type) === 'video' && model.model_code.startsWith('seedance-') }
 function channelPriceKey(prices: AgentModelPrice[]): string { return JSON.stringify(prices.map(p => [p.video_channel_id || '',p.resolution,p.billing_unit || 'second',p.unit_price,p.enabled !== false]).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))) }
@@ -441,7 +452,7 @@ function isDirty(model: AgentGroupModel): boolean {
   }
   if (hasInputImagePricing(model) && normalizeNumber(draft.freeInputImages) !== (model.free_input_images ?? null)) return true
   if (hasInputImagePricing(model) && normalizeNumber(draft.inputImageUnitPrice) !== (model.input_image_unit_price ?? null)) return true
-  const stored = new Map(model.prices.map((price) => [price.resolution, price]))
+  const stored = new Map(model.prices.map((price) => [displayedPriceResolution(model, price.resolution), price]))
   for (const resolution of Object.keys(draft.prices)) {
     const storedPrice = stored.get(resolution)
     const draftEnabled = draft.resolutionEnabled[resolution] !== false
@@ -496,8 +507,9 @@ function buildDrafts(): void {
       resolutionEnabled[resolution] = false
     }
     for (const price of model.prices) {
-      prices[price.resolution] = String(price.unit_price)
-      resolutionEnabled[price.resolution] = price.enabled !== false
+      const resolution = displayedPriceResolution(model, price.resolution)
+      prices[resolution] = String(price.unit_price)
+      resolutionEnabled[resolution] = price.enabled !== false
     }
     drafts[model.id] = {
       channelPrices: model.prices.map(p => ({...p})),
@@ -599,7 +611,7 @@ function buildPrices(model: AgentGroupModel): AgentModelPrice[] {
     if (value === null) {
       continue
     }
-    const price: AgentModelPrice = { resolution, unit_price: value }
+    const price: AgentModelPrice = { resolution: storedPriceResolution(model, resolution), unit_price: value }
     if (draft.resolutionEnabled[resolution] === false) {
       price.enabled = false
     }
