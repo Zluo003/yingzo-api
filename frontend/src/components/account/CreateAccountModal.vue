@@ -617,6 +617,7 @@
           v-if="selectedVideoModels.length > 0"
           v-model="videoUpstreamModels"
           :models="selectedVideoModels"
+          :default-models="videoProvider === 'newtoken_official' ? NEWTOKEN_OFFICIAL_MODEL_IDS : undefined"
           class="mt-4"
         />
 
@@ -4131,6 +4132,7 @@ import {
   defaultVideoModelResolutions,
   serializeVideoModelResolutions,
   toggleVideoResolution,
+  NEWTOKEN_OFFICIAL_MODEL_IDS,
   videoModelResolutions,
   videoProvidersServing
 } from '@/views/admin/videoModelResolutions'
@@ -4506,7 +4508,7 @@ function onCnPresetSelect(preset: { mode: CnAccountMode; protocol: CnApiProtocol
 }
 
 /** 视频上游平台，名称与后端适配器保持一致。 */
-type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart' | 'vipprompt'
+type VideoProvider = 'aigod' | 'newtoken' | 'newtoken_official' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart' | 'vipprompt'
 
 const videoProvider = ref<VideoProvider>('aigod')
 const videoAPIPath = ref('/v1/videos')
@@ -4540,6 +4542,7 @@ const videoProviderDefaultsMap: Record<
     requestTimeoutMs: 60000,
     connectTimeoutMs: 15000
   },
+  newtoken_official: { baseUrl: 'https://newtoken.club', apiPath: '/api/v3/contents/generations/tasks', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 300000, connectTimeoutMs: 15000 },
   newtoken: {
     baseUrl: 'https://newtoken.club',
     apiPath: '/v1/videos',
@@ -4585,6 +4588,11 @@ const videoProviderOptions: {
     value: 'aigod',
     labelKey: 'admin.accounts.video.providers.aigod',
     hintKey: 'admin.accounts.video.aigodAdapter'
+  },
+  {
+    value: 'newtoken_official',
+    labelKey: 'admin.accounts.video.providers.newtoken_official',
+    hintKey: 'admin.accounts.video.newtokenOfficialAdapter'
   },
   {
     value: 'newtoken',
@@ -4666,7 +4674,7 @@ const upstreamModelsPreviewed = ref(false)
 const videoDefaultModels = VIDEO_MODEL_CODES
 /** 视频模型选择与上游名称独立保存，留空名称由适配器按模型/分辨率路由。 */
 // Keep the initial selection serviceable by one provider; APIMart models remain selectable.
-const initialVideoModels = videoDefaultModels.filter(model => !model.startsWith('minimax-h3'))
+const initialVideoModels = videoDefaultModels.filter(model => !model.startsWith('minimax-h3') && model !== 'seedance-2.0-mini')
 const selectedVideoModels = ref<string[]>([...initialVideoModels])
 const videoUpstreamModels = ref<Record<string, string>>({})
 /**

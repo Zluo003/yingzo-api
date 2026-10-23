@@ -135,6 +135,11 @@ func (h *VideoHandler) resolveVideoReferenceMaterials(c *gin.Context, apiKey *se
 		if urlField == "" || urlObject == nil || rawURL == "" {
 			continue
 		}
+		// Upstream asset IDs are opaque: no HTTP download or client-supplied duration.
+		// Scheduling restricts these references to the official protocol adapter.
+		if service.IsSeedanceModel(stringValue(raw["model"])) && service.IsSeedanceAssetReference(rawURL) {
+			continue
+		}
 		if !strings.HasPrefix(strings.ToLower(rawURL), "data:") {
 			if urlField == "video_url" {
 				duration, cached := videoDurations[rawURL]

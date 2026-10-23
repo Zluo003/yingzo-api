@@ -1039,3 +1039,20 @@ func TestAgentModelInputImageUnitPriceAppliesToMiniMaxOnly(t *testing.T) {
 	})
 	require.ErrorContains(t, err, "input_image_unit_price")
 }
+
+func TestAgentModelCatalogDiscoversNewtokenOfficialMini(t *testing.T) {
+	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
+		Platform:    PlatformVideo,
+		Extra:       map[string]any{"video_provider": videoProviderNewtokenOfficial},
+		Credentials: map[string]any{"model_mapping": map[string]any{VideoModelSeedance20Mini: VideoModelSeedance20Mini}},
+	}}}
+	catalogService, models := newAgentCatalogForTest(accounts)
+	_, err := catalogService.Sync(context.Background(), 9)
+	require.NoError(t, err)
+	enableAllAgentModelsForTest(models)
+	catalog, err := catalogService.ListAvailable(context.Background(), 9)
+	require.NoError(t, err)
+	require.Equal(t, []string{VideoModelSeedance20Mini}, agentCatalogIDsForTest(catalog))
+	require.Equal(t, []string{AgentInterfaceSeedanceVideos}, catalog[0].Interfaces)
+	require.Equal(t, []string{"480p", "720p"}, SupportedVideoResolutions(VideoModelSeedance20Mini))
+}

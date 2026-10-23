@@ -23,6 +23,7 @@ interface VideoModelDurationRange {
 const VIDEO_MODEL_DURATION_RANGES: Record<string, VideoModelDurationRange> = {
   'seedance-2.0': { min: 4, max: 15 },
   'seedance-2.0-fast': { min: 4, max: 15 },
+  'seedance-2.0-mini': { min: 4, max: 15 },
   'seedance-2.5': { min: 4, max: 30 },
   'grok-imagine-video-1.5': { min: 1, max: 15 },
   'minimax-h3': { min: 4, max: 15 },

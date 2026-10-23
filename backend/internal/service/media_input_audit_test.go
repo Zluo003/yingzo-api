@@ -319,6 +319,7 @@ func TestMediaAuditOpaqueContextAndFrameReferences(t *testing.T) {
 		`{"previous_response_id":"resp-hidden","input":"draw"}`,
 		`{"input":[{"type":"input_image","file_id":"file-hidden"}]}`,
 		`{"conversation":"conv-hidden","input":"draw"}`,
+		`{"prompt":"animate","content":[{"type":"draft_task","draft_task":{"id":"ultra720_hidden"}}]}`,
 	} {
 		require.True(t, ExtractMediaAuditInput([]byte(raw)).UnsupportedMedia, raw)
 	}

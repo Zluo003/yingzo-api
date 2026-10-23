@@ -33,6 +33,7 @@
           <label class="input-label">{{ t('admin.accounts.video.provider') }}</label>
           <select v-model="editVideoProvider" class="input">
             <option value="aigod">{{ t('admin.accounts.video.providers.aigod') }}</option>
+            <option value="newtoken_official">{{ t('admin.accounts.video.providers.newtoken_official') }}</option>
             <option value="newtoken">{{ t('admin.accounts.video.providers.newtoken') }}</option>
             <option value="mikuapi">{{ t('admin.accounts.video.providers.mikuapi') }}</option>
             <option value="jingyu">{{ t('admin.accounts.video.providers.jingyu') }}</option>
@@ -215,6 +216,7 @@
           v-if="account.platform === 'video' && editSelectedVideoModels.length > 0"
           v-model="editVideoUpstreamModels"
           :models="editSelectedVideoModels"
+          :default-models="editVideoProvider === 'newtoken_official' ? NEWTOKEN_OFFICIAL_MODEL_IDS : undefined"
         />
         <!--
           分辨率/时长白名单：只展示上方模型白名单中选中的模型。
@@ -3148,6 +3150,7 @@ import {
   parseVideoModelResolutions,
   serializeVideoModelResolutions,
   toggleVideoResolution,
+  NEWTOKEN_OFFICIAL_MODEL_IDS,
   videoModelResolutions
 } from '@/views/admin/videoModelResolutions'
 import {
@@ -3279,7 +3282,7 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
-type VideoProvider = 'aigod' | 'newtoken' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart' | 'vipprompt'
+type VideoProvider = 'aigod' | 'newtoken' | 'newtoken_official' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart' | 'vipprompt'
 
 /** 对外提供的视频模型：单一来源见 @/views/admin/videoModelResolutions。 */
 const videoDefaultModels = VIDEO_MODEL_CODES
@@ -3329,6 +3332,7 @@ const editVideoDefaultsMap: Record<
   { baseUrl: string; apiPath: string; pollIntervalMs: number; pollTimeoutMs: number; requestTimeoutMs: number; connectTimeoutMs: number }
 > = {
   aigod: { baseUrl: 'https://api.aigod.one', apiPath: '/v1/videos', pollIntervalMs: 2000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
+  newtoken_official: { baseUrl: 'https://newtoken.club', apiPath: '/api/v3/contents/generations/tasks', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 300000, connectTimeoutMs: 15000 },
   newtoken: { baseUrl: 'https://newtoken.club', apiPath: '/v1/videos', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 300000, connectTimeoutMs: 15000 },
   mikuapi: { baseUrl: 'https://mikuapi.org', apiPath: '/v1/videos', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
   jingyu: { baseUrl: 'https://api.jingyuapi.art', apiPath: '/v1/video/generations', pollIntervalMs: 5000, pollTimeoutMs: 1800000, requestTimeoutMs: 1800000, connectTimeoutMs: 60000 },
@@ -4416,7 +4420,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     }
     // 只认已接入的上游；未知取值回落 aigod（后端也会在写入时校验并拒绝）。
     const storedVideoProvider: VideoProvider =
-      extra?.video_provider === 'newtoken' || extra?.video_provider === 'mikuapi' || extra?.video_provider === 'jingyu' || extra?.video_provider === 'xingguang' || extra?.video_provider === 'apimart' || extra?.video_provider === 'vipprompt'
+      extra?.video_provider === 'newtoken_official' || extra?.video_provider === 'newtoken' || extra?.video_provider === 'mikuapi' || extra?.video_provider === 'jingyu' || extra?.video_provider === 'xingguang' || extra?.video_provider === 'apimart' || extra?.video_provider === 'vipprompt'
         ? extra.video_provider
         : 'aigod'
     const platformDefaultUrl =

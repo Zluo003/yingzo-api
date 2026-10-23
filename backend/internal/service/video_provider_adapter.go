@@ -35,6 +35,8 @@ func videoProviderAdapterForAccount(account *Account) videoProviderAdapter {
 		return vippromptVideoProviderAdapter{}
 	case videoProviderApimart:
 		return apimartVideoProviderAdapter{}
+	case videoProviderNewtokenOfficial:
+		return newtokenOfficialVideoProviderAdapter{}
 	case videoProviderNewtoken:
 		return newtokenVideoProviderAdapter{}
 	case videoProviderMikuapi:
@@ -54,6 +56,8 @@ func videoProviderAdapterByName(provider string) videoProviderAdapter {
 		return vippromptVideoProviderAdapter{}
 	case videoProviderApimart:
 		return apimartVideoProviderAdapter{}
+	case videoProviderNewtokenOfficial:
+		return newtokenOfficialVideoProviderAdapter{}
 	case videoProviderNewtoken:
 		return newtokenVideoProviderAdapter{}
 	case videoProviderMikuapi:

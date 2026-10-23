@@ -23,11 +23,12 @@ import (
 )
 
 const (
-	videoProviderApimart  = "apimart"
-	videoProviderAigod    = "aigod"
-	videoProviderNewtoken = "newtoken"
-	videoProviderMikuapi  = "mikuapi"
-	videoProviderJingyu   = "jingyu"
+	videoProviderApimart          = "apimart"
+	videoProviderAigod            = "aigod"
+	videoProviderNewtoken         = "newtoken"
+	videoProviderNewtokenOfficial = "newtoken_official"
+	videoProviderMikuapi          = "mikuapi"
+	videoProviderJingyu           = "jingyu"
 	// videoAigodSubjectType：aigod 要求参考图/参考视频统一声明主体类型。
 	// 该上游把参考素材一律按真人链路处理，与下游是否传 subject_type 无关。
 	videoAigodSubjectType       = "person"
@@ -1505,7 +1506,15 @@ func normalizeVideoCreateRequestWithDynamicModel(req *VideoCreateRequest, dynami
 	} else if !IsSupportedVideoResolution(model, resolution) {
 		return nil, videoBadRequest("invalid_video_resolution", "Invalid video resolution")
 	}
+	if err := validateNewtokenOfficialOptions(req); err != nil {
+		return nil, err
+	}
 	requestedDuration := req.Duration
+	if IsSeedanceModel(model) && req.Raw != nil {
+		if _, provided := req.Raw["duration"]; !provided && requestedDuration == 0 {
+			requestedDuration = 4
+		}
+	}
 	duration := requestedDuration
 	if duration == -1 && spec.AutoDurationSeconds > 0 {
 		duration = float64(spec.AutoDurationSeconds)
@@ -1897,6 +1906,9 @@ func videoUpstreamBodyForAccount(account *Account, normalized *normalizedVideoRe
 }
 
 func isVideoAccountCompatibleForRequest(account *Account, normalized *normalizedVideoRequest) bool {
+	if normalized != nil && hasNewtokenOfficialReferences(normalized.Content, normalized.Raw) && videoAccountProvider(account) != videoProviderNewtokenOfficial {
+		return false
+	}
 	return videoProviderAdapterForAccount(account).CompatibleRequest(normalized)
 }
 
@@ -1907,7 +1919,7 @@ func isVideoAccountCompatibleForRequest(account *Account, normalized *normalized
 // unsupported request is routed to another upstream instead of failing there.
 func videoProviderNeedsRequestCompatibility(provider string) bool {
 	switch provider {
-	case videoProviderAigod, videoProviderNewtoken, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang, videoProviderApimart, videoProviderVipprompt:
+	case videoProviderAigod, videoProviderNewtoken, videoProviderNewtokenOfficial, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang, videoProviderApimart, videoProviderVipprompt:
 		return true
 	default:
 		return false
@@ -2170,6 +2182,8 @@ func videoAccountProvider(account *Account) string {
 		return videoProviderVipprompt
 	case videoProviderApimart:
 		return videoProviderApimart
+	case videoProviderNewtokenOfficial:
+		return videoProviderNewtokenOfficial
 	case videoProviderNewtoken:
 		return videoProviderNewtoken
 	case videoProviderMikuapi:
@@ -2226,7 +2240,7 @@ func videoAccountDefaultDuration(account *Account, key string) time.Duration {
 		case "poll_interval_ms":
 			return videoXingguangPollInterval
 		}
-	case videoProviderNewtoken:
+	case videoProviderNewtoken, videoProviderNewtokenOfficial:
 		switch key {
 		case "poll_interval_ms":
 			return videoNewtokenPollInterval

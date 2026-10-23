@@ -15,6 +15,7 @@ describe('video model resolutions', () => {
     expect(VIDEO_MODEL_CODES).toEqual([
       'seedance-2.0',
       'seedance-2.0-fast',
+      'seedance-2.0-mini',
       'seedance-2.5',
       'grok-imagine-video-1.5',
       'minimax-h3',
@@ -54,6 +55,7 @@ describe('video model resolutions', () => {
     expect(defaultVideoModelResolutions()).toEqual({
       'seedance-2.0': ['480p', '720p', '1080p', '4K'],
       'seedance-2.0-fast': ['480p', '720p'],
+      'seedance-2.0-mini': ['480p', '720p'],
       'seedance-2.5': ['480p', '720p', '1080p'],
       'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
       'minimax-h3': ['768p', '2K'],
@@ -132,6 +134,7 @@ describe('video model resolutions', () => {
     expect(parsed).toEqual({
       'seedance-2.0': ['720p', '1080p'],
       'seedance-2.0-fast': ['720p'],
+      'seedance-2.0-mini': ['480p', '720p'],
       // 未配置 / 值非法 => 后端语义是"不限制"，界面必须显示全部官方档位，
       // 而不是留空（留空会读成"什么都不支持"，与后端相反）。
       'seedance-2.5': ['480p', '720p', '1080p'],

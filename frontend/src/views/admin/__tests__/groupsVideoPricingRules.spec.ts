@@ -18,6 +18,7 @@ describe('video group pricing rules', () => {
     expect(VIDEO_PRICING_MODELS).toEqual([
       'seedance-2.0',
       'seedance-2.0-fast',
+      'seedance-2.0-mini',
       'seedance-2.5',
       'grok-imagine-video-1.5',
       'minimax-h3',

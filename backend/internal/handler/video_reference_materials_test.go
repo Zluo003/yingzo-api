@@ -486,3 +486,22 @@ func TestReferenceMaterialFetcherRejectsUnsafeTargets(t *testing.T) {
 		})
 	}
 }
+
+func TestVideoReferenceMaterialsPreserveOpaqueSeedanceAssets(t *testing.T) {
+	h := referenceMaterialTestHandler(t)
+	for _, kind := range []string{"image_url", "video_url", "audio_url"} {
+		t.Run(kind, func(t *testing.T) {
+			ref := map[string]any{"url": "asset://ast-example"}
+			item := map[string]any{"type": kind, kind: ref, "duration_seconds": 9999}
+			raw := map[string]any{"model": service.VideoModelSeedance25, "content": []any{item}}
+			_, changed, err := h.resolveVideoReferenceMaterials(referenceMaterialTestContext(t), referenceMaterialTestAPIKey(), raw)
+			require.NoError(t, err)
+			require.True(t, changed)
+			require.Equal(t, "asset://ast-example", ref["url"])
+			require.NotContains(t, item, "duration_seconds")
+		})
+	}
+	for _, raw := range []string{"asset://../secret", "asset://host/path", "asset://id?x=1", "file:///tmp/ref", "https://cdn.example/ref"} {
+		require.False(t, service.IsSeedanceAssetReference(raw), raw)
+	}
+}

@@ -125,7 +125,7 @@ func ExtractMediaAuditInput(body []byte) MediaAuditInput {
 			if strings.Contains(typ, "video") || strings.Contains(typ, "audio") {
 				out.UnsupportedMedia = true
 			}
-			if typ == "input_file" || typ == "file" {
+			if typ == "input_file" || typ == "file" || typ == "draft_task" {
 				out.UnsupportedMedia = true
 			}
 			if typ == "image" {

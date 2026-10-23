@@ -15,7 +15,7 @@
           type="text"
           pattern="[^*]*"
           class="input font-mono"
-          :placeholder="t('admin.accounts.video.upstreamModelDefault')"
+          :placeholder="defaultModels?.[model] ?? t('admin.accounts.video.upstreamModelDefault')"
           @input="setUpstreamModel(model, $event)"
         />
       </label>
@@ -28,6 +28,7 @@ import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 const props = defineProps<{
+  defaultModels?: Record<string, string>
   models: readonly string[]
   modelValue: Record<string, string>
 }>()

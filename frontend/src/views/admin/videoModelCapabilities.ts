@@ -13,6 +13,7 @@ export interface VideoModelCapabilities {
 export const VIDEO_MODEL_REFERENCE_LIMITS: Record<string, readonly [number, number, number]> = {
   'seedance-2.0': [9, 3, 3],
   'seedance-2.0-fast': [9, 3, 3],
+  'seedance-2.0-mini': [9, 3, 3],
   'seedance-2.5': [30, 10, 10],
   'grok-imagine-video-1.5': [7, 0, 0],
   'minimax-h3': [9, 3, 3],

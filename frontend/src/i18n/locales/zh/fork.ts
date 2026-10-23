@@ -258,6 +258,7 @@ export default {
         providers: {
           aigod: 'aigod',
           newtoken: 'newtoken',
+          newtoken_official: 'NewToken 官方协议',
           mikuapi: 'mikuapi',
           jingyu: 'jingyu',
           apimart: 'APIMart',
@@ -266,6 +267,7 @@ export default {
         },
         vippromptAdapter: '狼帧统一视频接口：Seedance 2.0 / 2.5、Kling v4；请填写目录中的完整上游模型名，并按该模型实际能力配置分辨率、时长和参考素材上限。支持文生与参考生视频，首帧/尾帧请求由其他上游处理。',
         aigodAdapter: 'Seedance 2.0 / 2.0 Fast / 2.5',
+        newtokenOfficialAdapter: '官方内容生成任务协议；支持 2.0 / Fast / Mini / 2.5 及公网素材 URL。分辨率受上游密钥分组限制，可按账号收窄能力。',
         newtokenAdapter: '按分辨率路由上游模型：2.0 / 1080p、2.0 Fast、2.5',
         mikuapiAdapter: '按请求体里的 resolution 字段路由：Seedance 2.0（含 4K）/ 2.0 Fast（480p/720p，仅 5/10 秒）/ 2.5（无 4K），另支持 grok-imagine-video-1.5 与可灵 kling-v3-omni / kling-v4（720p/1080p，3–30 秒；可灵走 /v1/videos，成片为直链）',
         jingyuAdapter: 'Jingyu /v1/video/generations：2.0（含 4K）/ 2.5（480p/720p）',

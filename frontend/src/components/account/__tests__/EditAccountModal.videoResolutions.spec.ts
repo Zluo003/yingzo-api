@@ -227,13 +227,38 @@ describe('EditAccountModal video resolutions', () => {
 
   it('loads legacy accounts with no model restriction as an explicit selection of all models', async () => {
     const account = buildVideoAccount()
-    const allModels = ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5', 'grok-imagine-video-1.5', 'minimax-h3', 'minimax-h3-max', 'kling-v3-omni', 'kling-v4']
+    const allModels = ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.0-mini', 'seedance-2.5', 'grok-imagine-video-1.5', 'minimax-h3', 'minimax-h3-max', 'kling-v3-omni', 'kling-v4']
     delete account.credentials.model_mapping
     const wrapper = mountModal(account)
     await flushPromises()
 
     expect(wrapper.getComponent(ModelWhitelistSelector).props('modelValue')).toEqual(allModels)
     expect(Object.keys((await submitEdit(wrapper)).credentials.model_mapping)).toEqual(allModels)
+  })
+
+  it('restores the official adapter and preserves custom account settings', async () => {
+    const account = buildVideoAccount({
+      video_provider: 'newtoken_official', base_url: 'https://custom.example',
+      api_path: '/custom/tasks', poll_interval_ms: 7000, request_timeout_ms: 240000,
+      video_model_resolutions: { 'seedance-2.0-mini': ['720p'] },
+      video_model_durations: { 'seedance-2.0-mini': [8] },
+      video_model_capabilities: { 'seedance-2.0-mini': { max_reference_images: 1 } }
+    })
+    account.credentials.model_mapping = { 'seedance-2.0-mini': 'custom-mini' }
+    const wrapper = mountModal(account)
+    await flushPromises()
+    expect(wrapper.get('option[value="newtoken_official"]').text()).toBe('admin.accounts.video.providers.newtoken_official')
+    expect(wrapper.get('[data-testid="video-upstream-model-seedance-2.0-mini"]').element).toHaveProperty('value', 'custom-mini')
+    const payload = await submitEdit(wrapper)
+    expect(payload.extra.video_provider).toBe('newtoken_official')
+    expect(payload.extra.base_url).toBe('https://custom.example')
+    expect(payload.extra.api_path).toBe('/custom/tasks')
+    expect(payload.extra.poll_interval_ms).toBe(7000)
+    expect(payload.extra.request_timeout_ms).toBe(240000)
+    expect(payload.extra.video_model_resolutions['seedance-2.0-mini']).toEqual(['720p'])
+    expect(payload.extra.video_model_durations['seedance-2.0-mini']).toEqual([8])
+    expect(payload.extra.video_model_capabilities['seedance-2.0-mini'].max_reference_images).toBe(1)
+    expect(payload.credentials.model_mapping).toEqual({ 'seedance-2.0-mini': 'custom-mini' })
   })
 
   it('restores the saved resolution whitelist from extra', async () => {

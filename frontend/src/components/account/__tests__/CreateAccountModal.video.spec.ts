@@ -144,9 +144,36 @@ describe('CreateAccountModal video mode', () => {
     await flushPromises()
 
     // jingyu 不服务 seedance-2.0-fast，因此不在可服务平台里。
-    expect(optionValues()).toEqual(['aigod', 'newtoken', 'mikuapi'])
+    expect(optionValues()).toEqual(['aigod', 'newtoken_official', 'newtoken', 'mikuapi'])
     // 早期清理掉的上游不能悄悄回来。
     expect(optionValues()).not.toContain('ycyapi')
+  })
+
+  it('selects the official adapter for Mini and preserves account overrides', async () => {
+    const wrapper = await mountVideoModal()
+    await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
+    for (const model of ['grok-imagine-video-1.5', 'kling-v3-omni', 'kling-v4', 'seedance-2.0-mini']) {
+      await wrapper.get(`[data-testid="video-model-${model}"]`).trigger('click')
+    }
+    await flushPromises()
+    const select = wrapper.get('[data-testid="video-provider-select"]')
+    expect(select.findAll('option').map(option => option.element.value)).toEqual(['newtoken_official'])
+    const mini = wrapper.get('[data-testid="video-upstream-model-seedance-2.0-mini"]')
+    expect(mini.attributes('placeholder')).toBe('doubao-seedance-2-0-mini-260615')
+    await mini.setValue('my-official-mini')
+    await wrapper.get('[data-testid="video-resolution-seedance-2.0-mini-480p"]').trigger('click')
+    const payload = await submitVideoAccount(wrapper)
+    expect(payload.extra.video_provider).toBe('newtoken_official')
+    expect(payload.extra.base_url).toBe('https://newtoken.club')
+    expect(payload.extra.api_path).toBe('/api/v3/contents/generations/tasks')
+    expect(payload.extra.request_timeout_ms).toBe(300000)
+    expect(payload.extra.video_model_resolutions['seedance-2.0-mini']).toEqual(['720p'])
+    expect(payload.credentials.model_mapping).toEqual({
+      'seedance-2.0': 'seedance-2.0',
+      'seedance-2.0-fast': 'seedance-2.0-fast',
+      'seedance-2.0-mini': 'my-official-mini',
+      'seedance-2.5': 'seedance-2.5'
+    })
   })
 
   it('auto-switches the platform to the only upstream serving the selected model', async () => {

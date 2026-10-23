@@ -258,6 +258,7 @@ export default {
         providers: {
           aigod: 'aigod',
           newtoken: 'newtoken',
+          newtoken_official: 'NewToken Official Protocol',
           mikuapi: 'mikuapi',
           jingyu: 'jingyu',
           apimart: 'APIMart',
@@ -266,6 +267,7 @@ export default {
         },
         vippromptAdapter: 'Unified video API for Seedance 2.0 / 2.5 and Kling v4. Enter the exact upstream catalogue name and configure resolutions, durations and reference limits for that model. Supports text and reference generation; frame roles use other providers.',
         aigodAdapter: 'Seedance 2.0 / 2.0 Fast / 2.5',
+        newtokenOfficialAdapter: 'Official content task API for 2.0 / Fast / Mini / 2.5 with public media URLs. Resolution availability depends on the upstream key group; account limits remain configurable.',
         newtokenAdapter: 'Routes the upstream model by resolution: 2.0 / 1080p, 2.0 Fast, 2.5',
         mikuapiAdapter: 'Routes by the resolution field: Seedance 2.0 (incl. 4K) / 2.0 Fast (480p/720p, 5s or 10s only) / 2.5 (no 4K), plus grok-imagine-video-1.5 and Kling kling-v3-omni / kling-v4 (720p/1080p, 3–30s; Kling uses /v1/videos and returns direct CDN links)',
         jingyuAdapter: 'Jingyu /v1/video/generations: 2.0 (incl. 4K) / 2.5 (480p/720p)',

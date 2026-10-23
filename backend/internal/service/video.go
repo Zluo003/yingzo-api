@@ -13,6 +13,7 @@ const (
 	VideoModelMinimaxH3Max   = "minimax-h3-max"
 	VideoModelSeedance20     = "seedance-2.0"
 	VideoModelSeedance20Fast = "seedance-2.0-fast"
+	VideoModelSeedance20Mini = "seedance-2.0-mini"
 	VideoModelSeedance25     = "seedance-2.5"
 
 	// 经 mikuapi 渠道提供的 Grok Imagine 与可灵视频。下游暴露的是网关自定义名
@@ -91,6 +92,20 @@ var videoModelSpecs = map[string]videoModelSpec{
 		AudioNeedsVisual:        true,
 	},
 	VideoModelSeedance20Fast: {
+		Resolutions:             []string{VideoResolution480P, VideoResolution720P},
+		DefaultResolution:       VideoResolution720P,
+		MinSeconds:              videoMinDurationSeconds,
+		MaxSeconds:              videoMaxDurationSeconds,
+		MaxRefImages:            9,
+		MaxRefVideos:            3,
+		MaxRefAudios:            3,
+		MaxRefVideoSeconds:      videoMaxDurationSeconds,
+		MaxRefVideoTotalSeconds: videoMaxReferenceVideoTotal,
+		AudioNeedsVisual:        true,
+	},
+	// The Mini documentation does not list separate duration/reference limits;
+	// use the 2.0 family limits, with optional narrower account restrictions.
+	VideoModelSeedance20Mini: {
 		Resolutions:             []string{VideoResolution480P, VideoResolution720P},
 		DefaultResolution:       VideoResolution720P,
 		MinSeconds:              videoMinDurationSeconds,
@@ -197,13 +212,14 @@ func IsSupportedVideoModel(model string) bool {
 	return ok
 }
 
-// SupportedVideoModels 是本仓库对外提供的视频模型清单：Seedance 三档 + 经
+// SupportedVideoModels 是本仓库对外提供的视频模型清单：Seedance 四档 + 经
 // mikuapi 渠道提供的 Grok Imagine 与可灵。
 // 新增可对外提供的模型时必须同时改这里和 videoModelSpecs，否则分组候选模型不会包含它。
 func SupportedVideoModels() []string {
 	return []string{
 		VideoModelSeedance20,
 		VideoModelSeedance20Fast,
+		VideoModelSeedance20Mini,
 		VideoModelSeedance25,
 		VideoModelGrokImagineVideo15,
 		VideoModelKlingV3Omni,
@@ -344,12 +360,13 @@ type VideoCreateRequest struct {
 }
 
 type VideoContent struct {
-	Type     string           `json:"type"`
-	Text     string           `json:"text"`
-	ImageURL *VideoContentURL `json:"image_url"`
-	VideoURL *VideoContentURL `json:"video_url"`
-	AudioURL *VideoContentURL `json:"audio_url"`
-	Role     string           `json:"role"`
+	DraftTask map[string]any   `json:"draft_task,omitempty"`
+	Type      string           `json:"type"`
+	Text      string           `json:"text"`
+	ImageURL  *VideoContentURL `json:"image_url"`
+	VideoURL  *VideoContentURL `json:"video_url"`
+	AudioURL  *VideoContentURL `json:"audio_url"`
+	Role      string           `json:"role"`
 	// SubjectType 目前由网关强制覆盖（参考图/视频统一声明 person），不跟随下游。
 	SubjectType string `json:"subject_type,omitempty"`
 	// DurationSeconds 是平台用 ffprobe 探测出的参考视频时长，参与参考时长计费。
