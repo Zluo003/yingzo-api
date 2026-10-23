@@ -18,7 +18,7 @@
     "@airwallex/components-sdk": "^1.35.2",
     "@stripe/stripe-js": "^9.17.0",
     "@vitejs/plugin-react": "5.0.4",
-    "dompurify": "^3.4.16",
+    "dompurify": "^3.4.17",
     "marked": "^18.0.14",
     "qrcode": "^1.5.4",
     "react": "19.2.0",
