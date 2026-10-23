@@ -161,6 +161,7 @@
       </p>
 
       <p v-if="activeTab === 'video' && modelsByTab.video.some(hasInputImagePricing)" class="mt-2 text-xs text-primary-600">{{ t('admin.yingzoAgent.inputImagePricingHint') }}</p>
+      <p v-if="activeTab === 'image' && modelsByTab.image.some(m => isSeedreamModel(m.model_code))" class="mt-2 text-xs text-primary-600">{{ t('seedream.billingHint') }}</p>
       <p v-if="activeTab === 'image'  && modelsByTab.image.some(m => m.model_code === MIDJOURNEY_MODEL)" class="mt-2 text-xs text-primary-600">{{ t('midjourney.billingHint') }}</p>
       <div v-if="!modelsByTab[activeTab].length" class="py-10 text-center text-sm text-gray-400">
         {{ t('admin.yingzoAgent.empty') }}
@@ -191,7 +192,7 @@
                   }}
                 </th>
               </template>
-              <template v-if="activeTab === 'video'">
+              <template v-if="activeTab === 'video' || activeTab === 'image'">
                 <th class="py-2 pr-3">{{ t('admin.yingzoAgent.freeInputImages') }}</th>
                 <th class="py-2 pr-3">{{ t('admin.yingzoAgent.extraImages') }}</th>
               </template>
@@ -286,13 +287,13 @@
                   <span v-else class="text-gray-400">—</span>
                 </td>
               </template>
-              <template v-if="activeTab === 'video'">
+              <template v-if="activeTab === 'video' || activeTab === 'image'">
                 <td class="py-2 pr-3">
                   <input v-if="hasInputImagePricing(model)" v-model="drafts[model.id].freeInputImages" class="input w-24" type="number" min="0" step="1" :placeholder="String(defaultFreeImages(model))" :aria-label="t('admin.yingzoAgent.freeInputImages')" :data-testid="'yingzo-agent-free-images-' + model.id" />
                   <span v-else class="text-gray-400">—</span>
                 </td>
                 <td class="py-2 pr-3">
-                  <input v-if="hasInputImagePricing(model)" v-model="drafts[model.id].inputImageUnitPrice" class="input w-24" type="number" min="0" step="0.001" :placeholder="t('admin.yingzoAgent.inputImagePricePlaceholder')" :aria-label="t('admin.yingzoAgent.inputImageUnitPrice')" :data-testid="'yingzo-agent-input-image-price-' + model.id" />
+                  <input v-if="hasInputImagePricing(model)" v-model="drafts[model.id].inputImageUnitPrice" class="input w-24" type="number" min="0" step="0.001" :placeholder="isSeedreamModel(model.model_code) ? '0' : t('admin.yingzoAgent.inputImagePricePlaceholder')" :aria-label="t('admin.yingzoAgent.inputImageUnitPrice')" :data-testid="'yingzo-agent-input-image-price-' + model.id" />
                   <span v-else class="text-gray-400">—</span>
                 </td>
               </template>
@@ -329,6 +330,7 @@ import {
   type AgentMediaType,
   type AgentModelPrice,
 } from '@/api/admin/agentModels'
+import { isSeedreamModel } from '@/components/account/seedream'
 import { MIDJOURNEY_MODEL, MIDJOURNEY_PRICE_TIERS } from '@/components/account/midjourney'
 import { VIDEO_MODEL_RESOLUTIONS } from '@/views/admin/videoModelResolutions'
 import type { AdminGroup } from '@/types'
@@ -406,6 +408,7 @@ function resolutionColumnsForType(mediaType: AgentMediaType, modelCode: string):
   if (mediaType === 'audio') return SUNO_BILLING_TIERS
   if (mediaType === 'image') {
     if (modelCode === MIDJOURNEY_MODEL) return MIDJOURNEY_PRICE_TIERS
+    if (isSeedreamModel(modelCode)) return ['1K', '2K']
     return IMAGE_RESOLUTIONS
   }
   const spec = VIDEO_MODEL_RESOLUTIONS.find((entry) => entry.model === modelCode)
@@ -417,9 +420,10 @@ function resolutionColumnsForType(mediaType: AgentMediaType, modelCode: string):
 const dirty = computed(() => models.value.some((model) => isDirty(model)))
 
 function hasInputImagePricing(model: AgentGroupModel): boolean {
-  return (drafts[model.id]?.mediaType ?? model.media_type) === 'video' && ['minimax-h3', 'minimax-h3-max'].includes(model.model_code)
+  const mediaType = drafts[model.id]?.mediaType ?? model.media_type
+  return (mediaType === 'video' && ['minimax-h3', 'minimax-h3-max'].includes(model.model_code)) || (mediaType === 'image' && isSeedreamModel(model.model_code))
 }
-function defaultFreeImages(model: AgentGroupModel): number { return model.model_code === 'minimax-h3' ? 5 : 2 }
+function defaultFreeImages(model: AgentGroupModel): number { return isSeedreamModel(model.model_code) ? 1 : model.model_code === 'minimax-h3' ? 5 : 2 }
 
 function isSeedance(model: AgentGroupModel): boolean { return (drafts[model.id]?.mediaType ?? model.media_type) === 'video' && model.model_code.startsWith('seedance-') }
 function channelPriceKey(prices: AgentModelPrice[]): string { return JSON.stringify(prices.map(p => [p.video_channel_id || '',p.resolution,p.billing_unit || 'second',p.unit_price,p.enabled !== false]).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))) }

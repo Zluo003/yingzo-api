@@ -470,10 +470,12 @@
       @close="showCreateImage = false"
       @created="handleImageAccountCreated"
       @midjourney="showCreateImage = false; showCreateMidjourney = true"
+      @seedream="showCreateImage = false; showCreateSeedream = true"
     />
     <SunoAccountModal :show="showCreateSuno || (showEdit && isSunoAccount(edAcc))" :account="showEdit ? edAcc : null" :proxies="proxies" :groups="groups" @close="showCreateSuno = false; showEdit = false" @created="reload" @updated="handleAccountUpdated" />
+    <SeedreamAccountModal :show="showCreateSeedream || (showEdit && isSeedreamAccount(edAcc))" :account="showEdit ? edAcc : null" :proxies="proxies" :groups="groups" @close="showCreateSeedream = false; showEdit = false" @created="handleImageAccountCreated" @updated="handleAccountUpdated" />
     <MidjourneyAccountModal :show="showCreateMidjourney || (showEdit && isMidjourneyAccount(edAcc))" :account="showEdit ? edAcc : null" :proxies="proxies" :groups="groups" @close="showCreateMidjourney = false; showEdit = false" @created="handleImageAccountCreated" @updated="handleAccountUpdated" />
-    <EditAccountModal :show="showEdit && !isMidjourneyAccount(edAcc) && !isSunoAccount(edAcc)" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
+    <EditAccountModal :show="showEdit && !isMidjourneyAccount(edAcc) && !isSunoAccount(edAcc) && !isSeedreamAccount(edAcc)" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
@@ -528,6 +530,8 @@ import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import SunoAccountModal from '@/components/account/SunoAccountModal.vue'
 import { isSunoAccount } from '@/components/account/suno'
+import SeedreamAccountModal from '@/components/account/SeedreamAccountModal.vue'
+import { isSeedreamAccount } from '@/components/account/seedream'
 import MidjourneyAccountModal from '@/components/account/MidjourneyAccountModal.vue'
 import { isMidjourneyAccount } from '@/components/account/midjourney'
 import { CreateAccountModal, EditAccountModal, BulkEditAccountModal, SyncFromCrsModal, TempUnschedStatusModal } from '@/components/account'
@@ -616,6 +620,7 @@ const selTypes = computed<AccountType[]>(() => {
 })
 const showCreate = ref(false)
 const showCreateImage = ref(false)
+const showCreateSeedream = ref(false)
 const showCreateMidjourney = ref(false)
 const showCreateSuno = ref(false)
 // 「添加视频账号」专用入口：打开同一个弹窗但预置 platform=video。
@@ -1391,6 +1396,7 @@ const isAnyModalOpen = computed(() => {
     showCreate.value ||
     showCreateImage.value ||
     showCreateMidjourney.value ||
+    showCreateSeedream.value ||
     showCreateSuno.value ||
     showCreateVideo.value ||
     showEdit.value ||

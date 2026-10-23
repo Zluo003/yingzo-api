@@ -101,6 +101,10 @@
           </button>
         </div>
 
+        <button type="button" class="mt-3 w-full rounded-lg border-2 border-gray-200 p-3 text-left hover:border-primary-500 dark:border-dark-600" data-testid="image-platform-seedream" @click="emit('seedream')">
+          <span class="block text-sm font-semibold">Seedream 5.0 Pro / Flash · APIMart</span>
+          <span class="text-xs text-gray-500">{{ t('seedream.scope') }}</span>
+        </button>
         <button type="button" class="mt-3 w-full rounded-lg border-2 border-gray-200 p-3 text-left hover:border-primary-500 dark:border-dark-600" data-testid="image-platform-midjourney" @click="emit('midjourney')">
           <span class="block text-sm font-semibold">Midjourney v8.2 · APIMart</span>
           <span class="text-xs text-gray-500">{{ t('midjourney.scope') }}</span>
@@ -4296,6 +4300,7 @@ function imageModelMapping(): Record<string, string> | null {
 /** 图片账号声明的模型名（提交成功后交给父组件去同步目录）。 */
 const declaredImageModels = computed(() => Object.keys(imageModelMapping() ?? {}))
 const emit = defineEmits<{
+  seedream: []
   midjourney: []
   close: []
   /** created 附带本次创建的账号与（图片账号模式下）声明的图片模型名。 */

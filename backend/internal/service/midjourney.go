@@ -452,9 +452,13 @@ func waitMidjourneyPoll(ctx context.Context, delay time.Duration) error {
 type midjourneyHTTPError struct{ status int }
 
 func (e *midjourneyHTTPError) Error() string {
-	return fmt.Sprintf("Midjourney upstream HTTP %d", e.status)
+	return fmt.Sprintf("APIMart image upstream HTTP %d", e.status)
 }
 func (s *DurableImageService) midjourneyHTTP(ctx context.Context, a *Account, method, path string, body []byte) ([]byte, error) {
+	return s.apimartImageHTTP(ctx, a, method, path, body)
+}
+
+func (s *DurableImageService) apimartImageHTTP(ctx context.Context, a *Account, method, path string, body []byte) ([]byte, error) {
 	base := strings.TrimSuffix(strings.TrimRight(a.GetCredential("base_url"), "/"), "/v1")
 	if base == "" {
 		base = "https://api.apimart.ai"
@@ -488,7 +492,7 @@ func (s *DurableImageService) midjourneyHTTP(ctx context.Context, a *Account, me
 		return nil, err
 	}
 	if len(data) > 2*1024*1024 {
-		return nil, errors.New("midjourney response too large")
+		return nil, errors.New("APIMart image response too large")
 	}
 	return data, nil
 }
@@ -513,6 +517,16 @@ func normalizeAgentModelPricesForModel(model, mediaType string, prices []AgentMo
 	}
 	if model == SunoModel {
 		return normalizeSunoPrices(mediaType, prices)
+	}
+	if IsSeedreamModel(model) {
+		if mediaType != AgentMediaTypeImage {
+			return nil, errors.New("seedream is an image model")
+		}
+		for _, p := range prices {
+			if p.Resolution != "1K" && p.Resolution != "2K" {
+				return nil, errors.New("seedream prices use 1K (including 1.5K) and 2K only")
+			}
+		}
 	}
 	if model != MidjourneyModel {
 		return normalizeAgentModelPrices(mediaType, prices)

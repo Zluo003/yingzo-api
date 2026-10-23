@@ -209,7 +209,21 @@ func (s *DurableImageService) Accept(ctx context.Context, key *APIKey, sub *User
 		}
 		snapshot.Midjourney = prepared
 	}
-	q, err := s.quote(ctx, key, sub, platform, model, size, count)
+	if IsSeedreamModel(model) {
+		if snapshot.Seedream == nil || snapshot.Seedream.Request.Model != model {
+			return nil, errors.New("missing Seedream snapshot")
+		}
+		if err := s.prepareSeedream(ctx, key, snapshot.Seedream); err != nil {
+			return nil, err
+		}
+	}
+	var q ImageTaskQuote
+	var err error
+	if IsSeedreamModel(model) {
+		q, err = s.seedreamQuote(ctx, key, sub, &snapshot.Seedream.Request)
+	} else {
+		q, err = s.quote(ctx, key, sub, platform, model, size, count)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +396,9 @@ func (s *DurableImageService) run(parent context.Context, t *DurableImageTask, e
 		var status int
 		var body json.RawMessage
 		var err error
-		if snapshot.Midjourney != nil {
+		if snapshot.Seedream != nil {
+			status, body, err = s.executeSeedream(execCtx, snapshot.Seedream, key, capture)
+		} else if snapshot.Midjourney != nil {
 			status, body, err = s.executeMidjourney(execCtx, snapshot.Midjourney, key, capture)
 		} else {
 			status, body, err = execute(execCtx, &snapshot, key, capture)
@@ -478,6 +494,13 @@ func (s *DurableImageService) settlement(ctx context.Context, t *DurableImageTas
 		return nil, errors.New("missing upstream usage")
 	}
 	log := *t.CapturedUsage
+	if t.Quote.Seedream != nil {
+		log.ImageCount = count
+		if log.ActualCost > t.Quote.Charge.APIKeyQuotaCost+1e-8 {
+			return nil, errors.New("seedream settlement exceeds reserved cost")
+		}
+		return &log, nil
+	}
 	if t.Quote.Model == MidjourneyModel {
 		count = 1
 	}
@@ -591,6 +614,26 @@ func (s *DurableImageService) publishResult(ctx context.Context, t *DurableImage
 		item["asset_id"], _ = json.Marshal(assetID)
 		item["url"], _ = json.Marshal(rawURL)
 		delete(item, "b64_json")
+	}
+	if t.Quote.Seedream != nil {
+		areas := make([]int64, 0, len(items))
+		for _, item := range items {
+			var id string
+			_ = json.Unmarshal(item["asset_id"], &id)
+			area, err := s.ownedImageArea(ctx, id, ImageTaskOwner{key.UserID, key.ID})
+			if err != nil {
+				return nil, 0, err
+			}
+			areas = append(areas, area)
+		}
+		cost, err := t.Quote.Seedream.cost(areas)
+		if err != nil || t.CapturedUsage == nil {
+			return nil, 0, errors.New("could not price Seedream output")
+		}
+		t.CapturedUsage.ActualCost = cost.ActualCost
+		t.CapturedUsage.TotalCost = cost.TotalCost
+		t.CapturedUsage.ImageOutputCost = cost.ImageOutputCost
+		t.CapturedUsage.ImageInputCost = cost.ImageInputCost
 	}
 	top["data"], _ = json.Marshal(items)
 	if _, ok := top["model"]; !ok {

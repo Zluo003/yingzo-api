@@ -89,6 +89,9 @@ func RegisterGatewayRoutes(
 		return getGroupPlatform(c) == service.PlatformOpenAI
 	}
 	imagesHandler := func(c *gin.Context) {
+		if h.AsyncImage != nil && h.AsyncImage.TrySeedream(c) {
+			return
+		}
 		if h.AsyncImage != nil && h.AsyncImage.Prefer(c, agentOrGroupPlatform(c)) {
 			return
 		}

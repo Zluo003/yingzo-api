@@ -1,6 +1,7 @@
 import mediaInputAudit from './mediaInputAudit'
 import videoChannels from './videoChannels'
 import midjourney from './midjourney'
+import seedream from './seedream'
 import landing from './landing'
 import common from './common'
 import dashboard from './dashboard'
@@ -23,6 +24,7 @@ export default deepMergeMessages(
     ...batchImage,
     admin,
     midjourney,
+    seedream,
     videoChannels,
     mediaInputAudit,
     suno,

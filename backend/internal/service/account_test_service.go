@@ -358,6 +358,9 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	if account.IsSuno() {
 		return s.testSunoAccount(c, account)
 	}
+	if account.IsSeedream() {
+		return s.testSeedreamAccount(c, account)
+	}
 	if account.IsMidjourney() {
 		return s.testMidjourneyAccount(c, account)
 	}

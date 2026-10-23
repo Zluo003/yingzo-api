@@ -12,6 +12,8 @@ The Backup page links to the new location. The old image-storage GET endpoint re
 
 Generated outputs reuse their existing retention, capacity and daily quotas. Default retention is 24 hours; configured values are preserved. Local files use `/media/{asset_id}/asset.ext`. For S3/R2, task queries resolve the stored asset ID and object location to a current public or signed direct-download URL. Do not persist a signed URL as the permanent asset identity. S3/R2 transfer is performed by the gateway after it receives the upstream image/video.
 
+Seedream 5.0 Pro / Flash always use asynchronous submission through the Images API; see [Seedream integration](SEEDREAM_5_IMAGE_API.md) for parameters, reference pricing, layer outputs and conservative reservations.
+
 ## Submission and compatibility
 
 Send `Prefer: respond-async` with the existing non-streaming request body:

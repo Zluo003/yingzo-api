@@ -801,6 +801,9 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 	if err := normalizeSunoAccount(account); err != nil {
 		return nil, err
 	}
+	if err := normalizeSeedreamAccount(account); err != nil {
+		return nil, err
+	}
 	if err := normalizeMidjourneyAccount(account); err != nil {
 		return nil, err
 	}
@@ -1183,6 +1186,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 	}
 
 	if err := normalizeSunoAccount(account); err != nil {
+		return nil, err
+	}
+	if err := normalizeSeedreamAccount(account); err != nil {
 		return nil, err
 	}
 	if err := normalizeMidjourneyAccount(account); err != nil {

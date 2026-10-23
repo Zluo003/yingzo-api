@@ -12,6 +12,7 @@ var ErrImageIdempotencyConflict = errors.New("idempotency key was already used w
 var ErrImageTaskLeaseLost = errors.New("image task execution lease was lost")
 
 type ImageTaskQuote struct {
+	Seedream *SeedreamFrozenPrices `json:",omitempty"`
 	// Retained after settlement so owned follow-up selections can resolve their
 	// provider task without retaining prompts or exposing upstream identifiers.
 	EncryptedProviderReference string
@@ -87,6 +88,7 @@ func captureAsyncImageUsage(ctx context.Context, log *UsageLog) bool {
 }
 
 type ImageRequestSnapshot struct {
+	Seedream      *SeedreamSnapshot       `json:"seedream,omitempty"`
 	Midjourney    *MidjourneySnapshot     `json:"midjourney,omitempty"`
 	Route         *CompositeRouteDecision `json:"route,omitempty"`
 	Platform      string                  `json:"platform"`

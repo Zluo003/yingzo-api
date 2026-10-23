@@ -279,6 +279,21 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 			"max_mode_multiplier": 2,
 		}
 	}
+	if service.IsSeedreamModel(entry.ID) {
+		tiers := configuredAgentModelResolutions(entry, config, service.AgentMediaTypeImage)
+		sizes := []string{}
+		if containsAgentMediaType(tiers, "1K") && containsAgentMediaType(tiers, "2K") {
+			sizes = []string{"1K", "1.5K", "2K"}
+		}
+		capabilities["supported_image_sizes"] = sizes
+		capabilities["supported_aspect_ratios"] = service.SeedreamAspectRatios
+		capabilities["max_input_images"] = 10
+		capabilities["max_output_images"] = 1
+		capabilities["supports_layer_decomposition"] = true
+		capabilities["max_layer_outputs"] = 17
+		capabilities["supported_output_formats"] = []string{"jpeg", "png"}
+		capabilities["asynchronous"] = true
+	}
 	if entry.ID == service.MidjourneyModel {
 		// The desktop only needs generation speed choices for Midjourney.
 		// Fixed version, routing and upscale rules belong to the API contract.
@@ -544,6 +559,40 @@ func (h *AgentHandler) calculateGenerationQuote(ctx context.Context, apiKey *ser
 	case "image":
 		if h.billingService == nil || h.agentModels == nil {
 			return nil, infraerrors.ServiceUnavailable("generation_estimate_failed", "Image pricing service is unavailable")
+		}
+		if service.IsSeedreamModel(input.Model) {
+			if input.Count != 1 || (input.Platform != "" && input.Platform != service.PlatformOpenAI) {
+				return nil, infraerrors.BadRequest("invalid_image_request", "Seedream requires count=1 and platform=openai")
+			}
+			var raw map[string]json.RawMessage
+			if json.Unmarshal(input.Request, &raw) != nil || raw == nil {
+				return nil, infraerrors.BadRequest("invalid_image_request", "Invalid Seedream request")
+			}
+			if m, ok := raw["model"]; ok {
+				var model string
+				_ = json.Unmarshal(m, &model)
+				if service.CanonicalSeedreamModel(model) != input.Model {
+					return nil, infraerrors.BadRequest("estimate_model_mismatch", "Request model does not match estimate model")
+				}
+			}
+			raw["model"], _ = json.Marshal(input.Model)
+			body, _ := json.Marshal(raw)
+			r, err := service.ParseSeedreamRequest(body)
+			if err != nil {
+				return nil, infraerrors.BadRequest("invalid_image_request", err.Error())
+			}
+			frozen, err := h.agentModels.EstimateSeedream(ctx, apiKey, h.billingService, r)
+			if err != nil {
+				return nil, infraerrors.BadRequest("pricing_not_configured", "Configure both Seedream output prices and reference pricing").WithCause(err)
+			}
+			quote.UnitKind = "image"
+			quote.Units = float64(frozen.Count)
+			quote.UnitPrice = frozen.PerImage.ActualCost
+			quote.TotalPrice = frozen.Charge.APIKeyQuotaCost
+			quote.ActualPrice = quote.TotalPrice
+			quote.Details = map[string]any{"platform": service.PlatformOpenAI, "image_size": r.BillingTier(), "count": 1, "reserved_output_images": frozen.Count, "input_images": len(r.ImageURLs), "input_image_cost": frozen.Seedream.InputCost.ActualCost, "layer_decomposition": r.LayerDecomposition, "settlement": "actual_pixel_area"}
+			quote.RequestHash = hashJSON(map[string]any{"kind": input.Kind, "platform": service.PlatformOpenAI, "request": r, "count": 1})
+			return quote, nil
 		}
 		var request struct {
 			Model string `json:"model"`

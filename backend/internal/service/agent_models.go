@@ -67,8 +67,8 @@ type AgentModelPrice struct {
 type AgentGroupModel struct {
 	VideoChannels   []VideoChannel `json:"video_channels,omitempty"`
 	FreeInputImages *int           `json:"free_input_images,omitempty"`
-	// InputImageUnitPrice 是 MiniMax H3 超额输入图片的每张单价。nil 表示未配置，
-	// 此时超额图片沿用所选分辨率档位的单价计费。0 是合法值（超额图片免费）。
+	// InputImageUnitPrice prices excess reference images. For MiniMax H3, nil
+	// falls back to the output unit price; for Seedream, nil means free.
 	InputImageUnitPrice *float64          `json:"input_image_unit_price,omitempty"`
 	ID                  int64             `json:"id"`
 	GroupID             int64             `json:"group_id"`
@@ -346,11 +346,12 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 	if input.Enabled && mediaType != AgentMediaTypeText && !hasEnabledAgentModelPrice(prices) {
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "an enabled media model requires at least one configured and enabled price")
 	}
-	if input.FreeInputImages != nil && (mediaType != AgentMediaTypeVideo || !isMinimaxH3Model(model.ModelCode) || *input.FreeInputImages < 0) {
-		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "free_input_images requires a non-negative integer on MiniMax H3 video models")
+	supportsInputImagePricing := (mediaType == AgentMediaTypeVideo && isMinimaxH3Model(model.ModelCode)) || (mediaType == AgentMediaTypeImage && IsSeedreamModel(model.ModelCode))
+	if input.FreeInputImages != nil && (!supportsInputImagePricing || *input.FreeInputImages < 0) {
+		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "free_input_images requires a non-negative integer on MiniMax H3 video or Seedream image models")
 	}
-	if input.InputImageUnitPrice != nil && (mediaType != AgentMediaTypeVideo || !isMinimaxH3Model(model.ModelCode) || *input.InputImageUnitPrice < 0) {
-		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "input_image_unit_price requires a non-negative number on MiniMax H3 video models")
+	if input.InputImageUnitPrice != nil && (!supportsInputImagePricing || *input.InputImageUnitPrice < 0 || math.IsNaN(*input.InputImageUnitPrice) || math.IsInf(*input.InputImageUnitPrice, 0)) {
+		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "input_image_unit_price requires a non-negative number on MiniMax H3 video or Seedream image models")
 	}
 	if err := s.modelRepo.UpdateModelConfig(ctx, groupID, model.ID, mediaType, input.Enabled, rate, input.FreeInputImages, input.InputImageUnitPrice, prices); err != nil {
 		return nil, fmt.Errorf("update Agent model: %w", err)

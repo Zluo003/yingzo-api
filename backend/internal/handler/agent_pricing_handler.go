@@ -79,16 +79,18 @@ func (h *AgentHandler) GetAgentPricingCompatibility(c *gin.Context) {
 }
 
 type agentPricingSnapshotRule struct {
-	VideoChannelID      string  `json:"video_channel_id"`
-	Model               string  `json:"model"`
-	Platform            string  `json:"platform"`
-	MediaType           string  `json:"media_type"`
-	Resolution          string  `json:"resolution"`
-	UnitKind            string  `json:"unit_kind"`
-	UnitPrice           float64 `json:"unit_price"`
-	EffectiveUnitPrice  float64 `json:"effective_unit_price"`
-	BillingMultiplier   float64 `json:"billing_multiplier"`
-	ReferenceMultiplier float64 `json:"reference_multiplier"`
+	FreeInputImages     *int     `json:"free_input_images,omitempty"`
+	InputImageUnitPrice *float64 `json:"input_image_unit_price,omitempty"`
+	VideoChannelID      string   `json:"video_channel_id"`
+	Model               string   `json:"model"`
+	Platform            string   `json:"platform"`
+	MediaType           string   `json:"media_type"`
+	Resolution          string   `json:"resolution"`
+	UnitKind            string   `json:"unit_kind"`
+	UnitPrice           float64  `json:"unit_price"`
+	EffectiveUnitPrice  float64  `json:"effective_unit_price"`
+	BillingMultiplier   float64  `json:"billing_multiplier"`
+	ReferenceMultiplier float64  `json:"reference_multiplier"`
 }
 
 type agentPricingSnapshot struct {
@@ -137,11 +139,24 @@ func (h *AgentHandler) GetAgentPricingSnapshot(c *gin.Context) {
 			continue
 		}
 		for _, price := range model.Prices {
+			var free *int
+			var inputPrice *float64
+			if service.IsSeedreamModel(model.ModelCode) {
+				f, p := 1, 0.0
+				if model.FreeInputImages != nil {
+					f = *model.FreeInputImages
+				}
+				if model.InputImageUnitPrice != nil {
+					p = *model.InputImageUnitPrice
+				}
+				free, inputPrice = &f, &p
+			}
 			if !agentModelPriceEnabled(price) {
 				continue
 			}
 			rules = append(rules, agentPricingSnapshotRule{
 				Model: model.ModelCode, Platform: model.Platform, MediaType: model.MediaType,
+				FreeInputImages: free, InputImageUnitPrice: inputPrice,
 				VideoChannelID: price.VideoChannelID, Resolution: price.Resolution, UnitKind: price.BillingUnit,
 				UnitPrice: price.UnitPrice, EffectiveUnitPrice: price.UnitPrice,
 				BillingMultiplier: 1,

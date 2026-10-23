@@ -54,6 +54,9 @@ func (h *AsyncImageHandler) pollable() bool {
 // Submit accepts the same payload as the synchronous Images endpoint and
 // returns before the upstream image generation begins.
 func (h *AsyncImageHandler) Submit(c *gin.Context) {
+	if h.TrySeedream(c) {
+		return
+	}
 	if h != nil && h.durable != nil {
 		c.Set(ctxKeyLocalImageTaskAdmission, true)
 	}
