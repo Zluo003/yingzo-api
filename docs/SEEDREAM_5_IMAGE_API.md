@@ -84,6 +84,8 @@ Idempotency-Key: <本次逻辑操作唯一 UUID>
 
 Seedream 始终异步，成功提交返回 **HTTP 202**。客户端应发送 `Prefer: respond-async`，以便余额或额度被预扣耗尽时仍可通过同一幂等键重放已接受请求。也可使用 `/v1/images/generations/async`。
 
+供应商任务接口的成功状态兼容 `success`（Seedream 模型示例）和 `completed`（通用任务接口），二者均在校验图片结果后进入网关的成功处理；下游继续使用网关返回的任务状态。参考 [APIMart 任务状态](https://docs.apimart.ai/cn/api-reference/tasks/status)。
+
 图生图仍可使用生成接口并传 `image_urls`；`/v1/images/edits` 和 `/v1/images/edits/async` 是 JSON 编辑入口，要求至少一张参考图。两个入口共用同一规范化请求幂等指纹。此适配器不接受 multipart 或 OpenAI `image` 文件字段。
 
 | 参数 | 约束和默认值 |

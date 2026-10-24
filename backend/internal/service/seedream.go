@@ -518,6 +518,10 @@ func normalizeSeedreamResult(body []byte, r *SeedreamRequest) (json.RawMessage, 
 		return nil, "", err
 	}
 	status := strings.ToLower(result.Status)
+	// APIMart's task API uses completed; Seedream's model examples use success.
+	if status == "completed" {
+		status = "success"
+	}
 	if status != "success" {
 		return nil, status, nil
 	}

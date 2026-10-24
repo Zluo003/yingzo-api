@@ -154,6 +154,9 @@ func TestSeedreamAccountAndAsyncUpstream(t *testing.T) {
 			} else {
 				require.Equal(t, "/v1/tasks/provider_task", req.URL.Path)
 				body = `{"code":200,"data":{"status":"success","result":{"images":[{"url":["https://image.example/result.png"],"sizes":["1536x1536"],"output_formats":["png"]}]}}}`
+				if model == SeedreamFlashModel {
+					body = strings.Replace(body, `"status":"success"`, `"status":"completed"`, 1)
+				}
 			}
 			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
 		}}
@@ -187,6 +190,21 @@ func TestSeedreamLayerMetadataAndOutputCount(t *testing.T) {
 	require.Error(t, err)
 	_, _, err = normalizeSeedreamResult([]byte(`{"status":"success","result":{"images":[{"url":["https://image.example/base.png"]}]}}`), &SeedreamRequest{LayerDecomposition: true})
 	require.Error(t, err)
+}
+
+func TestSeedreamCompletedTaskResult(t *testing.T) {
+	for _, envelope := range []bool{false, true} {
+		body := `{"status":"completed","result":{"images":[{"url":["https://image.example/result.png"]}]}}`
+		if envelope {
+			body = `{"code":200,"data":` + body + `}`
+		}
+		output, status, err := normalizeSeedreamResult([]byte(body), &SeedreamRequest{Model: SeedreamFlashModel})
+		require.NoError(t, err)
+		require.Equal(t, "success", status)
+		require.Contains(t, string(output), `"url":"https://image.example/result.png"`)
+	}
+	_, _, err := normalizeSeedreamResult([]byte(`{"status":"completed","result":{"images":[]}}`), &SeedreamRequest{Model: SeedreamFlashModel})
+	require.ErrorContains(t, err, "unexpected Seedream result groups")
 }
 func TestSeedreamUnknownPostOutcomeAndRevokedOwner(t *testing.T) {
 	calls := 0
