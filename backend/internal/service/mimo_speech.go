@@ -135,7 +135,7 @@ func ValidateMiMoSpeechRequest(body []byte, model string) error {
 			}
 		}
 	}
-	if !assistant && !(model == MiMoVoiceDesignModel && optimize.Bool()) {
+	if !assistant && (model != MiMoVoiceDesignModel || !optimize.Bool()) {
 		return errors.New("speech text is required in an assistant message")
 	}
 	format := audio.Get("format")

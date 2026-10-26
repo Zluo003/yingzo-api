@@ -21,7 +21,7 @@ sha256() {
 }
 
 archive="ffmpeg-$version.tar.xz"
-curl --fail --location --retry 3 --max-time 180 \
+curl --fail --location --retry 3 --retry-all-errors --max-time 180 \
     "https://ffmpeg.org/releases/$archive" -o "$work/$archive"
 test "$(sha256 "$work/$archive")" = "$source_sha256" || {
     echo 'FFmpeg source checksum mismatch' >&2
