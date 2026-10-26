@@ -43,6 +43,17 @@ func TestMiMoSpeechAccountIsolation(t *testing.T) {
 	require.Error(t, normalizeMiMoSpeechAccount(a))
 }
 
+func TestMiMoSpeechSchedulerCapabilities(t *testing.T) {
+	a := mimoTestAccount(t)
+	require.True(t, accountSupportsOpenAICapabilities(a, OpenAIEndpointCapabilityChatCompletions, ""), "chat scheduling must not require an image capability")
+	for _, capability := range []OpenAIEndpointCapability{OpenAIEndpointCapabilityResponses, OpenAIEndpointCapabilityEmbeddings, OpenAIEndpointCapabilityLive} {
+		require.False(t, accountSupportsOpenAICapabilities(a, capability, ""))
+	}
+	for _, capability := range []OpenAIImagesCapability{OpenAIImagesCapabilityBasic, OpenAIImagesCapabilityNative} {
+		require.False(t, accountSupportsOpenAICapabilities(a, "", capability))
+	}
+}
+
 func TestMiMoSpeechValidation(t *testing.T) {
 	for _, tc := range []struct {
 		name, model, body string

@@ -952,6 +952,37 @@ func TestOpsErrorLoggerMiddleware_LocalModelConfigurationFields(t *testing.T) {
 	require.Empty(t, job.entry.UpstreamEndpoint)
 }
 
+func TestOpsErrorLoggerMiddleware_UnattemptedSpeechRoutingHasNoUpstream(t *testing.T) {
+	for _, attempted := range []bool{false, true} {
+		t.Run(map[bool]string{false: "no upstream attempt", true: "upstream attempted"}[attempted], func(t *testing.T) {
+			setupOpsErrorLogTestQueue(t, 1)
+			gin.SetMode(gin.TestMode)
+			ops := service.NewOpsService(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			router := gin.New()
+			router.Use(OpsErrorLoggerMiddleware(ops))
+			router.POST("/v1/chat/completions", func(c *gin.Context) {
+				setOpsRequestContext(c, service.MiMoVoiceDesignModel, false)
+				markOpsRoutingCapacityLimited(c)
+				if attempted {
+					service.SetActualOpenAIUpstreamEndpoint(c, EndpointChatCompletions)
+					c.Set(service.OpsUpstreamStatusCodeKey, http.StatusServiceUnavailable)
+				}
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": gin.H{"type": "api_error", "message": "Service temporarily unavailable"}})
+			})
+			router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil))
+			job := <-opsErrorLogQueue
+			require.Equal(t, EndpointChatCompletions, job.entry.InboundEndpoint)
+			if attempted {
+				require.Equal(t, EndpointChatCompletions, job.entry.UpstreamEndpoint)
+				require.NotNil(t, job.entry.UpstreamStatusCode)
+			} else {
+				require.Empty(t, job.entry.UpstreamEndpoint)
+				require.Nil(t, job.entry.UpstreamStatusCode)
+			}
+		})
+	}
+}
+
 func TestOpsErrorLoggerMiddleware_LocalImageTasksHaveNoUpstream(t *testing.T) {
 	for _, path := range []string{"/v1/images/tasks/imgtask_missing", "/v1/images/tasks/by-idempotency/missing", "/images/tasks/imgtask_missing", "/v1/images/generations"} {
 		t.Run(path, func(t *testing.T) {

@@ -1978,7 +1978,7 @@ func (a *Account) openAIEndpointCapabilitySet() (map[string]bool, bool) {
 
 func (a *Account) SupportsOpenAIImageCapability(capability OpenAIImagesCapability) bool {
 	if a.IsMiMoSpeech() {
-		return false
+		return capability == ""
 	}
 	if a.IsMidjourney() || a.IsSuno() || a.IsSeedream() {
 		return false

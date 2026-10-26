@@ -1,6 +1,6 @@
 # MiMo V2.5 语音合成 · Yingzo 客户端对接
 
-核对日期：2026-10-26。下游使用 **Yingzo 服务地址与 Yingzo API Key**。上游 MiMo API Key 只保存在网关账号中。
+核对日期：2026-10-27。下游使用 **Yingzo 服务地址与 Yingzo API Key**。上游 MiMo API Key 只保存在网关账号中。
 
 上游依据：[使用指南](https://mimo.mi.com/docs/zh-CN/quick-start/usage-guide/audio/speech-synthesis-v2.5)、[API 参数原文](https://mimo.mi.com/static/docs/api/audio/tts.md)。
 
@@ -221,7 +221,7 @@ async function synthesize(baseUrl: string, apiKey: string, text: string): Promis
 流式客户端使用 POST + `fetch` 或支持自定义 POST 请求的 SSE 库，处理规则如下：
 
 1. 用流式 `TextDecoder` 解码网络字节，保留跨网络块的不完整 SSE 帧；以空行切分事件，合并帧内的 `data:` 行。不能把一次网络 `read()` 当成一次 SSE 事件。
-2. `data: [DONE]` 表示流结束。其他 `data:` 内容解析为 JSON，先检查 `error`；`choices=[]` 的帧可能只有 `usage`。
+2. `data: [DONE]` 表示流结束。其他 `data:` 内容解析为 JSON，先检查 `error`；`choices=[]` 的帧可能只有 `usage`。初始化帧的 `delta.audio` 可能为 `null`，跳过没有音频数据的帧即可。
 3. 音频位于 `choices[0].delta.audio.data`。**每个音频字段独立 Base64 解码，再按顺序拼接字节**，不要先拼接 Base64 字符串。文本润色结果可能位于 `delta.final_text_preview`，分别保存。
 4. 音频格式是 **24 kHz、单声道、PCM16LE**。每个采样点占两字节；若跨块出现单字节尾部，将它留到下一块再组成采样。实时播放可用 AudioWorklet 队列，将有符号 16 位整数除以 `32768` 转为浮点采样，再按输出设备采样率重采样。
 5. 原始 PCM 没有 WAV 文件头，不能直接作为 WAV/MP3 Blob 交给 `<audio>`。下载时添加 WAV 文件头，或使用音频库封装；上面的 Python 例子展示了标准 WAV 写入方式。
@@ -239,3 +239,7 @@ async function synthesize(baseUrl: string, apiKey: string, text: string): Promis
 - 音色设计检查用户描述必填、禁止预置 voice、`optimize_text_preview=true` 自动生成文案及 `final_text_preview` 展示。
 - 含 `assistant` 的风格标签、中文 voice ID、长文本与网络断流，均不丢失或重复音频块。
 - 查询网关用量，核对返回 token 用量与已配置价格；模型目录缺失时检查账号绑定、目录同步、模型启用及定价。
+
+遇到 `503 Service temporarily unavailable` 时，先检查错误记录是否包含选中账号和上游状态码。两者都为空且错误阶段为 `routing`，表示请求在本地调度阶段失败，上游尚未收到请求。旧版日志会把 OpenAI 兼容请求的默认推断端点显示为 `/v1/responses`，这不代表实际调用了 Responses；无上游调用的调度失败应显示空端点，成功合成的实际端点应为 `/v1/chat/completions`。
+
+2026-10-27 已在本地重建的 Docker 容器中使用临时 MiMo Key 验证两个模型的 JSON 与 SSE 调用均返回 200，音频为 24 kHz、单声道 PCM16；模型发现、真实 token 用量、渠道价格乘模型倍率结算及实际端点记录均已核对。

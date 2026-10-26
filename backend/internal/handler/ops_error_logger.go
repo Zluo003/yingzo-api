@@ -1246,6 +1246,7 @@ func OpsErrorLoggerMiddleware(ops *service.OpsService) gin.HandlerFunc {
 			}
 		}
 		suppressOpsUpstreamAttributionForLocalModelConfiguration(c, entry)
+		suppressOpsUnattemptedRoutingUpstream(c, entry)
 
 		if apiKey != nil {
 			entry.APIKeyID = &apiKey.ID
@@ -1714,6 +1715,19 @@ func applyOpsUpstreamErrorEvents(entry *service.OpsInsertErrorLogInput, events [
 	if detail := strings.TrimSpace(last.Detail); detail != "" {
 		entry.UpstreamErrorDetail = &detail
 	}
+}
+
+// A capacity failure before selecting any account has no upstream endpoint.
+// Keep actual attempts intact when a later failover runs out of accounts.
+func suppressOpsUnattemptedRoutingUpstream(c *gin.Context, entry *service.OpsInsertErrorLogInput) {
+	if entry == nil || !isOpsRoutingCapacityLimited(c) || entry.AccountID != nil || hasOpsUpstreamErrorContext(c) {
+		return
+	}
+	if service.GetActualOpenAIUpstreamEndpoint(c) != "" || c.GetString(ctxKeyActualUpstreamEndpoint) != "" {
+		return
+	}
+	entry.UpstreamEndpoint = ""
+	entry.UpstreamModel = ""
 }
 
 func suppressOpsUpstreamAttributionForLocalModelConfiguration(c *gin.Context, entry *service.OpsInsertErrorLogInput) {
