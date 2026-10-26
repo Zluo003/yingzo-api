@@ -920,7 +920,11 @@ func (r *accountRepository) accountListFilteredQuery(platform, accountType, stat
 	if platform != "" {
 		q = q.Where(dbaccount.PlatformEQ(platform))
 	}
-	if accountType != "" {
+	if accountType == "speech" {
+		q = q.Where(dbaccount.PlatformEQ(service.PlatformOpenAI), dbaccount.TypeEQ(service.AccountTypeAPIKey), dbpredicate.Account(func(s *entsql.Selector) {
+			s.Where(sqljson.ValueEQ(dbaccount.FieldExtra, service.MiMoSpeechProvider, sqljson.Path("speech_provider")))
+		}))
+	} else if accountType != "" {
 		q = q.Where(dbaccount.TypeEQ(accountType))
 	}
 	if status != "" {

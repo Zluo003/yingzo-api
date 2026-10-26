@@ -26,6 +26,7 @@
       {{ t('admin.accounts.createImageAccount') }}
     </button>
     <button type="button" class="btn btn-secondary" data-testid="create-music-account" @click="$emit('create-music')">{{ t('suno.addMusic') }}</button>
+    <button type="button" class="btn btn-secondary" data-testid="create-speech-account" @click="$emit('create-speech')">{{ t('speech.addSpeech') }}</button>
     <slot name="afterCreate"></slot>
   </div>
 </template>
@@ -35,7 +36,7 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 
 defineProps(['loading'])
-defineEmits(['refresh', 'create', 'create-video', 'create-image', 'create-music'])
+defineEmits(['refresh', 'create', 'create-video', 'create-image', 'create-music', 'create-speech'])
 
 const { t } = useI18n()
 </script>

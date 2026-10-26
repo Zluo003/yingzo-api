@@ -127,12 +127,12 @@ func (h *AgentHandler) GetAgentPricingSnapshot(c *gin.Context) {
 			continue
 		}
 		// 文本模型：每模型一个倍率，作用在该账号所属源分组的渠道价之上。
-		if model.MediaType == service.AgentMediaTypeText {
+		if service.UsesAgentTokenPricing(model.MediaType, model.ModelCode) {
 			if model.RateMultiplier == nil {
 				continue
 			}
 			rules = append(rules, agentPricingSnapshotRule{
-				Model: model.ModelCode, Platform: model.Platform, MediaType: service.AgentMediaTypeText,
+				Model: model.ModelCode, Platform: model.Platform, MediaType: model.MediaType,
 				UnitKind: "channel_price_multiplier", UnitPrice: 1,
 				BillingMultiplier: *model.RateMultiplier, EffectiveUnitPrice: *model.RateMultiplier,
 			})

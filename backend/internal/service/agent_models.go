@@ -339,11 +339,15 @@ func (s *AgentModelCatalogService) UpdateModel(ctx context.Context, groupID, mod
 			}
 		}
 	}
-	rate, err := normalizeAgentModelRate(mediaType, input.Enabled, input.RateMultiplier)
+	pricingType := mediaType
+	if UsesAgentTokenPricing(mediaType, model.ModelCode) {
+		pricingType = AgentMediaTypeText
+	}
+	rate, err := normalizeAgentModelRate(pricingType, input.Enabled, input.RateMultiplier)
 	if err != nil {
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", err.Error())
 	}
-	if input.Enabled && mediaType != AgentMediaTypeText && !hasEnabledAgentModelPrice(prices) {
+	if input.Enabled && !UsesAgentTokenPricing(mediaType, model.ModelCode) && !hasEnabledAgentModelPrice(prices) {
 		return nil, infraerrors.BadRequest("AGENT_MODEL_CONFIG_INVALID", "an enabled media model requires at least one configured and enabled price")
 	}
 	supportsInputImagePricing := (mediaType == AgentMediaTypeVideo && isMinimaxH3Model(model.ModelCode)) || (mediaType == AgentMediaTypeImage && IsSeedreamModel(model.ModelCode))
@@ -427,7 +431,7 @@ func (s *AgentModelCatalogService) ResolveTextModelRate(ctx context.Context, gro
 	}
 	for _, modelCode := range compactAgentModelCandidates(models) {
 		model, err := s.modelRepo.GetEnabledModel(ctx, groupID, platform, modelCode)
-		if err != nil || model == nil || model.MediaType != AgentMediaTypeText || model.RateMultiplier == nil {
+		if err != nil || model == nil || !UsesAgentTokenPricing(model.MediaType, model.ModelCode) || model.RateMultiplier == nil {
 			continue
 		}
 		if *model.RateMultiplier < 0 {
@@ -448,7 +452,7 @@ func (s *AgentModelCatalogService) RequireAccountLanguageModel(ctx context.Conte
 			continue
 		}
 		model, err := s.modelRepo.GetEnabledModel(ctx, groupID, account.Platform, modelCode)
-		if err == nil && model != nil && model.MediaType == AgentMediaTypeText {
+		if err == nil && model != nil && UsesAgentTokenPricing(model.MediaType, model.ModelCode) {
 			return model.ModelCode, nil
 		}
 	}
@@ -994,6 +998,9 @@ var (
 // 先看视频关键词：视频族里存在同时含 image 的名字（grok-imagine-video 之类），
 // 顺序反了会被误判成图片。
 func classifyAgentModelFamily(model string) string {
+	if IsMiMoSpeechModel(model) {
+		return AgentMediaTypeAudio
+	}
 	lower := strings.ToLower(strings.TrimSpace(model))
 	if lower == "" {
 		return ""
@@ -1056,6 +1063,9 @@ func addConfiguredAgentCatalogEntry(entries map[string]*agentModelCatalogAccumul
 }
 
 func agentInterfacesForModel(platform, mediaType, modelCode string) []string {
+	if platform == PlatformOpenAI && IsMiMoSpeechModel(modelCode) {
+		return []string{AgentInterfaceOpenAIChatCompletions}
+	}
 	if modelCode == SunoModel && mediaType == AgentMediaTypeAudio {
 		return []string{AgentInterfaceMusic}
 	}

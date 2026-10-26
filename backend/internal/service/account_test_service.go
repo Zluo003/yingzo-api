@@ -179,6 +179,9 @@ func (s *AccountTestService) SetOpenAIGatewayService(gateway *OpenAIGatewayServi
 
 // FetchOpenAIAccountModels uses the shared cached discovery path for the test picker.
 func (s *AccountTestService) FetchOpenAIAccountModels(ctx context.Context, account *Account) ([]openai.Model, error) {
+	if account.IsMiMoSpeech() {
+		return []openai.Model{{ID: MiMoTTSModel, Object: "model", Type: "model", OwnedBy: "xiaomi", DisplayName: "MiMo V2.5 TTS"}, {ID: MiMoVoiceDesignModel, Object: "model", Type: "model", OwnedBy: "xiaomi", DisplayName: "MiMo V2.5 Voice Design"}}, nil
+	}
 	if account.IsSuno() {
 		return []openai.Model{{ID: SunoModel, Object: "model", Type: "model", OwnedBy: "yingzo-agent", DisplayName: "Suno v6"}}, nil
 	}
@@ -355,6 +358,9 @@ func (s *AccountTestService) TestAccountConnection(c *gin.Context, accountID int
 	}
 
 	// Route to platform-specific test method
+	if account.IsMiMoSpeech() {
+		return s.testMiMoSpeechAccount(c, account)
+	}
 	if account.IsSuno() {
 		return s.testSunoAccount(c, account)
 	}

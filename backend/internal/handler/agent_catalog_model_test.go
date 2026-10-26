@@ -163,3 +163,18 @@ func TestAgentCatalogMidjourneyOnlyConfiguredOperations(t *testing.T) {
 		require.Equal(t, []string{service.AgentInterfaceMidjourney}, model["interfaces"])
 	}
 }
+
+func TestMiMoSpeechCatalogCapabilities(t *testing.T) {
+	for _, id := range []string{service.MiMoTTSModel, service.MiMoVoiceDesignModel} {
+		entry := service.AgentModelCatalogEntry{ID: id, MediaTypes: []string{service.AgentMediaTypeAudio}, Platforms: []string{service.PlatformOpenAI}, Interfaces: []string{service.AgentInterfaceOpenAIChatCompletions}}
+		caps := capabilitiesOf(t, agentCatalogModel(entry, nil))
+		require.Equal(t, []string{"text"}, caps["input_modalities"])
+		require.Equal(t, []string{"audio"}, caps["output_modalities"])
+		require.Equal(t, []string{"audio.generate"}, caps["operations"])
+		require.Equal(t, false, caps["asynchronous"])
+		require.Equal(t, true, caps["streaming"])
+		require.Equal(t, id == service.MiMoTTSModel, caps["realtime_streaming"])
+		require.Equal(t, id == service.MiMoVoiceDesignModel, caps["supports_voice_design"])
+		require.Equal(t, []string{"pcm16"}, caps["streaming_output_formats"])
+	}
+}

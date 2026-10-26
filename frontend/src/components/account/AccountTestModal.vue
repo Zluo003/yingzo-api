@@ -77,6 +77,8 @@
         />
       </div>
 
+      <p v-if="isSpeechAccount" class="input-hint">{{ t('speech.testHint') }}</p>
+
       <!-- Terminal Output -->
       <div class="group relative">
         <div
@@ -287,7 +289,8 @@ const loadingModels = ref(false)
 let abortController: AbortController | null = null
 const generatedImages = ref<PreviewImage[]>([])
 const testMode = ref<'default' | 'compact'>('default')
-const isOpenAIAccount = computed(() => props.account?.platform === 'openai')
+const isSpeechAccount = computed(() => props.account?.extra?.speech_provider === 'mimo')
+const isOpenAIAccount = computed(() => props.account?.platform === 'openai' && !isSpeechAccount.value)
 const openAITestModeOptions = computed(() => [
   { value: 'default', label: t('admin.accounts.openai.testModeDefault') },
   { value: 'compact', label: t('admin.accounts.openai.testModeCompact') }

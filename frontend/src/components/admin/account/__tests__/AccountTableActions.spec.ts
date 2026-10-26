@@ -14,6 +14,13 @@ const mountActions = () =>
   })
 
 describe('AccountTableActions', () => {
+  it('opens the dedicated speech account panel', async () => {
+    const wrapper = mountActions()
+    await wrapper.get('[data-testid="create-speech-account"]').trigger('click')
+    expect(wrapper.emitted('create-speech')).toHaveLength(1)
+    expect(wrapper.emitted('create')).toBeUndefined()
+  })
+
   it('renders the video-account button next to the create-account button', async () => {
     const wrapper = mountActions()
     const labels = wrapper.findAll('button').map((button) => button.text())

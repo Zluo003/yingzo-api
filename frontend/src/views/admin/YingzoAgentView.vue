@@ -157,7 +157,7 @@
       </div>
 
       <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
-        {{ activeTab === 'audio' ? t('suno.billingHint') : t(`admin.yingzoAgent.tabs.${activeTab}.hint`) }}
+        {{ activeTab === 'audio' ? t('speech.billingHint') : t(`admin.yingzoAgent.tabs.${activeTab}.hint`) }}
       </p>
 
       <p v-if="activeTab === 'video' && modelsByTab.video.some(hasInputImagePricing)" class="mt-2 text-xs text-primary-600">{{ t('admin.yingzoAgent.inputImagePricingHint') }}</p>
@@ -176,10 +176,10 @@
               <th class="py-2 pr-3">{{ t('admin.yingzoAgent.columns.mediaType') }}</th>
               <th class="py-2 pr-3">{{ t('admin.yingzoAgent.columns.source') }}</th>
               <th class="py-2 pr-3">{{ t('admin.yingzoAgent.columns.enabled') }}</th>
-              <template v-if="activeTab === 'text'">
+              <template v-if="activeTab === 'text' || activeTab === 'audio'">
                 <th class="py-2 pr-3">{{ t('admin.yingzoAgent.columns.rateMultiplier') }}</th>
               </template>
-              <template v-else>
+              <template v-if="activeTab !== 'text'">
                 <th
                   v-for="resolution in resolutionColumns"
                   :key="resolution"
@@ -218,7 +218,7 @@
                   v-model="drafts[model.id].mediaType"
                   class="input w-24"
                   :data-testid="`yingzo-agent-media-type-${model.id}`"
-                  :disabled="model.model_code === MIDJOURNEY_MODEL || model.model_code === 'suno-v6'"
+                  :disabled="model.model_code === MIDJOURNEY_MODEL || model.model_code === 'suno-v6' || isMiMoSpeechModel(model.model_code)"
                 >
                   <option value="text">{{ t('admin.yingzoAgent.mediaType.text') }}</option>
                   <option value="image">{{ t('admin.yingzoAgent.mediaType.image') }}</option>
@@ -248,7 +248,7 @@
                   :data-testid="`yingzo-agent-enabled-${model.id}`"
                 />
               </td>
-              <template v-if="drafts[model.id].mediaType === 'text'">
+              <template v-if="usesTokenPricing(model)">
                 <td class="py-2 pr-3">
                   <input
                     v-model="drafts[model.id].rateMultiplier"
@@ -261,10 +261,12 @@
                   />
                 </td>
               </template>
-              <td v-else-if="isSeedance(model)" :colspan="resolutionColumns.length" class="py-3 pr-3">
+              <template v-if="activeTab === 'audio' && !usesTokenPricing(model)"><td class="py-2 pr-3 text-gray-400">—</td></template>
+              <td v-if="usesTokenPricing(model) && activeTab === 'audio' && resolutionColumns.length" :colspan="resolutionColumns.length" class="text-gray-400">—</td>
+              <td v-else-if="!usesTokenPricing(model) && isSeedance(model)" :colspan="resolutionColumns.length" class="py-3 pr-3">
                 <SeedanceChannelPrices v-model="drafts[model.id].channelPrices" :channels="model.video_channels ?? [{id: '', name: t('videoChannels.default'), enabled:true, available:model.available}]" :resolutions="resolutionColumnsForDraft(model)" />
               </td>
-              <template v-else>
+              <template v-else-if="!usesTokenPricing(model)">
                 <td
                   v-for="resolution in (activeTab === 'text' ? resolutionColumnsForDraft(model) : resolutionColumns)"
                   :key="resolution"
@@ -340,6 +342,7 @@ import type { AdminGroup } from '@/types'
 
 const { t } = useI18n()
 
+import { isMiMoSpeechModel } from '@/components/account/speech'
 import { SUNO_BILLING_TIERS } from '@/components/account/suno'
 const IMAGE_RESOLUTIONS = ['1K', '2K', '4K']
 
@@ -370,7 +373,7 @@ const tabs: { key: AgentMediaType; labelKey: string }[] = [
   { key: 'text', labelKey: 'admin.yingzoAgent.tabs.text.title' },
   { key: 'image', labelKey: 'admin.yingzoAgent.tabs.image.title' },
   { key: 'video', labelKey: 'admin.yingzoAgent.tabs.video.title' },
-  { key: 'audio', labelKey: 'suno.billingTitle' },
+  { key: 'audio', labelKey: 'speech.billingTitle' },
 ]
 
 /** 系统内置聚合分组：由后端 kind/system_code 标识，管理员不能删除。 */
@@ -408,6 +411,7 @@ function resolutionColumnsForDraft(model: AgentGroupModel): string[] {
 }
 
 function resolutionColumnsForType(mediaType: AgentMediaType, modelCode: string): string[] {
+  if (mediaType === 'text' || isMiMoSpeechModel(modelCode)) return []
   if (mediaType === 'audio') return SUNO_BILLING_TIERS
   if (mediaType === 'image') {
     if (modelCode === MIDJOURNEY_MODEL) return MIDJOURNEY_PRICE_TIERS
@@ -436,6 +440,7 @@ function storedPriceResolution(model: AgentGroupModel, resolution: string): stri
   return isSeedreamModel(model.model_code) && resolution === '1.5K' ? '1K' : resolution
 }
 
+function usesTokenPricing(model: AgentGroupModel): boolean { return (drafts[model.id]?.mediaType ?? model.media_type) === 'text' || isMiMoSpeechModel(model.model_code) }
 function isSeedance(model: AgentGroupModel): boolean { return (drafts[model.id]?.mediaType ?? model.media_type) === 'video' && model.model_code.startsWith('seedance-') }
 function channelPriceKey(prices: AgentModelPrice[]): string { return JSON.stringify(prices.map(p => [p.video_channel_id || '',p.resolution,p.billing_unit || 'second',p.unit_price,p.enabled !== false]).sort((a,b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))) }
 function isDirty(model: AgentGroupModel): boolean {
@@ -447,7 +452,7 @@ function isDirty(model: AgentGroupModel): boolean {
     return true
   }
   if (isSeedance(model)) return channelPriceKey(draft.channelPrices) !== channelPriceKey(model.prices)
-  if (draft.mediaType === 'text') {
+  if (usesTokenPricing(model)) {
     return normalizeNumber(draft.rateMultiplier) !== (model.rate_multiplier ?? null)
   }
   if (hasInputImagePricing(model) && normalizeNumber(draft.freeInputImages) !== (model.free_input_images ?? null)) return true
@@ -647,7 +652,7 @@ async function saveChanges(): Promise<void> {
       }
       // 提交草稿里的媒体类型：管理员在页面上改过类型时，这一次保存就把它落库。
       const payload =
-        draft.mediaType === 'text'
+        usesTokenPricing(model)
           ? {
               media_type: draft.mediaType,
               enabled: draft.enabled,

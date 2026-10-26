@@ -798,6 +798,9 @@ func buildAccountForCreate(input *CreateAccountInput, accountExtra map[string]an
 		}
 		account.LoadFactor = input.LoadFactor
 	}
+	if err := normalizeMiMoSpeechAccount(account); err != nil {
+		return nil, err
+	}
 	if err := normalizeSunoAccount(account); err != nil {
 		return nil, err
 	}
@@ -1185,6 +1188,9 @@ func (s *adminServiceImpl) UpdateAccount(ctx context.Context, id int64, input *U
 		}
 	}
 
+	if err := normalizeMiMoSpeechAccount(account); err != nil {
+		return nil, err
+	}
 	if err := normalizeSunoAccount(account); err != nil {
 		return nil, err
 	}
@@ -1269,6 +1275,12 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
 	if err := normalizeVideoResultDelivery(updates); err != nil {
 		return err
 	}
+	if _, changesProvider := updates["speech_provider"]; changesProvider {
+		return infraerrors.BadRequest("INVALID_SPEECH_ACCOUNT", "Use the dedicated speech panel to configure speech accounts")
+	}
+	if _, changesKind := updates["speech_account"]; changesKind {
+		return infraerrors.BadRequest("INVALID_SPEECH_ACCOUNT", "Use the dedicated speech panel to configure speech accounts")
+	}
 	if _, changesProvider := updates["music_provider"]; changesProvider {
 		return infraerrors.BadRequest("INVALID_SUNO_ACCOUNT", "Use the dedicated Suno panel to configure a music provider")
 	}
@@ -1278,6 +1290,9 @@ func (s *adminServiceImpl) UpdateAccountExtra(ctx context.Context, id int64, upd
 		account, err := s.accountRepo.GetByID(ctx, id)
 		if err != nil {
 			return err
+		}
+		if account.IsMiMoSpeech() {
+			return infraerrors.BadRequest("INVALID_SPEECH_ACCOUNT", "Speech accounts cannot also be image accounts")
 		}
 		if account.IsSuno() {
 			return infraerrors.BadRequest("INVALID_SUNO_ACCOUNT", "Suno must use a dedicated music account")
@@ -1364,6 +1379,23 @@ func (s *adminServiceImpl) BulkUpdateAccounts(ctx context.Context, input *BulkUp
 	for _, account := range cachedTargets {
 		if account != nil {
 			targetsByID[account.ID] = account
+		}
+	}
+	if _, changesProvider := input.Extra["speech_provider"]; changesProvider {
+		return nil, infraerrors.BadRequest("INVALID_SPEECH_ACCOUNT", "Use the dedicated speech panel to configure speech accounts")
+	}
+	if _, changesKind := input.Extra["speech_account"]; changesKind {
+		return nil, infraerrors.BadRequest("INVALID_SPEECH_ACCOUNT", "Use the dedicated speech panel to configure speech accounts")
+	}
+	for _, account := range cachedTargets {
+		if !account.IsMiMoSpeech() {
+			continue
+		}
+		_, image := input.Extra["image_provider"]
+		_, music := input.Extra["music_provider"]
+		imageAccount, _ := input.Extra["image_account"].(bool)
+		if len(input.Credentials) > 0 || image || music || imageAccount {
+			return nil, infraerrors.BadRequest("INVALID_SPEECH_ACCOUNT", "Edit speech credentials in the dedicated speech panel")
 		}
 	}
 	if _, changesProvider := input.Extra["music_provider"]; changesProvider {

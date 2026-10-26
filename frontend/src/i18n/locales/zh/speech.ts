@@ -1,0 +1,20 @@
+export default {
+  "addSpeech": "添加语音账号",
+  "createTitle": "添加语音账号 · MiMo",
+  "editTitle": "编辑语音账号 · MiMo",
+  "scope": "预置音色与文本音色设计：mimo-v2.5-tts、mimo-v2.5-tts-voicedesign。",
+  "pricingHint": "绑定 OpenAI 分组或 Yingzo Agent；在渠道配置输入与输出 token 价格，并在音频计费中设置模型倍率。",
+  "keepKey": "留空保留现有 API Key",
+  "proxy": "代理",
+  "noProxy": "不使用代理",
+  "groups": "绑定分组",
+  "required": "请填写名称、API Key，并至少选择一个分组。",
+  "invalidUrl": "请输入 HTTPS 域名地址，可带 /v1；不要填写具体接口路径、查询参数或认证信息。",
+  "saveFailed": "保存语音账号失败",
+  "accountType": "语音账号 · MiMo",
+  "billingTitle": "音频计费",
+  "billingHint": "MiMo 语音按渠道 token 价格 × 模型倍率计费；Suno 音乐按操作和版本逐次计费。",
+  "testHint": "只读检查连接与鉴权，不生成收费语音。",
+  "syncedToAgent": "语音账号已添加，模型已同步至 Yingzo Agent。",
+  "syncFailed": "账号已添加，模型目录同步失败；可在 Yingzo Agent 页面重新同步。"
+}

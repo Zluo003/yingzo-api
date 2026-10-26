@@ -163,6 +163,9 @@ func (d *openAIChatSilentRefusalDetector) observeChatChoicesPayload(payload []by
 			d.observeFinishReason(finish.String())
 		}
 		delta := choice.Get("delta")
+		if audio := delta.Get("audio.data"); audio.Type == gjson.String && audio.String() != "" {
+			d.sawContent = true
+		}
 		if !delta.Exists() {
 			continue
 		}

@@ -1788,6 +1788,9 @@ func (a *Account) GetOpenAISessionID() string {
 }
 
 func (a *Account) SupportsOpenAIEndpointCapability(capability OpenAIEndpointCapability) bool {
+	if a.IsMiMoSpeech() {
+		return capability == "" || capability == OpenAIEndpointCapabilityChatCompletions
+	}
 	if a.IsMidjourney() || a.IsSuno() || a.IsSeedream() {
 		return false
 	}
@@ -1974,6 +1977,9 @@ func (a *Account) openAIEndpointCapabilitySet() (map[string]bool, bool) {
 }
 
 func (a *Account) SupportsOpenAIImageCapability(capability OpenAIImagesCapability) bool {
+	if a.IsMiMoSpeech() {
+		return false
+	}
 	if a.IsMidjourney() || a.IsSuno() || a.IsSeedream() {
 		return false
 	}

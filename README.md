@@ -212,6 +212,7 @@ docker compose -f docker-compose.dev.yml build && docker compose -f docker-compo
 
 | 文档 | 内容 |
 | --- | --- |
+| [MiMo V2.5 语音合成对接](docs/MIMO_SPEECH_INTEGRATION.md) | 语音账号、预置音色、音色设计、音频目录、token 计费与流式播放 |
 | [Seedream 5.0 Pro / Flash 图片对接](docs/SEEDREAM_5_IMAGE_API.md) | 专用账户、分辨率与参考图计费、异步生成、透明编辑和完整图层拆分 |
 | [Midjourney v8.2 客户端对接](docs/MIDJOURNEY_AGENT_INTEGRATION.md) | 账户与两项计费配置、Fast 能力、文生图、图生图、风格参考及放大选图 |
 | [Suno 全功能接口参考](docs/SUNO_FULL_API_REFERENCE.md) | 全部端点参数、源任务引用、Max、自定义模型、结果结构 |

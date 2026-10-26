@@ -115,6 +115,24 @@ async function mountView(): Promise<VueWrapper> {
 }
 
 describe('admin YingzoAgentView', () => {
+  it('configures speech token multipliers beside Suno operation prices', async () => {
+    getAgentModels.mockResolvedValue({ models: [
+      model({ id: 10, model_code: 'mimo-v2.5-tts', media_type: 'audio', rate_multiplier: 1.2 }),
+      model({ id: 11, model_code: 'suno-v6', media_type: 'audio', prices: [{ resolution: 'song', unit_price: 2, billing_unit: 'request' }] }),
+    ] })
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="yingzo-agent-tab-audio"]').trigger('click')
+    expect(wrapper.get('[data-testid="yingzo-agent-rate-10"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="yingzo-agent-price-10-song"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="yingzo-agent-rate-11"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="yingzo-agent-price-11-song"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="yingzo-agent-media-type-10"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="yingzo-agent-rate-10"]').setValue('1.8')
+    await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
+    await flushPromises()
+    expect(updateAgentModel).toHaveBeenCalledWith(7, 10, { media_type: 'audio', enabled: true, rate_multiplier: 1.8 })
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     getAllGroups.mockResolvedValue([OTHER_GROUP, AGENT_GROUP])

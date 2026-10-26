@@ -1,0 +1,20 @@
+export default {
+  "addSpeech": "Add speech account",
+  "createTitle": "Add speech account · MiMo",
+  "editTitle": "Edit speech account · MiMo",
+  "scope": "Preset voices and voice design: mimo-v2.5-tts, mimo-v2.5-tts-voicedesign.",
+  "pricingHint": "Bind an OpenAI group or Yingzo Agent. Configure input/output token prices in a channel and the model multiplier under Audio pricing.",
+  "keepKey": "Leave blank to keep the saved API key",
+  "proxy": "Proxy",
+  "noProxy": "No proxy",
+  "groups": "Groups",
+  "required": "Enter a name and API key, and select at least one group.",
+  "invalidUrl": "Use an HTTPS origin, optionally ending in /v1, without endpoint paths, queries or credentials.",
+  "saveFailed": "Failed to save speech account",
+  "accountType": "Speech account · MiMo",
+  "billingTitle": "Audio pricing",
+  "billingHint": "MiMo speech uses channel token prices × model multiplier; Suno music uses per-operation and version prices.",
+  "testHint": "Checks connection and authentication without generating paid speech.",
+  "syncedToAgent": "Speech account added and models synced to Yingzo Agent.",
+  "syncFailed": "Account added, but catalog sync failed. Retry from Yingzo Agent."
+}

@@ -507,6 +507,12 @@ func billingUnitForAgentModel(model, mediaType string) string {
 	return billingUnitForAgentMedia(mediaType)
 }
 func normalizeAgentModelPricesForModel(model, mediaType string, prices []AgentModelPrice) ([]AgentModelPrice, error) {
+	if IsMiMoSpeechModel(model) {
+		if mediaType != AgentMediaTypeAudio {
+			return nil, errors.New("MiMo speech is an audio model")
+		}
+		return normalizeAgentModelPrices(AgentMediaTypeText, prices)
+	}
 	if IsSeedanceModel(model) && mediaType == AgentMediaTypeVideo {
 		return normalizeSeedanceChannelPrices(prices)
 	}

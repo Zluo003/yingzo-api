@@ -260,6 +260,23 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 	capabilities["operations"] = operations
 	capabilities["streaming"] = streaming
 	capabilities["asynchronous"] = asynchronous
+	if service.IsMiMoSpeechModel(entry.ID) {
+		capabilities["input_modalities"] = []string{"text"}
+		capabilities["output_modalities"] = []string{"audio"}
+		capabilities["operations"] = []string{"audio.generate"}
+		capabilities["streaming"] = true
+		capabilities["asynchronous"] = false
+		capabilities["realtime_streaming"] = entry.ID == service.MiMoTTSModel
+		capabilities["supported_output_formats"] = []string{"wav", "mp3", "pcm16"}
+		capabilities["streaming_output_formats"] = []string{"pcm16"}
+		capabilities["audio_sample_rate_hz"] = 24000
+		capabilities["audio_channels"] = 1
+		capabilities["supports_voice_design"] = entry.ID == service.MiMoVoiceDesignModel
+		capabilities["supports_text_optimization"] = entry.ID == service.MiMoVoiceDesignModel
+		if entry.ID == service.MiMoTTSModel {
+			capabilities["voices"] = service.MiMoSpeechVoices
+		}
+	}
 	if entry.ID == service.SunoModel {
 		// operations 是桌面内核的路由词表，必须是字符串数组；每个操作的
 		// API 字段规格属于计费元数据，发布进目录会让内核校验拒绝整个目录，

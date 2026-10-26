@@ -101,12 +101,18 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		return
 	}
 
+	if err := service.ValidateMiMoSpeechRequest(body, reqModel); err != nil {
+		h.errorResponse(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return
+	}
+
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
 
 	setOpsRequestContext(c, reqModel, reqStream)
 	setOpsEndpointContext(c, "", int16(service.RequestTypeFromLegacy(reqStream, false)))
 
-	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIChat, reqModel, body); decision != nil && !decision.AllowNextStage {
+	auditBody := service.MiMoSpeechAuditBody(body, reqModel)
+	if decision := h.checkSecurityAudit(c, reqLog, apiKey, subject, service.ContentModerationProtocolOpenAIChat, reqModel, auditBody); decision != nil && !decision.AllowNextStage {
 		h.openAISecurityAuditError(c, decision)
 		return
 	}
@@ -239,6 +245,16 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		}
 		if slotResult != openAISlotAcquireOK {
 			return
+		}
+
+		if apiKey.Group != nil && apiKey.Group.IsAgent() && (account.IsMiMoSpeech() || service.IsMiMoSpeechModel(forwardModel)) {
+			if priceErr := h.gatewayService.ValidateAgentLanguagePricing(c.Request.Context(), apiKey.Group, account, reqModel); priceErr != nil {
+				if accountReleaseFunc != nil {
+					accountReleaseFunc()
+				}
+				writeOpenAIAgentPricingError(c, priceErr)
+				return
+			}
 		}
 
 		service.SetOpsLatencyMs(c, service.OpsRoutingLatencyMsKey, time.Since(routingStart).Milliseconds())

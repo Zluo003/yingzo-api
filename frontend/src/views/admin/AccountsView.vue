@@ -18,6 +18,7 @@
             @create-video="showCreateVideo = true"
             @create-image="showCreateImage = true"
             @create-music="showCreateSuno = true"
+            @create-speech="showCreateSpeech = true"
           >
             <template #after>
               <!-- Auto Refresh Dropdown -->
@@ -261,6 +262,7 @@
           <template #cell-platform_type="{ row }">
             <div class="flex min-w-0 flex-col gap-1">
               <div class="flex flex-wrap items-center gap-1">
+                <span v-if="isSpeechAccount(row)" class="rounded bg-primary-50 px-2 py-0.5 text-xs text-primary-600 dark:bg-primary-900/20">{{ t('speech.accountType') }}</span>
                 <PlatformTypeBadge :platform="row.platform" :type="row.type"
                   :auth-mode="getOpenAIAuthMode(row)"
                   :plan-type="getAccountPlanType(row)"
@@ -472,10 +474,11 @@
       @midjourney="showCreateImage = false; showCreateMidjourney = true"
       @seedream="showCreateImage = false; showCreateSeedream = true"
     />
+    <SpeechAccountModal :show="showCreateSpeech || (showEdit && isSpeechAccount(edAcc))" :account="showEdit ? edAcc : null" :proxies="proxies" :groups="groups" @close="showCreateSpeech = false; showEdit = false" @created="handleSpeechAccountCreated" @updated="handleAccountUpdated" />
     <SunoAccountModal :show="showCreateSuno || (showEdit && isSunoAccount(edAcc))" :account="showEdit ? edAcc : null" :proxies="proxies" :groups="groups" @close="showCreateSuno = false; showEdit = false" @created="reload" @updated="handleAccountUpdated" />
     <SeedreamAccountModal :show="showCreateSeedream || (showEdit && isSeedreamAccount(edAcc))" :account="showEdit ? edAcc : null" :proxies="proxies" :groups="groups" @close="showCreateSeedream = false; showEdit = false" @created="handleImageAccountCreated" @updated="handleAccountUpdated" />
     <MidjourneyAccountModal :show="showCreateMidjourney || (showEdit && isMidjourneyAccount(edAcc))" :account="showEdit ? edAcc : null" :proxies="proxies" :groups="groups" @close="showCreateMidjourney = false; showEdit = false" @created="handleImageAccountCreated" @updated="handleAccountUpdated" />
-    <EditAccountModal :show="showEdit && !isMidjourneyAccount(edAcc) && !isSunoAccount(edAcc) && !isSeedreamAccount(edAcc)" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
+    <EditAccountModal :show="showEdit && !isMidjourneyAccount(edAcc) && !isSunoAccount(edAcc) && !isSeedreamAccount(edAcc) && !isSpeechAccount(edAcc)" :account="edAcc" :proxies="proxies" :groups="groups" @close="showEdit = false" @updated="handleAccountUpdated" />
     <ReAuthAccountModal :show="showReAuth" :account="reAuthAcc" @close="closeReAuthModal" @reauthorized="handleAccountUpdated" />
     <AccountTestModal :show="showTest" :account="testingAcc" @close="closeTestModal" />
     <AccountStatsModal :show="showStats" :account="statsAcc" @close="closeStatsModal" />
@@ -528,6 +531,8 @@ import DataTable from '@/components/common/DataTable.vue'
 import HelpTooltip from '@/components/common/HelpTooltip.vue'
 import Pagination from '@/components/common/Pagination.vue'
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
+import SpeechAccountModal from '@/components/account/SpeechAccountModal.vue'
+import { isSpeechAccount } from '@/components/account/speech'
 import SunoAccountModal from '@/components/account/SunoAccountModal.vue'
 import { isSunoAccount } from '@/components/account/suno'
 import SeedreamAccountModal from '@/components/account/SeedreamAccountModal.vue'
@@ -623,6 +628,7 @@ const showCreateImage = ref(false)
 const showCreateSeedream = ref(false)
 const showCreateMidjourney = ref(false)
 const showCreateSuno = ref(false)
+const showCreateSpeech = ref(false)
 // 「添加视频账号」专用入口：打开同一个弹窗但预置 platform=video。
 const showCreateVideo = ref(false)
 const showEdit = ref(false)
@@ -1398,6 +1404,7 @@ const isAnyModalOpen = computed(() => {
     showCreateMidjourney.value ||
     showCreateSeedream.value ||
     showCreateSuno.value ||
+    showCreateSpeech.value ||
     showCreateVideo.value ||
     showEdit.value ||
     showSync.value ||
@@ -2179,7 +2186,7 @@ const buildAccountQueryFilters = () => ({
 const accountMatchesCurrentFilters = (account: Account) => {
   const filters = buildAccountQueryFilters()
   if (filters.platform && account.platform !== filters.platform) return false
-  if (filters.type && account.type !== filters.type) return false
+  if (filters.type === 'speech' ? !isSpeechAccount(account) : filters.type && account.type !== filters.type) return false
   if (filters.status) {
     const now = Date.now()
     const rateLimitResetAt = account.rate_limit_reset_at ? new Date(account.rate_limit_reset_at).getTime() : Number.NaN
@@ -2310,6 +2317,18 @@ const handleImageAccountCreated = async (payload?: { imageModels?: string[] }) =
     appStore.showSuccess(t('admin.accounts.image.syncedToAgent', { count: declared.length }))
   } catch (error: any) {
     appStore.showWarning(error?.message ?? t('admin.accounts.image.syncToAgentFailed'))
+  }
+}
+
+const handleSpeechAccountCreated = async () => {
+  await reload()
+  const agentGroup = groups.value.find(group => group.kind === 'agent' && group.system_code === 'yingzo')
+  if (!agentGroup) return
+  try {
+    await agentModelsAPI.syncAgentModels(agentGroup.id)
+    appStore.showSuccess(t('speech.syncedToAgent'))
+  } catch {
+    appStore.showWarning(t('speech.syncFailed'))
   }
 }
 

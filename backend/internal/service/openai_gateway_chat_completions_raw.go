@@ -74,6 +74,14 @@ func (s *OpenAIGatewayService) forwardAsRawChatCompletions(
 	billingModel := resolveOpenAIForwardModel(account, originalModel, defaultMappedModel)
 	upstreamModel := normalizeOpenAIModelForUpstream(account, billingModel)
 	SetOpsUpstreamModel(c, upstreamModel)
+	if account.IsMiMoSpeech() && !IsMiMoSpeechModel(upstreamModel) {
+		writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", "Model is not supported by this speech account")
+		return nil, errors.New("unsupported speech model")
+	}
+	if err := ValidateMiMoSpeechRequest(body, upstreamModel); err != nil {
+		writeChatCompletionsError(c, http.StatusBadRequest, "invalid_request_error", err.Error())
+		return nil, err
+	}
 	grokCacheIdentity := ""
 	if account.Platform == PlatformGrok {
 		// Resolve before image bridging or other body rewrites so the fallback is

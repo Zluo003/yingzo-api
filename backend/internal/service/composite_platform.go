@@ -133,6 +133,7 @@ func DetectModelPlatform(model string) (string, bool) {
 		strings.HasPrefix(normalized, "dall-e-"),
 		strings.HasPrefix(normalized, "gpt-image-"),
 		strings.HasPrefix(normalized, "tts-"),
+		IsMiMoSpeechModel(normalized),
 		strings.HasPrefix(normalized, "whisper-"),
 		hasOpenAISeriesPrefix(normalized):
 		return PlatformOpenAI, true

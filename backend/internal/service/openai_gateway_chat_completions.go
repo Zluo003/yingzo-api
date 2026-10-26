@@ -94,6 +94,10 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 		return nil, errors.New("codex_cli_only restriction: only codex official clients are allowed")
 	}
 
+	if account.IsOpenAIApiKey() && (account.IsMiMoSpeech() || IsMiMoSpeechModel(resolveOpenAIForwardModel(account, gjson.GetBytes(body, "model").String(), defaultMappedModel))) {
+		return s.forwardAsRawChatCompletions(ctx, c, account, body, defaultMappedModel)
+	}
+
 	if account.Platform == PlatformGrok {
 		if account.IsGrokOAuth() {
 			if eligible, reason := grokChatResponsesBridgeEligibility(body); eligible {
