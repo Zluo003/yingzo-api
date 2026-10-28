@@ -58,17 +58,19 @@ func isValidAffiliateCodeFormat(code string) bool {
 }
 
 type AffiliateSummary struct {
-	UserID               int64     `json:"user_id"`
-	AffCode              string    `json:"aff_code"`
-	AffCodeCustom        bool      `json:"aff_code_custom"`
-	AffRebateRatePercent *float64  `json:"aff_rebate_rate_percent,omitempty"`
-	InviterID            *int64    `json:"inviter_id,omitempty"`
-	AffCount             int       `json:"aff_count"`
-	AffQuota             float64   `json:"aff_quota"`
-	AffFrozenQuota       float64   `json:"aff_frozen_quota"`
-	AffHistoryQuota      float64   `json:"aff_history_quota"`
-	CreatedAt            time.Time `json:"created_at"`
-	UpdatedAt            time.Time `json:"updated_at"`
+	UserID               int64      `json:"user_id"`
+	AffCode              string     `json:"aff_code"`
+	AffCodeCustom        bool       `json:"aff_code_custom"`
+	AffRebateRatePercent *float64   `json:"aff_rebate_rate_percent,omitempty"`
+	InviterID            *int64     `json:"inviter_id,omitempty"`
+	AffCount             int        `json:"aff_count"`
+	AffQuota             float64    `json:"aff_quota"`
+	AffDebtQuota         float64    `json:"aff_debt_quota"`
+	AffFrozenQuota       float64    `json:"aff_frozen_quota"`
+	NextThawAt           *time.Time `json:"next_thaw_at,omitempty"`
+	AffHistoryQuota      float64    `json:"aff_history_quota"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
 }
 
 type AffiliateInvitee struct {
@@ -80,13 +82,20 @@ type AffiliateInvitee struct {
 }
 
 type AffiliateDetail struct {
-	UserID          int64   `json:"user_id"`
-	AffCode         string  `json:"aff_code"`
-	InviterID       *int64  `json:"inviter_id,omitempty"`
-	AffCount        int     `json:"aff_count"`
-	AffQuota        float64 `json:"aff_quota"`
-	AffFrozenQuota  float64 `json:"aff_frozen_quota"`
-	AffHistoryQuota float64 `json:"aff_history_quota"`
+	Enabled                   bool       `json:"enabled"`
+	FirstRechargeBonusPercent float64    `json:"first_recharge_bonus_percent"`
+	WithdrawMinimum           float64    `json:"withdraw_minimum"`
+	TransferMinimum           float64    `json:"transfer_minimum"`
+	RebateFreezeHours         int        `json:"rebate_freeze_hours"`
+	NextThawAt                *time.Time `json:"next_thaw_at,omitempty"`
+	UserID                    int64      `json:"user_id"`
+	AffCode                   string     `json:"aff_code"`
+	InviterID                 *int64     `json:"inviter_id,omitempty"`
+	AffCount                  int        `json:"aff_count"`
+	AffQuota                  float64    `json:"aff_quota"`
+	AffDebtQuota              float64    `json:"aff_debt_quota"`
+	AffFrozenQuota            float64    `json:"aff_frozen_quota"`
+	AffHistoryQuota           float64    `json:"aff_history_quota"`
 	// EffectiveRebateRatePercent 是当前用户作为邀请人时实际生效的返利比例：
 	// 优先用户自己的专属比例（aff_rebate_rate_percent），否则回退到全局比例。
 	// 用于在用户的 /affiliate 页面直观展示「分享后能拿到多少」。
@@ -241,8 +250,9 @@ func (s *AffiliateService) EnsureUserAffiliate(ctx context.Context, userID int64
 func (s *AffiliateService) GetAffiliateDetail(ctx context.Context, userID int64) (*AffiliateDetail, error) {
 	// Lazy thaw: move any matured frozen quota to available before reading.
 	if s != nil && s.repo != nil {
-		// best-effort: thaw failure is non-fatal
-		_, _ = s.repo.ThawFrozenQuota(ctx, userID)
+		if _, err := s.repo.ThawFrozenQuota(ctx, userID); err != nil {
+			return nil, err
+		}
 	}
 
 	summary, err := s.EnsureUserAffiliate(ctx, userID)
@@ -253,12 +263,23 @@ func (s *AffiliateService) GetAffiliateDetail(ctx context.Context, userID int64)
 	if err != nil {
 		return nil, err
 	}
+	freezeHours, err := s.settingService.loadAffiliateRebateFreezeHours(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return &AffiliateDetail{
+		Enabled:                    s.IsEnabled(ctx),
+		FirstRechargeBonusPercent:  s.settingService.AffiliateAmountSetting(ctx, SettingKeyAffiliateFirstRechargeBonusPercent, 10),
+		WithdrawMinimum:            s.settingService.AffiliateAmountSetting(ctx, SettingKeyAffiliateWithdrawMinimum, 0),
+		TransferMinimum:            s.settingService.AffiliateAmountSetting(ctx, SettingKeyAffiliateTransferMinimum, 0),
+		RebateFreezeHours:          freezeHours,
+		NextThawAt:                 summary.NextThawAt,
 		UserID:                     summary.UserID,
 		AffCode:                    summary.AffCode,
 		InviterID:                  summary.InviterID,
 		AffCount:                   summary.AffCount,
 		AffQuota:                   summary.AffQuota,
+		AffDebtQuota:               summary.AffDebtQuota,
 		AffFrozenQuota:             summary.AffFrozenQuota,
 		AffHistoryQuota:            summary.AffHistoryQuota,
 		EffectiveRebateRatePercent: s.resolveRebateRatePercent(ctx, summary),
@@ -373,7 +394,10 @@ func (s *AffiliateService) AccrueInviteRebateForOrder(ctx context.Context, invit
 
 	var freezeHours int
 	if s.settingService != nil {
-		freezeHours = s.settingService.GetAffiliateRebateFreezeHours(ctx)
+		freezeHours, err = s.settingService.loadAffiliateRebateFreezeHours(ctx)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	applied, err := s.repo.AccrueQuota(ctx, *inviteeSummary.InviterID, inviteeUserID, rebate, freezeHours, sourceOrderID)
@@ -413,7 +437,17 @@ func (s *AffiliateService) TransferAffiliateQuota(ctx context.Context, userID in
 		return 0, 0, infraerrors.ServiceUnavailable("SERVICE_UNAVAILABLE", "affiliate service unavailable")
 	}
 
-	transferred, balance, err := s.repo.TransferQuotaToBalance(ctx, userID)
+	minimum := s.settingService.AffiliateAmountSetting(ctx, SettingKeyAffiliateTransferMinimum, 0)
+	var transferred, balance float64
+	var err error
+	if repo, ok := s.repo.(AffiliateWalletRepository); ok {
+		transferred, balance, err = repo.TransferQuotaToBalanceMinimum(ctx, userID, minimum)
+	} else {
+		if minimum > 0 {
+			return 0, 0, infraerrors.ServiceUnavailable("SERVICE_UNAVAILABLE", "affiliate wallet unavailable")
+		}
+		transferred, balance, err = s.repo.TransferQuotaToBalance(ctx, userID)
+	}
 	if err != nil {
 		return 0, 0, err
 	}

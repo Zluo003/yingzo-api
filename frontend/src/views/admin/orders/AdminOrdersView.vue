@@ -254,13 +254,18 @@ function isRefundPendingWarning(warning: string | undefined): boolean {
   return /pending|处理中|待/.test(String(warning || '').toLowerCase())
 }
 
+function refundSuccessMessage(adjustment?: { rebate_revoked: number; debt_increased: number; bonus_revoked: number }): string {
+  if (!adjustment || !(adjustment.rebate_revoked || adjustment.bonus_revoked)) return t('payment.admin.refundSuccess')
+  return `${t('payment.admin.refundSuccess')}；已撤销返利 ¥${adjustment.rebate_revoked.toFixed(2)}、首充赠送 ¥${adjustment.bonus_revoked.toFixed(2)}${adjustment.debt_increased > 0 ? `，新增待追回 ¥${adjustment.debt_increased.toFixed(2)}` : ''}`
+}
+
 async function handleRefund(data: { amount: number; reason: string; deduct_balance: boolean; force: boolean }) {
   if (!selectedOrder.value) return
   refundSubmitting.value = true
   try {
     const res = await adminPaymentAPI.refundOrder(selectedOrder.value.id, { amount: data.amount, reason: data.reason, deduct_balance: data.deduct_balance, force: data.force })
     if (res.data.success) {
-      appStore.showSuccess(t('payment.admin.refundSuccess'))
+      appStore.showSuccess(refundSuccessMessage(res.data.affiliate_adjustment))
       closeRefundDialog()
       loadOrders()
       return
@@ -289,7 +294,7 @@ async function handleQueryRefund(order: PaymentOrder) {
   try {
     const res = await adminPaymentAPI.queryRefund(order.id)
     if (res.data.success) {
-      appStore.showSuccess(t('payment.admin.refundSuccess'))
+      appStore.showSuccess(refundSuccessMessage(res.data.affiliate_adjustment))
     } else if (isRefundPendingWarning(res.data.warning)) {
       appStore.showSuccess(t('payment.admin.refundPending'))
     } else {

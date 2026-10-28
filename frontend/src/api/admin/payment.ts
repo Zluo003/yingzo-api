@@ -54,6 +54,7 @@ export interface UpdatePaymentConfigRequest {
 }
 
 export interface RefundResult {
+  affiliate_adjustment?: { rebate_revoked: number; frozen_revoked: number; available_revoked: number; debt_increased: number; bonus_revoked: number }
   success: boolean
   warning?: string
   require_force?: boolean

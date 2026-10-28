@@ -420,6 +420,9 @@ export interface SystemSettings {
   login_agreement_documents: LoginAgreementDocument[];
   // Default settings
   default_balance: number;
+  affiliate_first_recharge_bonus_percent: number;
+  affiliate_withdraw_minimum: number;
+  affiliate_transfer_minimum: number;
   affiliate_rebate_rate: number;
   affiliate_rebate_freeze_hours: number;
   affiliate_rebate_duration_days: number;
@@ -762,6 +765,9 @@ export interface UpdateSettingsRequest {
   login_agreement_updated_at?: string;
   login_agreement_documents?: LoginAgreementDocument[];
   default_balance?: number;
+  affiliate_first_recharge_bonus_percent?: number;
+  affiliate_withdraw_minimum?: number;
+  affiliate_transfer_minimum?: number;
   affiliate_rebate_rate?: number;
   affiliate_rebate_freeze_hours?: number;
   affiliate_rebate_duration_days?: number;

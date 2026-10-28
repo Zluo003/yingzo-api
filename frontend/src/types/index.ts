@@ -154,11 +154,18 @@ export interface AffiliateInvitee {
 }
 
 export interface UserAffiliateDetail {
+  enabled: boolean
+  first_recharge_bonus_percent: number
+  withdraw_minimum: number
+  transfer_minimum: number
+  rebate_freeze_hours: number
+  next_thaw_at?: string
   user_id: number
   aff_code: string
   inviter_id?: number | null
   aff_count: number
   aff_quota: number
+  aff_debt_quota: number
   aff_frozen_quota: number
   aff_history_quota: number
   /** 当前用户作为邀请人时实际生效的返利比例（专属覆盖全局）。0-100。 */

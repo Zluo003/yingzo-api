@@ -350,6 +350,15 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.DefaultBalance != after.DefaultBalance {
 		changed = append(changed, "default_balance")
 	}
+	if before.AffiliateFirstRechargeBonusPercent != after.AffiliateFirstRechargeBonusPercent {
+		changed = append(changed, "affiliate_first_recharge_bonus_percent")
+	}
+	if before.AffiliateWithdrawMinimum != after.AffiliateWithdrawMinimum {
+		changed = append(changed, "affiliate_withdraw_minimum")
+	}
+	if before.AffiliateTransferMinimum != after.AffiliateTransferMinimum {
+		changed = append(changed, "affiliate_transfer_minimum")
+	}
 	if before.AffiliateRebateRate != after.AffiliateRebateRate {
 		changed = append(changed, "affiliate_rebate_rate")
 	}

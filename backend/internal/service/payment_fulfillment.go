@@ -376,6 +376,9 @@ func (s *PaymentService) doBalance(ctx context.Context, o *dbent.PaymentOrder, l
 
 	switch action {
 	case redeemActionSkipCompleted:
+		if err := s.applyAffiliateFirstRechargeBonus(ctx, o); err != nil {
+			return err
+		}
 		if err := s.applyAffiliateRebateForOrder(ctx, o); err != nil {
 			return err
 		}
@@ -391,6 +394,9 @@ func (s *PaymentService) doBalance(ctx context.Context, o *dbent.PaymentOrder, l
 	}
 	if _, err := s.redeemService.redeemForPaymentFulfillment(ctx, o.UserID, o.RechargeCode); err != nil {
 		return fmt.Errorf("redeem balance: %w", err)
+	}
+	if err := s.applyAffiliateFirstRechargeBonus(ctx, o); err != nil {
+		return err
 	}
 	if err := s.applyAffiliateRebateForOrder(ctx, o); err != nil {
 		return err
@@ -678,6 +684,14 @@ func (s *PaymentService) applyAffiliateRebateForOrder(ctx context.Context, o *db
 	defer func() { _ = tx.Rollback() }()
 
 	txCtx := dbent.NewTxContext(ctx, tx)
+	allowed, err := lockAffiliateRewardOrder(txCtx, tx.Client(), o.ID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return nil
+	}
+
 	claimed, err := s.tryClaimAffiliateRebateAudit(txCtx, tx.Client(), o.ID, baseAmount)
 	if err != nil {
 		s.writeAuditLog(ctx, o.ID, "AFFILIATE_REBATE_FAILED", "system", map[string]any{
@@ -742,7 +756,7 @@ func affiliateRebateBaseAmount(o *dbent.PaymentOrder) float64 {
 	}
 	switch o.OrderType {
 	case payment.OrderTypeBalance, payment.OrderTypeSubscription:
-		return o.Amount
+		return o.PayAmount
 	default:
 		return 0
 	}

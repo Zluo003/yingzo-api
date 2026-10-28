@@ -82,6 +82,8 @@ export default {
           rebateRateHint: 'Default percentage given back to the inviter on recharges (0-100, e.g. 10 = 10%).',
           freezeHours: 'Rebate Freeze Period (hours)',
           freezeHoursDesc: 'New rebates will be frozen for this period before becoming available for withdrawal. 0 = no freeze.',
+          freezeDays: 'Rebate Freeze Period (days)',
+          freezeDaysDesc: 'Each new rebate is frozen separately and excluded from available funds until it matures. Frozen funds cannot be withdrawn or transferred. 7 days = 168 hours; maximum 30 days; 0 disables freezing. Changes do not alter existing release times.',
           durationDays: 'Rebate Duration (days)',
           durationDaysDesc: 'Rebate relationship expires after this many days since invitee registration. 0 = permanent.',
           perInviteeCap: 'Per-Invitee Rebate Cap',

@@ -56,7 +56,8 @@
 .recharge-side{display:flex;flex-direction:column;gap:18px}
 .recharge-orders{margin-top:18px}
 .recharge-orders .panel{margin-bottom:0}
-.amounts.nine{grid-template-columns:repeat(5,1fr)}
+.amounts.recharge-amounts{grid-template-columns:repeat(4,minmax(0,1fr))}
+.amounts.recharge-amounts button{min-width:0;padding:12px 4px;overflow-wrap:anywhere}
 .method-list{display:flex;flex-direction:column;gap:8px}
 .method-item{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;text-align:left;border:1px solid var(--line);border-radius:12px;padding:13px 16px;background:#fffaf5;transition:border-color .15s}
 .method-item:hover{border-color:#b3a394}
@@ -186,7 +187,6 @@
 .md-body hr{border:0;border-top:1px solid var(--line);margin:1.4em 0}
 @media(max-width:900px){
   .recharge-grid{grid-template-columns:1fr}
-  .amounts.nine{grid-template-columns:repeat(3,1fr)}
   .plans-grid{grid-template-columns:1fr}
   .orders-head-cols,.orders-row{grid-template-columns:1.4fr 1fr .9fr 1fr}
   .orders-head-cols span:nth-child(2),.orders-row span:nth-child(2),

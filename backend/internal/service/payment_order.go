@@ -203,6 +203,12 @@ func (s *PaymentService) createOrderInTx(ctx context.Context, req CreateOrderReq
 	if selectedProviderKey != "" {
 		b.SetProviderKey(selectedProviderKey)
 	}
+	if req.OrderType == payment.OrderTypeBalance && s.affiliateService != nil && s.affiliateService.IsEnabled(ctx) {
+		if providerSnapshot == nil {
+			providerSnapshot = map[string]any{}
+		}
+		providerSnapshot["affiliate_first_recharge_bonus_percent"] = s.affiliateService.settingService.AffiliateAmountSetting(ctx, SettingKeyAffiliateFirstRechargeBonusPercent, 10)
+	}
 	if providerSnapshot != nil {
 		b.SetProviderSnapshot(providerSnapshot)
 	}

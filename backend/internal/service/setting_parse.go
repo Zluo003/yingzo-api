@@ -125,6 +125,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyOIDCConnectUserInfoUsernamePath:           "",
 		SettingKeyDefaultConcurrency:                        strconv.Itoa(s.cfg.Default.UserConcurrency),
 		SettingKeyDefaultBalance:                            strconv.FormatFloat(s.cfg.Default.UserBalance, 'f', 8, 64),
+		SettingKeyAffiliateFirstRechargeBonusPercent:        "10",
+		SettingKeyAffiliateWithdrawMinimum:                  "0",
+		SettingKeyAffiliateTransferMinimum:                  "0",
 		SettingKeyAffiliateRebateRate:                       strconv.FormatFloat(AffiliateRebateRateDefault, 'f', 8, 64),
 		SettingKeyAffiliateRebateFreezeHours:                strconv.Itoa(AffiliateRebateFreezeHoursDefault),
 		SettingKeyAffiliateRebateDurationDays:               strconv.Itoa(AffiliateRebateDurationDaysDefault),
@@ -394,6 +397,18 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		result.DefaultBalance = balance
 	} else {
 		result.DefaultBalance = s.cfg.Default.UserBalance
+	}
+	result.AffiliateFirstRechargeBonusPercent = 10
+	if v, err := strconv.ParseFloat(settings[SettingKeyAffiliateFirstRechargeBonusPercent], 64); err == nil && !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= 100 {
+		result.AffiliateFirstRechargeBonusPercent = v
+	}
+	result.AffiliateWithdrawMinimum = 0
+	if v, err := strconv.ParseFloat(settings[SettingKeyAffiliateWithdrawMinimum], 64); err == nil && !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= 100000000 {
+		result.AffiliateWithdrawMinimum = v
+	}
+	result.AffiliateTransferMinimum = 0
+	if v, err := strconv.ParseFloat(settings[SettingKeyAffiliateTransferMinimum], 64); err == nil && !math.IsNaN(v) && !math.IsInf(v, 0) && v >= 0 && v <= 100000000 {
+		result.AffiliateTransferMinimum = v
 	}
 	if rebateRate, err := strconv.ParseFloat(settings[SettingKeyAffiliateRebateRate], 64); err == nil {
 		result.AffiliateRebateRate = clampAffiliateRebateRate(rebateRate)

@@ -47,6 +47,8 @@
         </div>
       </div>
 
+      <p class="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">退款成功后将按比例自动撤销对应邀请返利及首充赠送。返利先扣冻结或可用余额；已提现、转余额造成的不足部分记为待追回，抵扣后续返利。此规则不受下方“扣除余额”开关影响。首充赠送已消费时，扣回后个人余额可能为负，后续充值先抵扣。</p>
+
       <!-- Deduct Balance -->
       <div>
         <div class="flex items-center gap-2">

@@ -245,7 +245,7 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 		Status:       StatusActive,
 	}
 
-	if err := s.createUserAndClaimInvitation(ctx, user, invitationRedeemCode); err != nil {
+	if err := s.createUserAndClaimInvitation(ctx, user, invitationRedeemCode, affiliateCode); err != nil {
 		// 优先检查邮箱冲突错误（竞态条件下可能发生）
 		switch {
 		case errors.Is(err, ErrEmailExists):
@@ -254,6 +254,8 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 			return "", nil, ErrEmailDomainRegistrationLimit
 		case errors.Is(err, ErrInvitationCodeInvalid):
 			return "", nil, ErrInvitationCodeInvalid
+		case errors.Is(err, ErrAffiliateCodeInvalid), errors.Is(err, ErrAffiliateAlreadyBound):
+			return "", nil, err
 		default:
 			logger.LegacyPrintf("service.auth", "[Auth] Database error creating user: %v", err)
 			return "", nil, ErrServiceUnavailable
@@ -1284,10 +1286,19 @@ func (s *AuthService) createUserWithRegistrationEmailGuard(ctx context.Context, 
 //
 // 无邀请码时保持原单次创建路径（不开事务）；entClient 缺失的异常配置下退化为顺序执行，
 // 并发正确性仍由 Use 的条件更新兜底（可能产生孤儿用户，但不会放行第二个注册）。
-func (s *AuthService) createUserAndClaimInvitation(ctx context.Context, user *User, invitation *RedeemCode) error {
+func (s *AuthService) createUserAndClaimInvitation(ctx context.Context, user *User, invitation *RedeemCode, affiliateCodes ...string) error {
+	affiliateCode := ""
+	if len(affiliateCodes) > 0 && s.affiliateService != nil && s.affiliateService.IsEnabled(ctx) {
+		affiliateCode = strings.TrimSpace(affiliateCodes[0])
+	}
 	commitUser := func(execCtx context.Context) error {
 		if err := s.createUserWithRegistrationEmailGuard(execCtx, user); err != nil {
 			return err
+		}
+		if affiliateCode != "" {
+			if err := s.affiliateService.BindInviterByCode(execCtx, user.ID, affiliateCode); err != nil {
+				return err
+			}
 		}
 		if invitation == nil {
 			return nil
@@ -1305,7 +1316,7 @@ func (s *AuthService) createUserAndClaimInvitation(ctx context.Context, user *Us
 		return nil
 	}
 
-	if invitation == nil {
+	if invitation == nil && affiliateCode == "" {
 		return commitUser(ctx)
 	}
 	if s.entClient == nil {

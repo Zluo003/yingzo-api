@@ -17,6 +17,7 @@ const ERROR_MESSAGES = {
   REGISTRATION_DISABLED: '当前暂未开放注册。',
   PASSWORD_RESET_DISABLED: '当前暂未开启邮箱找回密码，请联系管理员。',
   INVALID_RESET_TOKEN: '重设链接无效或已过期，请重新申请。',
+  AFFILIATE_CODE_INVALID: '邀请返利码无效，请确认后重试或留空。',
   EMAIL_EXISTS: '该邮箱已注册，请登录或找回密码。',
 }
 
@@ -30,7 +31,7 @@ export default function Auth({ mode, setPage, setUser }) {
   const forgot = mode === 'forgot-password'
   const reset = mode === 'reset-password'
   const [title, description, submitLabel] = COPY[mode]
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', verifyCode: '', invitationCode: '' })
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '', verifyCode: '', invitationCode: '', affiliateCode: new URLSearchParams(window.location.search).get('aff') || '' })
   const [resetLink] = useState(() => {
     const query = new URLSearchParams(window.location.search)
     return { email: (query.get('email') || '').trim(), token: (query.get('token') || '').trim() }
@@ -156,6 +157,7 @@ export default function Auth({ mode, setPage, setUser }) {
         payload.username = form.name.trim()
         if (emailVerification) payload.verify_code = form.verifyCode.trim()
         if (settings.invitation_code_enabled) payload.invitation_code = form.invitationCode.trim()
+        if (settings.affiliate_enabled && form.affiliateCode.trim()) payload.aff_code = form.affiliateCode.trim()
       }
       const data = await request(login ? '/auth/login' : '/auth/register', {
         method: 'POST', body: JSON.stringify(payload),
@@ -220,6 +222,7 @@ export default function Auth({ mode, setPage, setUser }) {
             </div>
             <small id="auth-code-hint" className="auth-field-hint">验证码将发送到上方邮箱。</small>
           </div>}
+          {register && settings?.affiliate_enabled && <label>邀请返利码（选填）<input name="aff_code" value={form.affiliateCode} onChange={event => setForm({ ...form, affiliateCode: event.target.value })} maxLength={32} disabled={busy || sending} placeholder="填写邀请人的专属邀请码"/><small>使用有效邀请码注册，首次充值可享余额赠送。</small></label>}
           {register && settings?.invitation_code_enabled && <label>邀请码<input name="invitation_code" value={form.invitationCode} onChange={event => setForm({ ...form, invitationCode: event.target.value })} disabled={busy || sending} required /></label>}
           {login && passwordResetEnabled && authLink('forgot-password', '忘记密码？', 'auth-forgot-link')}
           {notice && <div className="auth-notice" role="status">{notice}</div>}

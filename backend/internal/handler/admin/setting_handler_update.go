@@ -172,6 +172,9 @@ type UpdateSettingsRequest struct {
 	// 默认配置
 	DefaultConcurrency                        int                               `json:"default_concurrency"`
 	DefaultBalance                            float64                           `json:"default_balance"`
+	AffiliateFirstRechargeBonusPercent        *float64                          `json:"affiliate_first_recharge_bonus_percent" binding:"omitempty,gte=0,lte=100"`
+	AffiliateWithdrawMinimum                  *float64                          `json:"affiliate_withdraw_minimum" binding:"omitempty,gte=0,lte=100000000"`
+	AffiliateTransferMinimum                  *float64                          `json:"affiliate_transfer_minimum" binding:"omitempty,gte=0,lte=100000000"`
 	AffiliateRebateRate                       *float64                          `json:"affiliate_rebate_rate"`
 	AffiliateRebateFreezeHours                *int                              `json:"affiliate_rebate_freeze_hours"`
 	AffiliateRebateDurationDays               *int                              `json:"affiliate_rebate_duration_days"`
@@ -1631,24 +1634,42 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		CustomEndpoints:                        customEndpointsJSON,
 		DefaultConcurrency:                     req.DefaultConcurrency,
 		DefaultBalance:                         req.DefaultBalance,
-		AffiliateRebateRate:                    affiliateRebateRate,
-		AffiliateRebateFreezeHours:             affiliateRebateFreezeHours,
-		AffiliateRebateDurationDays:            affiliateRebateDurationDays,
-		AffiliateRebatePerInviteeCap:           affiliateRebatePerInviteeCap,
-		AdminRechargeRebateEnabled:             adminRechargeRebateEnabled,
-		DefaultUserRPMLimit:                    req.DefaultUserRPMLimit,
-		DefaultSubscriptions:                   defaultSubscriptions,
-		EnableModelFallback:                    req.EnableModelFallback,
-		FallbackModelAnthropic:                 req.FallbackModelAnthropic,
-		FallbackModelOpenAI:                    req.FallbackModelOpenAI,
-		FallbackModelGemini:                    req.FallbackModelGemini,
-		FallbackModelAntigravity:               req.FallbackModelAntigravity,
-		EnableIdentityPatch:                    req.EnableIdentityPatch,
-		IdentityPatchPrompt:                    req.IdentityPatchPrompt,
-		MinClaudeCodeVersion:                   req.MinClaudeCodeVersion,
-		MaxClaudeCodeVersion:                   req.MaxClaudeCodeVersion,
-		AllowUngroupedKeyScheduling:            req.AllowUngroupedKeyScheduling,
-		BackendModeEnabled:                     req.BackendModeEnabled,
+		AffiliateFirstRechargeBonusPercent: func() float64 {
+			if req.AffiliateFirstRechargeBonusPercent != nil {
+				return *req.AffiliateFirstRechargeBonusPercent
+			}
+			return previousSettings.AffiliateFirstRechargeBonusPercent
+		}(),
+		AffiliateWithdrawMinimum: func() float64 {
+			if req.AffiliateWithdrawMinimum != nil {
+				return *req.AffiliateWithdrawMinimum
+			}
+			return previousSettings.AffiliateWithdrawMinimum
+		}(),
+		AffiliateTransferMinimum: func() float64 {
+			if req.AffiliateTransferMinimum != nil {
+				return *req.AffiliateTransferMinimum
+			}
+			return previousSettings.AffiliateTransferMinimum
+		}(),
+		AffiliateRebateRate:          affiliateRebateRate,
+		AffiliateRebateFreezeHours:   affiliateRebateFreezeHours,
+		AffiliateRebateDurationDays:  affiliateRebateDurationDays,
+		AffiliateRebatePerInviteeCap: affiliateRebatePerInviteeCap,
+		AdminRechargeRebateEnabled:   adminRechargeRebateEnabled,
+		DefaultUserRPMLimit:          req.DefaultUserRPMLimit,
+		DefaultSubscriptions:         defaultSubscriptions,
+		EnableModelFallback:          req.EnableModelFallback,
+		FallbackModelAnthropic:       req.FallbackModelAnthropic,
+		FallbackModelOpenAI:          req.FallbackModelOpenAI,
+		FallbackModelGemini:          req.FallbackModelGemini,
+		FallbackModelAntigravity:     req.FallbackModelAntigravity,
+		EnableIdentityPatch:          req.EnableIdentityPatch,
+		IdentityPatchPrompt:          req.IdentityPatchPrompt,
+		MinClaudeCodeVersion:         req.MinClaudeCodeVersion,
+		MaxClaudeCodeVersion:         req.MaxClaudeCodeVersion,
+		AllowUngroupedKeyScheduling:  req.AllowUngroupedKeyScheduling,
+		BackendModeEnabled:           req.BackendModeEnabled,
 		AllowUserViewErrorRequests: func() bool {
 			if req.AllowUserViewErrorRequests != nil {
 				return *req.AllowUserViewErrorRequests
@@ -2265,6 +2286,9 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		CustomEndpoints:                                        dto.ParseCustomEndpoints(updatedSettings.CustomEndpoints),
 		DefaultConcurrency:                                     updatedSettings.DefaultConcurrency,
 		DefaultBalance:                                         updatedSettings.DefaultBalance,
+		AffiliateFirstRechargeBonusPercent:                     updatedSettings.AffiliateFirstRechargeBonusPercent,
+		AffiliateWithdrawMinimum:                               updatedSettings.AffiliateWithdrawMinimum,
+		AffiliateTransferMinimum:                               updatedSettings.AffiliateTransferMinimum,
 		AffiliateRebateRate:                                    updatedSettings.AffiliateRebateRate,
 		AffiliateRebateFreezeHours:                             updatedSettings.AffiliateRebateFreezeHours,
 		AffiliateRebateDurationDays:                            updatedSettings.AffiliateRebateDurationDays,

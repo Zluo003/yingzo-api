@@ -31,20 +31,21 @@ SELECT ua.user_id,
        (ua.aff_rebate_rate_percent IS NOT NULL) AS has_custom_rate,
        ua.aff_count,
        COALESCE(rebated.rebated_invitee_count, 0),
-       (ua.aff_quota + COALESCE(matured.matured_frozen_quota, 0))::double precision,
+       GREATEST(0, ua.aff_quota + COALESCE(matured.matured_frozen_quota, 0))::double precision,
        ua.aff_history_quota::double precision
 FROM user_affiliates ua
 JOIN users u ON u.id = ua.user_id
 LEFT JOIN (
     SELECT user_id, COUNT(DISTINCT source_user_id)::integer AS rebated_invitee_count
     FROM user_affiliate_ledger
-    WHERE action = 'accrue' AND source_user_id IS NOT NULL
+    WHERE action = 'accrue' AND source_user_id IS NOT NULL AND amount > reversed_amount
     GROUP BY user_id
 ) rebated ON rebated.user_id = ua.user_id
 LEFT JOIN (
-    SELECT user_id, COALESCE(SUM(amount), 0)::double precision AS matured_frozen_quota
-    FROM user_affiliate_ledger
+    SELECT user_id, COALESCE(SUM(amount - reversed_amount), 0)::double precision AS matured_frozen_quota
+    FROM user_affiliate_ledger l
     WHERE action = 'accrue' AND frozen_until IS NOT NULL AND frozen_until <= NOW()
+      AND NOT EXISTS (SELECT 1 FROM payment_orders p WHERE p.id=l.source_order_id AND p.status IN ('REFUNDING','REFUND_PENDING'))
     GROUP BY user_id
 ) matured ON matured.user_id = ua.user_id
 WHERE ua.user_id = $1
@@ -165,7 +166,7 @@ VALUES ($1, 'accrue', $2, $3, $4, NOW(), NOW())`, inviterID, amount, inviteeUser
 func (r *affiliateRepository) GetAccruedRebateFromInvitee(ctx context.Context, inviterID, inviteeUserID int64) (float64, error) {
 	client := clientFromContext(ctx, r.client)
 	rows, err := client.QueryContext(ctx,
-		`SELECT COALESCE(SUM(amount), 0)::double precision FROM user_affiliate_ledger WHERE user_id = $1 AND source_user_id = $2 AND action = 'accrue'`,
+		`SELECT COALESCE(SUM(amount - reversed_amount), 0)::double precision FROM user_affiliate_ledger WHERE user_id = $1 AND source_user_id = $2 AND action = 'accrue'`,
 		inviterID, inviteeUserID)
 	if err != nil {
 		return 0, fmt.Errorf("query accrued rebate from invitee: %w", err)
@@ -192,14 +193,23 @@ func (r *affiliateRepository) ThawFrozenQuota(ctx context.Context, userID int64)
 
 // thawFrozenQuotaTx moves matured frozen quota to available quota within an existing tx.
 func thawFrozenQuotaTx(txCtx context.Context, txClient *dbent.Client, userID int64) (float64, error) {
+	locks, lockErr := txClient.QueryContext(txCtx, "SELECT user_id FROM user_affiliates WHERE user_id=$1 FOR UPDATE", userID)
+	if lockErr != nil {
+		return 0, lockErr
+	}
+	if err := locks.Close(); err != nil {
+		return 0, err
+	}
+
 	rows, err := txClient.QueryContext(txCtx, `
 WITH matured AS (
-    UPDATE user_affiliate_ledger
+    UPDATE user_affiliate_ledger l
     SET frozen_until = NULL, updated_at = NOW()
-    WHERE user_id = $1
+    WHERE user_id = $1 AND action = 'accrue'
       AND frozen_until IS NOT NULL
       AND frozen_until <= NOW()
-    RETURNING amount
+      AND NOT EXISTS (SELECT 1 FROM payment_orders p WHERE p.id=l.source_order_id AND p.status IN ('REFUNDING','REFUND_PENDING'))
+    RETURNING amount - reversed_amount AS amount
 )
 SELECT COALESCE(SUM(amount), 0) FROM matured`, userID)
 	if err != nil {
@@ -233,6 +243,10 @@ WHERE user_id = $2`, thawed, userID)
 }
 
 func (r *affiliateRepository) TransferQuotaToBalance(ctx context.Context, userID int64) (float64, float64, error) {
+	return r.TransferQuotaToBalanceMinimum(ctx, userID, 0)
+}
+
+func (r *affiliateRepository) TransferQuotaToBalanceMinimum(ctx context.Context, userID int64, minimum float64) (float64, float64, error) {
 	var transferred float64
 	var newBalance float64
 
@@ -241,6 +255,16 @@ func (r *affiliateRepository) TransferQuotaToBalance(ctx context.Context, userID
 			return err
 		}
 
+		lockRows, lockErr := txClient.QueryContext(txCtx, "SELECT user_id FROM user_affiliates WHERE user_id=$1 FOR UPDATE", userID)
+		if lockErr != nil {
+			return lockErr
+		}
+		if err := lockRows.Close(); err != nil {
+			return err
+		}
+		if err := checkAffiliateRefundPending(txCtx, txClient, userID); err != nil {
+			return err
+		}
 		// Thaw any matured frozen quota before transfer.
 		if _, err := thawFrozenQuotaTx(txCtx, txClient, userID); err != nil {
 			return fmt.Errorf("thaw before transfer: %w", err)
@@ -281,6 +305,9 @@ FROM cleared`, userID)
 		}
 		if err := rows.Close(); err != nil {
 			return err
+		}
+		if transferred < minimum {
+			return service.ErrAffiliateMinimum
 		}
 		if transferred <= 0 {
 			return service.ErrAffiliateQuotaEmpty
@@ -351,7 +378,7 @@ SELECT ua.user_id,
        COALESCE(u.email, ''),
        COALESCE(u.username, ''),
        ua.created_at,
-       COALESCE(SUM(ual.amount), 0)::double precision AS total_rebate
+       COALESCE(SUM(ual.amount - ual.reversed_amount), 0)::double precision AS total_rebate
 FROM user_affiliates ua
 LEFT JOIN users u ON u.id = ua.user_id
 LEFT JOIN user_affiliate_ledger ual
@@ -417,7 +444,7 @@ SELECT ua.inviter_id,
        COALESCE(invitee.email, ''),
        COALESCE(invitee.username, ''),
        COALESCE(inviter_aff.aff_code, ''),
-       COALESCE(SUM(ual.amount), 0)::double precision AS total_rebate,
+       COALESCE(SUM(ual.amount - ual.reversed_amount), 0)::double precision AS total_rebate,
        ua.created_at
 FROM user_affiliates ua
 JOIN users invitee ON invitee.id = ua.user_id
@@ -505,7 +532,7 @@ SELECT po.id,
        COALESCE(invitee.username, ''),
        po.amount::double precision,
        po.pay_amount::double precision,
-       ual.amount::double precision,
+       (ual.amount - ual.reversed_amount)::double precision,
        po.payment_type,
        po.status,
        ual.created_at
@@ -790,7 +817,9 @@ SELECT user_id,
        aff_frozen_quota::double precision,
        aff_history_quota::double precision,
        created_at,
-       updated_at
+       updated_at,
+       (SELECT MIN(l.frozen_until) FROM user_affiliate_ledger l
+        WHERE l.user_id = $1 AND l.action = 'accrue' AND l.amount > l.reversed_amount AND l.frozen_until > NOW())
 FROM user_affiliates
 WHERE user_id = $1`, userID)
 	if err != nil {
@@ -819,6 +848,7 @@ WHERE user_id = $1`, userID)
 		&out.AffHistoryQuota,
 		&out.CreatedAt,
 		&out.UpdatedAt,
+		&out.NextThawAt,
 	); err != nil {
 		return nil, err
 	}
@@ -828,6 +858,9 @@ WHERE user_id = $1`, userID)
 	if rebateRate.Valid {
 		v := rebateRate.Float64
 		out.AffRebateRatePercent = &v
+	}
+	if out.AffQuota < 0 {
+		out.AffDebtQuota, out.AffQuota = -out.AffQuota, 0
 	}
 	return &out, nil
 }
@@ -884,6 +917,9 @@ LIMIT 1`, strings.ToUpper(strings.TrimSpace(code)))
 	if rebateRate.Valid {
 		v := rebateRate.Float64
 		out.AffRebateRatePercent = &v
+	}
+	if out.AffQuota < 0 {
+		out.AffDebtQuota, out.AffQuota = -out.AffQuota, 0
 	}
 	return &out, nil
 }

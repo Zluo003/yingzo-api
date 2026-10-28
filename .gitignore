@@ -157,6 +157,7 @@ docs/*
 !docs/COMPOSITE_GROUPS.md
 !docs/PLUGIN_DEVELOPMENT.md
 !docs/TUTORIALS.md
+!docs/INVITATION_REBATES.md
 !docs/channel-monitor-v2-safe-defaults.md
 !docs/legal/
 !docs/legal/*.md

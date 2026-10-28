@@ -228,3 +228,38 @@ export const affiliatesAPI = {
 }
 
 export default affiliatesAPI
+
+export interface AffiliateWalletRecord {
+  id: number
+  user_id: number
+  email: string
+  amount: number
+  pay_amount: number
+  rebate_amount: number
+  action: string
+  status: string
+  alipay_account: string
+  alipay_name: string
+  admin_note: string
+  created_at: string
+  processed_at?: string
+  reversed_amount: number
+  source_order_id?: number
+  frozen_until?: string
+}
+export type AffiliateWalletKind = 'invites' | 'recharges' | 'ledger' | 'withdrawals'
+export async function listWithdrawals(page = 1) {
+  const { data } = await apiClient.get<PaginatedResponse<AffiliateWalletRecord>>('/admin/affiliates/withdrawals', { params: { page, page_size: 20 } })
+  return data
+}
+export async function processWithdrawal(id: number, status: 'paid' | 'rejected', admin_note: string) {
+  return apiClient.put(`/admin/affiliates/withdrawals/${id}`, { status, admin_note })
+}
+export async function getWalletDetail(userId: number) {
+  const { data } = await apiClient.get<import('@/types').UserAffiliateDetail>(`/admin/affiliates/users/${userId}/detail`)
+  return data
+}
+export async function listWalletRecords(userId: number, kind: AffiliateWalletKind, page = 1) {
+  const { data } = await apiClient.get<PaginatedResponse<AffiliateWalletRecord>>(`/admin/affiliates/users/${userId}/records`, { params: { kind, page, page_size: 20 } })
+  return data
+}

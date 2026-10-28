@@ -5,13 +5,14 @@ import DownloadPage from './DownloadPage.jsx'
 import TutorialsPage from './TutorialsPage.jsx'
 import UsageDashboard from './UsageDashboard.jsx'
 import Auth from './Auth.jsx'
+import Affiliate from './Affiliate.jsx'
 import { request, clearAuthKeys } from './lib.js'
 import { hasAuthTokens, pageFromPath, requiresLogin } from './auth-session.js'
 import { useAuthSession } from './useAuthSession.jsx'
 import { useTutorialConfig } from './useTutorialConfig.jsx'
 import { Recharge, PaymentResult, StripePayment, AirwallexPayment } from './recharge.jsx'
 import { AnnouncementBell, AnnouncementPopup, fetchAnnouncements, resetAnnouncements } from './announcements.jsx'
-const nav = [['home','首页'],['download','软件下载'],['tutorials','使用教程'],['keys','API Key 管理'],['models','模型广场'],['usage','使用记录'],['recharge','充值']]
+const nav = [['home','首页'],['download','软件下载'],['tutorials','使用教程'],['keys','API Key 管理'],['models','模型广场'],['usage','使用记录'],['recharge','充值'],['affiliate','邀请返利']]
 function dateOnly(value){if(!value)return '—';const d=new Date(value);return Number.isNaN(d.getTime())?'—':d.toLocaleDateString('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit'})}
 function Logo(){return <img className="logo" src="/assets/yingzo-logo.png" alt="Yingzo"/>}
 function Toast({message,onClose}){return message?<div className="toast" onClick={onClose}>{message}</div>:null}
@@ -99,6 +100,6 @@ export function App() {
   }
   if (page === 'home') return <><LandingPage setPage={setPage} user={user} tutorialsEnabled={tutorialsEnabled}/><AnnouncementPopup/></>
   return <><Shell page={page} setPage={setPage} user={user} onLogout={logout} tutorialsEnabled={tutorialsEnabled}>
-    {page === 'keys' ? <Keys/> : page === 'models' ? <ModelPlaza/> : page === 'usage' ? <Usage/> : page === 'profile' ? <Profile setUser={setUser} onLogout={logout}/> : <Recharge user={user} setUser={setUser}/>}
+    {page === 'affiliate' ? <Affiliate setUser={setUser}/> : page === 'keys' ? <Keys/> : page === 'models' ? <ModelPlaza/> : page === 'usage' ? <Usage/> : page === 'profile' ? <Profile setUser={setUser} onLogout={logout}/> : <Recharge user={user} setUser={setUser}/>}
   </Shell><AnnouncementPopup/></>
 }

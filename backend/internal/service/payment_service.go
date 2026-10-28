@@ -122,25 +122,28 @@ type OrderListParams struct {
 }
 
 type RefundPlan struct {
-	OrderID         int64
-	Order           *dbent.PaymentOrder
-	RefundAmount    float64
-	GatewayAmount   float64
-	Reason          string
-	Force           bool
-	DeductBalance   bool
-	DeductionType   string
-	BalanceToDeduct float64
-	SubDaysToDeduct int
-	SubscriptionID  int64
+	RecordedBalanceDeducted float64
+	RecordedSubDaysDeducted int
+	OrderID                 int64
+	Order                   *dbent.PaymentOrder
+	RefundAmount            float64
+	GatewayAmount           float64
+	Reason                  string
+	Force                   bool
+	DeductBalance           bool
+	DeductionType           string
+	BalanceToDeduct         float64
+	SubDaysToDeduct         int
+	SubscriptionID          int64
 }
 
 type RefundResult struct {
-	Success         bool    `json:"success"`
-	Warning         string  `json:"warning,omitempty"`
-	RequireForce    bool    `json:"require_force,omitempty"`
-	BalanceDeducted float64 `json:"balance_deducted,omitempty"`
-	SubDaysDeducted int     `json:"subscription_days_deducted,omitempty"`
+	AffiliateAdjustment *AffiliateRefundAdjustment `json:"affiliate_adjustment,omitempty"`
+	Success             bool                       `json:"success"`
+	Warning             string                     `json:"warning,omitempty"`
+	RequireForce        bool                       `json:"require_force,omitempty"`
+	BalanceDeducted     float64                    `json:"balance_deducted,omitempty"`
+	SubDaysDeducted     int                        `json:"subscription_days_deducted,omitempty"`
 }
 
 type DashboardStats struct {

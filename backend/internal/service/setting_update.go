@@ -363,6 +363,18 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	// 默认配置
 	updates[SettingKeyDefaultConcurrency] = strconv.Itoa(settings.DefaultConcurrency)
 	updates[SettingKeyDefaultBalance] = strconv.FormatFloat(settings.DefaultBalance, 'f', 8, 64)
+	if math.IsNaN(settings.AffiliateFirstRechargeBonusPercent) || math.IsInf(settings.AffiliateFirstRechargeBonusPercent, 0) || settings.AffiliateFirstRechargeBonusPercent < 0 || settings.AffiliateFirstRechargeBonusPercent > 100 {
+		return nil, fmt.Errorf("invalid affiliate_first_recharge_bonus_percent")
+	}
+	updates[SettingKeyAffiliateFirstRechargeBonusPercent] = strconv.FormatFloat(settings.AffiliateFirstRechargeBonusPercent, 'f', 8, 64)
+	if math.IsNaN(settings.AffiliateWithdrawMinimum) || math.IsInf(settings.AffiliateWithdrawMinimum, 0) || settings.AffiliateWithdrawMinimum < 0 || settings.AffiliateWithdrawMinimum > 100000000 {
+		return nil, fmt.Errorf("invalid affiliate_withdraw_minimum")
+	}
+	updates[SettingKeyAffiliateWithdrawMinimum] = strconv.FormatFloat(settings.AffiliateWithdrawMinimum, 'f', 8, 64)
+	if math.IsNaN(settings.AffiliateTransferMinimum) || math.IsInf(settings.AffiliateTransferMinimum, 0) || settings.AffiliateTransferMinimum < 0 || settings.AffiliateTransferMinimum > 100000000 {
+		return nil, fmt.Errorf("invalid affiliate_transfer_minimum")
+	}
+	updates[SettingKeyAffiliateTransferMinimum] = strconv.FormatFloat(settings.AffiliateTransferMinimum, 'f', 8, 64)
 	settings.AffiliateRebateRate = clampAffiliateRebateRate(settings.AffiliateRebateRate)
 	updates[SettingKeyAffiliateRebateRate] = strconv.FormatFloat(settings.AffiliateRebateRate, 'f', 8, 64)
 	if settings.AffiliateRebateFreezeHours < 0 {

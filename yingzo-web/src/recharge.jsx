@@ -11,8 +11,8 @@ import {
   buildAlipayDeepLink, currencySymbol, formatPaymentAmount, feeAmountFor, totalAmountFor,
   formatPaymentDate, relativeTime, renderMarkdown, ORDER_STATUS_LABELS, isTerminalSuccess,
 } from './lib.js'
+import { buildRechargeAmountPresets, getRechargeAmountRange } from './recharge-amounts.js'
 
-const AMOUNT_PRESETS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000]
 const POLL_INTERVAL_MS = 3000
 const VERIFY_INTERVAL_MS = 15000
 const VERIFY_MAX_ATTEMPTS = 6
@@ -382,7 +382,13 @@ export function Recharge({ user, setUser }) {
       try {
         const data = await request('/payment/checkout-info')
         setInfo(data)
-        const visible = sortMethodEntries(Object.entries(getVisibleMethods(data.methods || {})))
+        const range = getRechargeAmountRange(data)
+        const presets = buildRechargeAmountPresets(range.min, range.max)
+        setAmount(current => presets.includes(current) ? current : presets[0] ?? '')
+        const visible = sortMethodEntries(Object.entries(getVisibleMethods(data.methods || {})).map(([name, limit]) => {
+          const methodRange = getRechargeAmountRange({ ...data, global_min: limit.single_min, global_max: limit.single_max })
+          return [name, { ...limit, single_min: methodRange.min, single_max: methodRange.max }]
+        }))
         setMethods(visible)
         setMethod(visible[0]?.[0] || '')
         // Wechat OAuth resume: re-create the order with the resume token / openid.
@@ -583,8 +589,8 @@ export function Recharge({ user, setUser }) {
   const total = totalAmountFor(amount, feeRate)
   const multiplier = Number(info?.balance_recharge_multiplier || 1)
   const credited = Math.round((Number(amount) || 0) * multiplier)
-  const globalMin = Number(info?.global_min || 0)
-  const globalMax = Number(info?.global_max || 0)
+  const { min: globalMin, max: globalMax } = getRechargeAmountRange(info || {})
+  const amountPresets = buildRechargeAmountPresets(globalMin, globalMax)
   const amountOutOfRange = (globalMin > 0 && amount < globalMin) || (globalMax > 0 && amount > globalMax)
 
   function submitRecharge() {
@@ -642,10 +648,11 @@ export function Recharge({ user, setUser }) {
       {tab === 'recharge' && showBalanceTab && <div className="recharge-grid">
         <div className="panel form-card">
           <h2>选择金额</h2>
-          <div className="amounts nine">{AMOUNT_PRESETS.map(x => <button className={Number(amount) === x ? 'selected' : ''} key={x} onClick={() => setAmount(x)}>{currencySymbol()}{x}</button>)}</div>
+          <div className="amounts recharge-amounts">{amountPresets.map(x => <button className={Number(amount) === x ? 'selected' : ''} key={x} onClick={() => { setAmount(x); setFormError('') }}>{currencySymbol()}{x}</button>)}</div>
           <label>自定义金额
-            <input type="number" min="0" value={amount} onChange={e => setAmount(e.target.value === '' ? '' : Number(e.target.value))} placeholder="输入金额"/>
+            <input type="number" min={globalMin || 0.01} max={globalMax || undefined} step="0.01" value={amount} onChange={e => { setAmount(e.target.value === '' ? '' : Number(e.target.value)); setFormError('') }} placeholder="输入金额"/>
           </label>
+          {(globalMin > 0 || globalMax > 0) && <p className="muted small-note">充值金额范围：{currencySymbol()}{globalMin || 0.01} 起{globalMax > 0 ? `，最高 ${currencySymbol()}${globalMax}` : ''}</p>}
           <h2>支付方式</h2>
           <div className="method-list">
             {methods.map(([name, limit]) => <button key={name} className={`method-item ${method === name ? 'selected' : ''} ${!amountFits(name) ? 'disabled' : ''}`} onClick={() => amountFits(name) && setMethod(name)}>

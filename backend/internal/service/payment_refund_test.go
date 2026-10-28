@@ -676,3 +676,80 @@ type refundQueryProviderTestDouble struct {
 func (p *refundQueryProviderTestDouble) QueryRefund(context.Context, payment.RefundQueryRequest) (*payment.RefundResponse, error) {
 	return p.refundResponse, nil
 }
+
+type affiliateRefundRepoTestDouble struct {
+	AffiliateRepository
+	reverse func(context.Context, int64, float64, float64) (*AffiliateRefundAdjustment, error)
+}
+
+func (r *affiliateRefundRepoTestDouble) ReverseOrderRewards(ctx context.Context, id int64, refund, amount float64) (*AffiliateRefundAdjustment, error) {
+	return r.reverse(ctx, id, refund, amount)
+}
+
+func TestRefundReversesRewardsOnlyAfterConfirmedSuccess(t *testing.T) {
+	for _, status := range []string{payment.ProviderStatusSuccess, payment.ProviderStatusRefunded, payment.ProviderStatusPending, payment.ProviderStatusFailed} {
+		t.Run(status, func(t *testing.T) {
+			ctx := context.Background()
+			client := newPaymentConfigServiceTestClient(t)
+			order := createPendingRefundOrderForTest(t, ctx, client, "reward-"+status)
+			_, err := client.PaymentOrder.UpdateOneID(order.ID).SetStatus(OrderStatusRefunding).Save(ctx)
+			require.NoError(t, err)
+			calls := 0
+			repo := &affiliateRefundRepoTestDouble{reverse: func(ctx context.Context, id int64, refund, amount float64) (*AffiliateRefundAdjustment, error) {
+				require.NotNil(t, dbent.TxFromContext(ctx))
+				require.Equal(t, order.ID, id)
+				require.Equal(t, 40.0, refund)
+				require.Equal(t, 100.0, amount)
+				calls++
+				return &AffiliateRefundAdjustment{RebateRevoked: 4, BonusRevoked: 4}, nil
+			}}
+			svc := &PaymentService{entClient: client, affiliateService: &AffiliateService{repo: repo}}
+			result, err := svc.finishRefund(ctx, &RefundPlan{OrderID: order.ID, Order: order, RefundAmount: 40, Reason: "test"}, &payment.RefundResponse{Status: status})
+			require.NoError(t, err)
+			if status == payment.ProviderStatusSuccess || status == payment.ProviderStatusRefunded {
+				require.True(t, result.Success)
+				require.Equal(t, 1, calls)
+				require.Equal(t, 4.0, result.AffiliateAdjustment.RebateRevoked)
+				reloaded, err := client.PaymentOrder.Get(ctx, order.ID)
+				require.NoError(t, err)
+				require.Equal(t, OrderStatusPartiallyRefunded, reloaded.Status)
+			} else {
+				require.False(t, result.Success)
+				require.Zero(t, calls)
+			}
+		})
+	}
+}
+
+func TestQueryAndFinalizeRefundPreservesNoPrincipalDeduction(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	order := createPendingRefundOrderForTest(t, ctx, client, "no-deduction")
+	_, err := client.PaymentAuditLog.Update().Where(paymentauditlog.OrderIDEQ(strconv.FormatInt(order.ID, 10)), paymentauditlog.ActionEQ("REFUND_PENDING")).SetDetail(`{"refundID":"rf_test","deductionRollbackOK":true,"deductBalance":false}`).Save(ctx)
+	require.NoError(t, err)
+	svc := &PaymentService{entClient: client, loadBalancer: &captureLoadBalancer{}, userRepo: &mockUserRepo{deductAvailableBalanceFn: func(context.Context, int64, float64) (float64, error) {
+		t.Fatal("principal deduction was disabled")
+		return 0, nil
+	}}}
+	restore := replacePaymentProviderFactoryForTest(t, &refundQueryProviderTestDouble{refundResponse: &payment.RefundResponse{Status: payment.ProviderStatusSuccess}})
+	defer restore()
+	result, err := svc.QueryAndFinalizeRefund(ctx, order.ID)
+	require.NoError(t, err)
+	require.True(t, result.Success)
+	require.Zero(t, result.BalanceDeducted)
+}
+
+func TestRefundedOrderCannotReceiveLateAffiliateRewards(t *testing.T) {
+	ctx := context.Background()
+	client := newPaymentConfigServiceTestClient(t)
+	for _, status := range []string{OrderStatusRefundPending, OrderStatusRefunding, OrderStatusRefunded, OrderStatusPartiallyRefunded} {
+		order := createPendingRefundOrderForTest(t, ctx, client, "late-"+status)
+		_, err := client.PaymentOrder.UpdateOneID(order.ID).SetStatus(status).Save(ctx)
+		require.NoError(t, err)
+		svc := &PaymentService{entClient: client, affiliateService: &AffiliateService{}}
+		// These paths would query non-existent wallet tables if the order guard did
+		// not stop the late bonus/rebate before any accounting work.
+		require.NoError(t, svc.applyAffiliateFirstRechargeBonus(ctx, order))
+		require.NoError(t, svc.applyAffiliateRebateForOrder(ctx, order))
+	}
+}

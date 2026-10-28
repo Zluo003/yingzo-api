@@ -673,7 +673,13 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/admin/affiliates',
-    redirect: '/admin/affiliates/invites'
+    redirect: '/admin/affiliates/withdrawals'
+  },
+  {
+    path: '/admin/affiliates/withdrawals',
+    name: 'AdminAffiliateWithdrawals',
+    component: () => import('@/views/admin/affiliates/AdminAffiliateWithdrawalsView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: '邀请返利 · 提现管理' }
   },
   {
     path: '/admin/affiliates/invites',

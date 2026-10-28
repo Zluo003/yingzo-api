@@ -116,18 +116,33 @@ func (s *SettingService) GetAffiliateRebateRatePercent(ctx context.Context) floa
 // GetAffiliateRebateFreezeHours 返回返利冻结期（小时）。
 // 返回 0 表示不冻结（向后兼容）。
 func (s *SettingService) GetAffiliateRebateFreezeHours(ctx context.Context) int {
-	raw, err := s.settingRepo.GetValue(ctx, SettingKeyAffiliateRebateFreezeHours)
+	hours, err := s.loadAffiliateRebateFreezeHours(ctx)
 	if err != nil {
 		return AffiliateRebateFreezeHoursDefault
 	}
+	return hours
+}
+
+// Financial writes must not interpret a failed settings read as "no freeze".
+func (s *SettingService) loadAffiliateRebateFreezeHours(ctx context.Context) (int, error) {
+	if s == nil || s.settingRepo == nil {
+		return AffiliateRebateFreezeHoursDefault, nil
+	}
+	raw, err := s.settingRepo.GetValue(ctx, SettingKeyAffiliateRebateFreezeHours)
+	if errors.Is(err, ErrSettingNotFound) {
+		return AffiliateRebateFreezeHoursDefault, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("read affiliate freeze period: %w", err)
+	}
 	hours, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || hours < 0 {
-		return AffiliateRebateFreezeHoursDefault
+		return 0, fmt.Errorf("invalid affiliate freeze period: %q", raw)
 	}
 	if hours > AffiliateRebateFreezeHoursMax {
-		return AffiliateRebateFreezeHoursMax
+		return AffiliateRebateFreezeHoursMax, nil
 	}
-	return hours
+	return hours, nil
 }
 
 // GetAffiliateRebateDurationDays 返回返利有效期（天）。

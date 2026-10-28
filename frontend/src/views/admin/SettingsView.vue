@@ -7333,6 +7333,12 @@
             </div>
 
             <div v-if="form.affiliate_enabled" class="space-y-6">
+              <p class="text-sm text-gray-500">仅直接邀请产生返利，按充值实付金额计算；首充赠送只进入被邀请人的个人余额。关闭活动后保留记录与余额转换。</p>
+              <div class="grid gap-4 sm:grid-cols-3">
+<label class="input-label">被邀请人首充赠送（%）<input v-model.number="form.affiliate_first_recharge_bonus_percent" type="number" min="0" max="100" step="0.01" class="input mt-2" required /><span class="mt-1 block text-xs text-gray-500">仅填写邀请码的用户首次充值赠送，0 为不赠送。</span></label>
+<label class="input-label">支付宝提现最低金额（元）<input v-model.number="form.affiliate_withdraw_minimum" type="number" min="0" max="100000000" step="0.01" class="input mt-2" required /><span class="mt-1 block text-xs text-gray-500">按单次申请金额校验，0 为不设门槛。</span></label>
+<label class="input-label">转个人余额最低金额（元）<input v-model.number="form.affiliate_transfer_minimum" type="number" min="0" max="100000000" step="0.01" class="input mt-2" required /><span class="mt-1 block text-xs text-gray-500">按可用返利余额校验，关闭活动后仍适用。</span></label>
+</div>
               <div class="flex items-center justify-between">
                 <div>
                   <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -7368,18 +7374,18 @@
 
               <div>
                 <label class="input-label">
-                  {{ t('admin.settings.features.affiliate.freezeHours') }}
+                  {{ t('admin.settings.features.affiliate.freezeDays') }}
                 </label>
                 <input
-                  v-model.number="form.affiliate_rebate_freeze_hours"
+                  v-model.number="affiliateRebateFreezeDays"
                   type="number"
-                  step="1"
+                  step="any"
                   min="0"
-                  max="720"
+                  max="30"
                   class="input"
                 />
                 <p class="mt-1 text-xs text-gray-400">
-                  {{ t('admin.settings.features.affiliate.freezeHoursDesc') }}
+                  {{ t('admin.settings.features.affiliate.freezeDaysDesc') }}
                 </p>
               </div>
 
@@ -9574,7 +9580,10 @@ const form = reactive<SettingsForm>({
   default_balance: 0,
   default_platform_quotas: normalizePlatformQuotasMap() as DefaultPlatformQuotasMap,
   account_scheduling_thresholds: normalizeAccountSchedulingThresholdsMap(),
-  affiliate_rebate_rate: 20,
+  affiliate_first_recharge_bonus_percent: 10,
+  affiliate_withdraw_minimum: 0,
+  affiliate_transfer_minimum: 0,
+  affiliate_rebate_rate: 10,
   affiliate_rebate_freeze_hours: 0,
   affiliate_rebate_duration_days: 0,
   affiliate_rebate_per_invitee_cap: 0,
@@ -9848,6 +9857,14 @@ function applyCaptchaSelection(provider: CaptchaProviderSelection | null): void 
   form.tencent_captcha_enabled = provider === "tencent";
   form.aliyun_captcha_enabled = provider === "aliyun";
 }
+
+const affiliateRebateFreezeDays = computed({
+  get: () => Math.round((Number(form.affiliate_rebate_freeze_hours) || 0) / 24 * 1000) / 1000,
+  set: (days: number) => {
+    const hours = Math.round((Number(days) || 0) * 24);
+    form.affiliate_rebate_freeze_hours = Math.max(0, Math.min(720, hours));
+  },
+});
 
 const captchaMasterEnabled = computed({
   get: () =>
@@ -11207,6 +11224,9 @@ async function saveSettings() {
       login_agreement_updated_at: form.login_agreement_updated_at,
       login_agreement_documents: form.login_agreement_documents,
       default_balance: form.default_balance,
+      affiliate_first_recharge_bonus_percent: Number(form.affiliate_first_recharge_bonus_percent) || 0,
+      affiliate_withdraw_minimum: Number(form.affiliate_withdraw_minimum) || 0,
+      affiliate_transfer_minimum: Number(form.affiliate_transfer_minimum) || 0,
       affiliate_rebate_rate: Math.min(
         100,
         Math.max(0, Number(form.affiliate_rebate_rate) || 0),
