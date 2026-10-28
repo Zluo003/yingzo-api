@@ -56,10 +56,10 @@ func TestAffiliateRepository_TransferQuotaToBalance_UsesClaimedQuotaBeforeClear(
 		Concurrency:  5,
 	})
 
-	affCode := fmt.Sprintf("AFF%09d", time.Now().UnixNano()%1_000_000_000)
 	_, err := client.ExecContext(txCtx, `
-INSERT INTO user_affiliates (user_id, aff_code, aff_quota, aff_history_quota, created_at, updated_at)
-VALUES ($1, $2, $3, $3, NOW(), NOW())`, u.ID, affCode, 12.34)
+UPDATE user_affiliates
+SET aff_quota = $2, aff_history_quota = $2, updated_at = NOW()
+WHERE user_id = $1`, u.ID, 12.34)
 	require.NoError(t, err)
 
 	transferred, balance, err := repo.TransferQuotaToBalance(txCtx, u.ID)
@@ -187,11 +187,8 @@ func TestAffiliateRepository_TransferQuotaToBalance_EmptyQuota(t *testing.T) {
 		Concurrency:  5,
 	})
 
-	affCode := fmt.Sprintf("AFF%09d", time.Now().UnixNano()%1_000_000_000)
-	_, err := client.ExecContext(txCtx, `
-INSERT INTO user_affiliates (user_id, aff_code, aff_quota, aff_history_quota, created_at, updated_at)
-VALUES ($1, $2, 0, 0, NOW(), NOW())`, u.ID, affCode)
-	require.NoError(t, err)
+	require.Equal(t, 1, querySingleInt(t, txCtx, client,
+		"SELECT COUNT(*) FROM user_affiliates WHERE user_id = $1 AND aff_quota = 0", u.ID))
 
 	transferred, balance, err := repo.TransferQuotaToBalance(txCtx, u.ID)
 	require.ErrorIs(t, err, service.ErrAffiliateQuotaEmpty)
