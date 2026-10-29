@@ -1,0 +1,24 @@
+# Optional Discord bridge overlay. From the repository root:
+# docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.midjourney.yml up -d --build
+services:
+  sub2api:
+    environment:
+      MIDJOURNEY_BRIDGE_URL: http://midjourney-discord:8081
+      MIDJOURNEY_BRIDGE_SECRET: ${MIDJOURNEY_BRIDGE_SECRET:?Set a shared random secret of at least 32 characters}
+    depends_on:
+      midjourney-discord:
+        condition: service_healthy
+  midjourney-discord:
+    image: ghcr.io/zluo003/yingzo-midjourney-discord:${MIDJOURNEY_BRIDGE_VERSION:-latest}
+    build:
+      context: ../midjourney-discord
+    restart: unless-stopped
+    environment:
+      MIDJOURNEY_BRIDGE_SECRET: ${MIDJOURNEY_BRIDGE_SECRET:?Set a shared random secret of at least 32 characters}
+    volumes:
+      - midjourney-discord-data:/data
+    networks:
+      - sub2api-network
+    # Internal service only; never publish the bridge port to the Internet.
+volumes:
+  midjourney-discord-data:

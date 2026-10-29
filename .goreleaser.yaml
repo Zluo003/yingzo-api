@@ -35,6 +35,13 @@ archives:
       - LICENSE*
       - README*
       - deploy/*
+      - docs/MIDJOURNEY_AGENT_INTEGRATION.md
+      - midjourney-discord/package.json
+      - midjourney-discord/package-lock.json
+      - midjourney-discord/Dockerfile
+      - midjourney-discord/.dockerignore
+      - midjourney-discord/src/*.js
+      - midjourney-discord/scripts/*.js
       - third-party/ffmpeg/*
 
 checksum:

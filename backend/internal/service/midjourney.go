@@ -23,14 +23,17 @@ const MidjourneyModel = "midjourney-v8.2"
 
 // The current upstream accepts fewer than 1024 Unicode characters.
 const MidjourneyPromptMaxCharacters = 1023
-const MidjourneyProvider = "apimart_midjourney"
+const MidjourneyProvider = "discord_midjourney"
 const AgentInterfaceMidjourney = "midjourney.generations"
 
+var midjourneySnowflake = regexp.MustCompile(`^[0-9]{17,20}$`)
 var midjourneyAspectRatio = regexp.MustCompile(`^[1-9][0-9]{0,3}:[1-9][0-9]{0,3}$`)
 
-// One v8.2 Fast generation/edit or U1-U4 selection per task. Native flags and
+// One v8.2 Fast generation/edit, selection or follow-up per task. Native flags and
 // legacy character-reference parameters are deliberately not exposed.
 type MidjourneyRequest struct {
+	Operation      string   `json:"operation,omitempty"`
+	Mode           string   `json:"mode,omitempty"`
 	Model          string   `json:"model,omitempty"`
 	Prompt         string   `json:"prompt,omitempty"`
 	Version        string   `json:"version,omitempty"`
@@ -54,7 +57,7 @@ type MidjourneyRequest struct {
 }
 
 func ParseMidjourneyRequest(body []byte, action string) (*MidjourneyRequest, error) {
-	if action != "imagine" && action != "edits" && action != "upscale" {
+	if action != "imagine" && action != "edits" && action != "select" && action != "upscale" && action != "variations" {
 		return nil, errors.New("unsupported Midjourney action")
 	}
 	var r MidjourneyRequest
@@ -77,16 +80,38 @@ func ParseMidjourneyRequest(body []byte, action string) (*MidjourneyRequest, err
 		return nil, errors.New("midjourney v8.2 only supports fast speed")
 	}
 	r.Speed = "fast"
-	if action == "upscale" {
-		if !strings.HasPrefix(r.TaskID, "imgtask_") || r.Index < 1 || r.Index > 4 {
-			return nil, errors.New("upscale requires a Yingzo task_id and index between 1 and 4")
+	if r.Operation != "" && r.Operation != action {
+		return nil, errors.New("operation does not match request endpoint")
+	}
+	r.Operation = action
+	if action == "select" || action == "upscale" || action == "variations" {
+		if !strings.HasPrefix(r.TaskID, "imgtask_") {
+			return nil, errors.New("a Yingzo parent task_id is required")
+		}
+		if action == "select" {
+			if r.Index < 1 || r.Index > 4 || r.Mode != "" {
+				return nil, errors.New("select requires index 1–4 and no mode")
+			}
+		} else {
+			if r.Index != 0 {
+				return nil, errors.New("select a single image first; upscale and variations do not accept index")
+			}
+			if r.Mode == "" {
+				r.Mode = "subtle"
+			}
+			if r.Mode != "subtle" && !((action == "upscale" && r.Mode == "creative") || (action == "variations" && r.Mode == "strong")) {
+				return nil, errors.New("unsupported action mode")
+			}
 		}
 		if r.Prompt != "" || r.Size != "" || r.Quality != "" || r.Style != "" || r.Seed != nil || r.NegativePrompt != "" || r.Stylize != nil || r.Chaos != nil || r.Weird != nil || r.Tile || r.Raw || len(r.ImageURLs) > 0 || r.ImageWeight != nil || r.StyleReference != "" || r.StyleWeight != nil {
-			return nil, errors.New("upscale accepts only model, version, task_id, index and speed")
+			return nil, errors.New("follow-up actions accept only operation, model, version, task_id, index or mode and speed")
 		}
-		r.Speed = "fast"
 		return &r, nil
 	}
+	if r.Mode != "" {
+		return nil, errors.New("mode is only valid for upscale and variations")
+	}
+
 	r.Prompt = strings.TrimSpace(r.Prompt)
 	if r.Prompt == "" {
 		return nil, errors.New("prompt must not be empty")
@@ -98,12 +123,12 @@ func ParseMidjourneyRequest(body []byte, action string) (*MidjourneyRequest, err
 	// Keep all controllable parameters in validated structured fields.
 	for _, value := range []string{r.Prompt, r.NegativePrompt} {
 		lower := strings.ToLower(value)
-		if strings.Contains(value, "--") || strings.Contains(lower, "https:") || strings.Contains(lower, "http:") || strings.Contains(lower, "data:") {
+		if strings.ContainsAny(value, "{}") || strings.Contains(value, "--") || strings.Contains(lower, "https:") || strings.Contains(lower, "http:") || strings.Contains(lower, "data:") {
 			return nil, errors.New("use plain text without image URLs or native --parameters; use the structured fields instead")
 		}
 	}
 	if r.TaskID != "" || r.Index != 0 {
-		return nil, errors.New("task_id and index are only valid for upscale")
+		return nil, errors.New("task_id and index are only valid for follow-up actions")
 	}
 	if len(r.ImageURLs) > 4 || (action == "edits" && len(r.ImageURLs) == 0) {
 		return nil, errors.New("image_urls accepts up to 4 images; edits requires at least one image")
@@ -128,13 +153,10 @@ func ParseMidjourneyRequest(body []byte, action string) (*MidjourneyRequest, err
 	if r.Size != "" && !midjourneyAspectRatio.MatchString(r.Size) {
 		return nil, errors.New("size must be an aspect ratio such as 16:9")
 	}
-	if r.Quality == "" {
-		r.Quality = "2"
-	}
 	switch r.Quality {
-	case "0.25", "0.5", "1", "2":
+	case "", "1":
 	default:
-		return nil, errors.New("quality must be 0.25, 0.5, 1 or 2")
+		return nil, errors.New("Discord v8.2 supports quality 1 in this integration")
 	}
 	if r.Style != "" && r.Style != "raw" {
 		return nil, errors.New("style must be raw")
@@ -148,6 +170,9 @@ func ParseMidjourneyRequest(body []byte, action string) (*MidjourneyRequest, err
 			return nil, fmt.Errorf("%s must be between 0 and %d", field.name, field.max)
 		}
 	}
+	if _, err := r.DiscordPrompt(action); err != nil {
+		return nil, err
+	}
 	return &r, nil
 }
 
@@ -160,14 +185,17 @@ func validMidjourneyImageURL(value string) bool {
 }
 
 func (r *MidjourneyRequest) PriceTier() string {
-	if r.TaskID != "" {
+	switch r.Operation {
+	case "select":
+		return "select"
+	case "upscale":
 		return "upscale"
 	}
 	return "generation"
 }
 func IsMidjourneyPriceTier(tier string) bool {
 	switch tier {
-	case "generation", "upscale":
+	case "generation", "select", "upscale":
 		return true
 	}
 	return false
@@ -179,44 +207,54 @@ func (a *Account) IsMidjourney() bool {
 
 // Called for both account create and edit after credentials have been merged.
 func normalizeMidjourneyAccount(a *Account) error {
+	if a.Extra["image_provider"] == "apimart_midjourney" {
+		return infraerrors.BadRequest("MIDJOURNEY_PROVIDER_RETIRED", "APIMart Midjourney was removed; configure a Discord MJ account")
+	}
 	if a.Extra["image_provider"] != MidjourneyProvider {
 		return nil
 	}
 	if !a.IsMidjourney() {
 		return infraerrors.BadRequest("INVALID_MIDJOURNEY_ACCOUNT", "Midjourney requires an OpenAI API-key image account")
 	}
-	if strings.TrimSpace(a.GetCredential("api_key")) == "" {
-		return infraerrors.BadRequest("INVALID_MIDJOURNEY_ACCOUNT", "APIMart API key is required")
+	if a.Concurrency < 1 || a.Concurrency > 100 {
+		return infraerrors.BadRequest("INVALID_MIDJOURNEY_ACCOUNT", "MJ concurrency must be between 1 and 100")
 	}
-	base := strings.TrimSpace(a.GetCredential("base_url"))
-	if base == "" {
-		base = "https://api.apimart.ai"
+	if strings.TrimSpace(a.GetCredential("discord_token")) == "" || strings.HasPrefix(a.GetCredential("discord_token"), "Bot ") {
+		return infraerrors.BadRequest("INVALID_MIDJOURNEY_ACCOUNT", "Discord user token is required")
 	}
-	u, err := url.Parse(base)
-	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return infraerrors.BadRequest("INVALID_MIDJOURNEY_ACCOUNT", "Midjourney base URL must be an HTTPS origin or /v1 URL")
+	for _, field := range []string{"discord_server_id", "discord_channel_id"} {
+		if !midjourneySnowflake.MatchString(a.GetCredential(field)) {
+			return infraerrors.BadRequest("INVALID_MIDJOURNEY_ACCOUNT", "Discord server/channel IDs must be 17–20 digits")
+		}
 	}
-	if p := strings.TrimRight(u.Path, "/"); p != "" && p != "/v1" {
-		return infraerrors.BadRequest("INVALID_MIDJOURNEY_ACCOUNT", "Midjourney base URL must not include an endpoint path")
-	}
-	a.Credentials["base_url"] = strings.TrimRight(base, "/")
+	delete(a.Credentials, "api_key")
+	delete(a.Credentials, "base_url")
 	a.Credentials["model_mapping"] = map[string]any{MidjourneyModel: MidjourneyModel}
 	a.Extra["image_account"] = true
 	return nil
 }
 
 type MidjourneySnapshot struct {
-	Action           string            `json:"action,omitempty"`
-	GroupID          int64             `json:"group_id"`
-	AccountID        int64             `json:"account_id"`
-	ParentUpstreamID string            `json:"parent_upstream_id,omitempty"`
-	Request          MidjourneyRequest `json:"request"`
+	Action           string               `json:"action,omitempty"`
+	GroupID          int64                `json:"group_id"`
+	AccountID        int64                `json:"account_id"`
+	ParentUpstreamID string               `json:"parent_upstream_id,omitempty"`
+	Parent           *midjourneyReference `json:"parent,omitempty"`
+	Request          MidjourneyRequest    `json:"request"`
 }
 type midjourneyReference struct {
-	AccountID  int64  `json:"account_id"`
-	UpstreamID string `json:"upstream_id"`
-	Action     string `json:"action"`
-	ImageCount int    `json:"image_count,omitempty"`
+	Prompt     string             `json:"prompt,omitempty"`
+	Provider   string             `json:"provider"`
+	ChannelID  string             `json:"channel_id"`
+	ServerID   string             `json:"server_id"`
+	MessageID  string             `json:"message_id"`
+	Hash       string             `json:"hash"`
+	Flags      int                `json:"flags"`
+	Options    []midjourneyOption `json:"options"`
+	AccountID  int64              `json:"account_id"`
+	UpstreamID string             `json:"upstream_id"`
+	Action     string             `json:"action"`
+	ImageCount int                `json:"image_count,omitempty"`
 }
 
 func (s *DurableImageService) prepareMidjourney(ctx context.Context, key *APIKey, r *MidjourneyRequest, action string) (*MidjourneySnapshot, error) {
@@ -226,7 +264,7 @@ func (s *DurableImageService) prepareMidjourney(ctx context.Context, key *APIKey
 		if err != nil {
 			return nil, err
 		}
-		if parent.Quote.Model != MidjourneyModel || parent.Status != ImageTaskStatusCompleted || (parent.Quote.Size != "generation" && !strings.HasPrefix(parent.Quote.Size, "imagine_")) {
+		if parent.Quote.Model != MidjourneyModel || parent.Status != ImageTaskStatusCompleted {
 			return nil, infraerrors.BadRequest("INVALID_MIDJOURNEY_PARENT", "parent must be a completed Midjourney v8.2 generation task")
 		}
 		if time.Now().Unix() >= parent.ExpiresAt {
@@ -237,13 +275,17 @@ func (s *DurableImageService) prepareMidjourney(ctx context.Context, key *APIKey
 			return nil, ErrImageTaskUnavailable
 		}
 		var saved midjourneyReference
-		if json.Unmarshal([]byte(raw), &saved) != nil || saved.AccountID <= 0 || saved.UpstreamID == "" || (saved.Action != "imagine" && saved.Action != "edits") {
+		if json.Unmarshal([]byte(raw), &saved) != nil || saved.AccountID <= 0 || saved.Provider != MidjourneyProvider || saved.MessageID == "" {
 			return nil, ErrImageTaskUnavailable
 		}
-		if saved.ImageCount > 0 && r.Index > saved.ImageCount {
+		if (action == "select" && saved.ImageCount != 4) || ((action == "upscale" || action == "variations") && saved.ImageCount != 1) {
 			return nil, infraerrors.BadRequest("INVALID_MIDJOURNEY_INDEX", "index exceeds the number of images returned by the parent task")
 		}
 		snapshot.AccountID, snapshot.ParentUpstreamID = saved.AccountID, saved.UpstreamID
+		snapshot.Parent = &saved
+		if _, err := midjourneyActionID(saved.Options, action, r.Index, r.Mode); err != nil {
+			return nil, infraerrors.BadRequest("MIDJOURNEY_ACTION_UNAVAILABLE", err.Error())
+		}
 	}
 	accounts, err := s.midjourneyAccounts(ctx, snapshot)
 	if err != nil {
@@ -266,6 +308,15 @@ func (s *DurableImageService) midjourneyAccounts(ctx context.Context, snapshot *
 	sort.SliceStable(accounts, func(i, j int) bool {
 		if accounts[i].Priority != accounts[j].Priority {
 			return accounts[i].Priority < accounts[j].Priority
+		}
+		if accounts[i].LastUsedAt == nil {
+			return accounts[j].LastUsedAt != nil || accounts[i].ID < accounts[j].ID
+		}
+		if accounts[j].LastUsedAt == nil {
+			return false
+		}
+		if !accounts[i].LastUsedAt.Equal(*accounts[j].LastUsedAt) {
+			return accounts[i].LastUsedAt.Before(*accounts[j].LastUsedAt)
 		}
 		return accounts[i].ID < accounts[j].ID
 	})
@@ -344,75 +395,71 @@ func (s *DurableImageService) executeMidjourney(ctx context.Context, snapshot *M
 		return 503, nil, auditErr
 	}
 	r := snapshot.Request
-	r.Speed = "fast"
-	action := "imagine"
-	var payload any
-	path := "/v1/midjourney/generations"
-	if r.TaskID != "" {
-		action = "upscale"
-		path += "/upscale"
-		payload = map[string]any{"task_id": snapshot.ParentUpstreamID, "index": r.Index, "speed": "fast"}
-	} else {
-		if snapshot.Action == "edits" {
-			action = "edits"
-			path += "/edits"
+	action := snapshot.Action
+	if action == "" {
+		action = "imagine"
+	}
+	if capture == nil || capture.Quote == nil || capture.Quote.PerImage == nil || capture.TaskID == "" {
+		return 503, nil, ErrImageTaskUnavailable
+	}
+	if snapshot.Parent != nil && (snapshot.Parent.ChannelID != a.GetCredential("discord_channel_id") || snapshot.Parent.ServerID != a.GetCredential("discord_server_id")) {
+		return 400, nil, errors.New("parent Discord channel changed")
+	}
+	payload := midjourneyBridgeSubmission{ID: capture.TaskID, Account: midjourneyBridgeAccountFor(a), Action: action, Parent: snapshot.Parent, Index: r.Index, Mode: r.Mode}
+	if r.TaskID == "" {
+		prompt, promptErr := r.DiscordPrompt(action)
+		if promptErr != nil {
+			return 400, nil, promptErr
 		}
-		r.Model = ""
-		r.Version = "8.2"
-		payload = r
+		payload.Prompt = prompt
 	}
 	raw, _ := json.Marshal(payload)
-	body, err := s.midjourneyHTTP(ctx, a, http.MethodPost, path, raw)
+	body, err := midjourneyBridgeHTTP(ctx, http.MethodPost, "/tasks", raw)
 	if err != nil {
 		return 502, nil, err
 	}
 	var receipt struct {
-		Code int `json:"code"`
-		Data []struct {
-			TaskID string `json:"task_id"`
-		} `json:"data"`
+		ID string `json:"id"`
 	}
-	if json.Unmarshal(body, &receipt) != nil || (receipt.Code != 0 && receipt.Code != 200) || len(receipt.Data) != 1 || receipt.Data[0].TaskID == "" {
-		return 502, nil, errors.New("invalid Midjourney receipt")
+	if json.Unmarshal(body, &receipt) != nil || receipt.ID != capture.TaskID {
+		return 502, nil, errors.New("invalid Discord task receipt")
 	}
-	upstreamID := receipt.Data[0].TaskID
 	for {
-		body, err = s.midjourneyHTTP(ctx, a, http.MethodGet, "/v1/midjourney/"+url.PathEscape(upstreamID), nil)
+		body, err = midjourneyBridgeHTTP(ctx, http.MethodGet, "/tasks/"+url.PathEscape(receipt.ID), nil)
 		if err != nil {
-			// GET may be retried safely; never resubmit a POST with an uncertain outcome.
 			var status *midjourneyHTTPError
 			if errors.As(err, &status) && status.status < 500 && status.status != 429 {
 				return 502, nil, err
 			}
-			if err := waitMidjourneyPoll(ctx, 5*time.Second); err != nil {
+			if err := waitMidjourneyPoll(ctx, 3*time.Second); err != nil {
 				return 504, nil, err
 			}
 			continue
 		}
-		var result struct {
-			Status string   `json:"status"`
-			Grid   string   `json:"grid_image_url"`
-			Images []string `json:"image_urls"`
-		}
+		var result midjourneyBridgeResult
 		if json.Unmarshal(body, &result) != nil {
-			return 502, nil, errors.New("invalid Midjourney task response")
+			return 502, nil, errors.New("invalid Discord task response")
 		}
-		switch strings.ToUpper(result.Status) {
-		case "SUCCESS":
-			items := []map[string]any{}
-			imageCount := len(result.Images)
-			if result.Grid != "" && (action == "imagine" || (action == "edits" && imageCount == 0)) {
-				imageCount = 4
-				items = append(items, map[string]any{"url": result.Grid, "kind": "grid"})
-			} else {
-				if imageCount < 1 || imageCount > 4 || (action == "imagine" && imageCount != 4) || (action == "upscale" && imageCount != 1) {
-					return 502, nil, errors.New("unexpected Midjourney image count")
-				}
-				for i, u := range result.Images {
-					items = append(items, map[string]any{"url": u, "index": i + 1, "kind": "image"})
+		switch result.Status {
+		case "completed":
+			if !validDiscordImageURL(result.URI) || result.MessageID == "" {
+				return 502, nil, errors.New("invalid Discord result")
+			}
+			if snapshot.Parent != nil {
+				payload.Prompt = snapshot.Parent.Prompt
+			}
+			imageCount := 1
+			for _, o := range result.Options {
+				if o.Label == "U1" {
+					imageCount = 4
 				}
 			}
-			output, _ := json.Marshal(map[string]any{"model": MidjourneyModel, "version": "8.2", "action": action, "speed": r.Speed, "index": r.Index, "parent_task_id": r.TaskID, "data": items, "_midjourney": midjourneyReference{AccountID: a.ID, UpstreamID: upstreamID, Action: action, ImageCount: imageCount}})
+			kind := "image"
+			if imageCount == 4 {
+				kind = "grid"
+			}
+			ref := midjourneyReference{Provider: MidjourneyProvider, AccountID: a.ID, UpstreamID: receipt.ID, Action: action, ImageCount: imageCount, ChannelID: a.GetCredential("discord_channel_id"), ServerID: a.GetCredential("discord_server_id"), MessageID: result.MessageID, Hash: result.Hash, Flags: result.Flags, Options: result.Options, Prompt: payload.Prompt}
+			output, _ := json.Marshal(map[string]any{"model": MidjourneyModel, "version": "8.2", "action": action, "speed": "fast", "index": r.Index, "mode": r.Mode, "parent_task_id": r.TaskID, "data": []map[string]any{{"url": result.URI, "kind": kind, "width": result.Width, "height": result.Height}}, "_midjourney": ref, "available_actions": midjourneyAvailableActions(result.Options)})
 			usage := capture.Quote.Usage
 			usage.AccountID = a.ID
 			usage.ImageCount = 1
@@ -427,11 +474,13 @@ func (s *DurableImageService) executeMidjourney(ctx context.Context, snapshot *M
 			capture.Usage = &usage
 			_ = s.openAI.accountRepo.UpdateLastUsed(ctx, a.ID)
 			return 200, output, nil
-		case "FAILURE", "FAILED", "CANCELLED":
-			return 502, nil, errors.New("midjourney upstream task failed")
-		case "NOT_START", "SUBMITTED", "IN_PROGRESS", "PROCESSING", "PENDING", "QUEUED":
+		case "failed", "interrupted":
+			capture.TaskError = NewUsageTaskError(502, []byte(`{"error":{"code":"midjourney_discord_failed","message":"Discord task failed; check MJ account status"}}`), "Discord task failed")
+			_ = s.openAI.accountRepo.SetTempUnschedulable(context.WithoutCancel(ctx), a.ID, time.Now().Add(5*time.Minute), "Discord task failed; check MJ session, subscription and channel")
+			return 502, nil, errors.New("Discord task failed")
+		case "queued", "processing":
 		default:
-			return 502, nil, errors.New("unknown Midjourney task status")
+			return 502, nil, errors.New("unknown Discord task status")
 		}
 		if err := waitMidjourneyPoll(ctx, 5*time.Second); err != nil {
 			return 504, nil, err
@@ -452,10 +501,7 @@ func waitMidjourneyPoll(ctx context.Context, delay time.Duration) error {
 type midjourneyHTTPError struct{ status int }
 
 func (e *midjourneyHTTPError) Error() string {
-	return fmt.Sprintf("APIMart image upstream HTTP %d", e.status)
-}
-func (s *DurableImageService) midjourneyHTTP(ctx context.Context, a *Account, method, path string, body []byte) ([]byte, error) {
-	return s.apimartImageHTTP(ctx, a, method, path, body)
+	return fmt.Sprintf("image upstream HTTP %d", e.status)
 }
 
 func (s *DurableImageService) apimartImageHTTP(ctx context.Context, a *Account, method, path string, body []byte) ([]byte, error) {
@@ -549,7 +595,7 @@ func normalizeAgentModelPricesForModel(model, mediaType string, prices []AgentMo
 	seen := map[string]bool{}
 	for _, p := range prices {
 		if !IsMidjourneyPriceTier(p.Resolution) || seen[p.Resolution] || p.UnitPrice < 0 || math.IsNaN(p.UnitPrice) || math.IsInf(p.UnitPrice, 0) {
-			return nil, errors.New("midjourney prices must use unique generation or upscale operations with finite non-negative prices")
+			return nil, errors.New("midjourney prices must use unique generation, select or upscale operations with finite non-negative prices")
 		}
 		seen[p.Resolution] = true
 		p.BillingUnit = "request"

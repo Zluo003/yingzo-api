@@ -142,8 +142,8 @@ describe('admin YingzoAgentView', () => {
     deleteAgentModel.mockResolvedValue({ deleted: true })
   })
 
-  it('keeps two Midjourney operation prices separate from image resolutions', async () => {
-    const tiers = ['generation', 'upscale']
+  it('keeps three Midjourney operation prices separate from image resolutions', async () => {
+    const tiers = ['generation', 'select', 'upscale']
     getAgentModels.mockResolvedValue({ models: [...CATALOG.models, model({ id: 4, model_code: 'midjourney-v8.2', media_type: 'image', prices: tiers.map((resolution, i) => ({ resolution, unit_price: i / 10, billing_unit: 'request' })) })] })
     const wrapper = await mountView()
     await wrapper.get('[data-testid="yingzo-agent-tab-image"]').trigger('click')
@@ -155,7 +155,7 @@ describe('admin YingzoAgentView', () => {
     await wrapper.get('[data-testid="yingzo-agent-save"]').trigger('click')
     await flushPromises()
     expect(updateAgentModel).toHaveBeenCalledWith(7, 4, { media_type: 'image', enabled: true, prices: [
-      { resolution: 'generation', unit_price: 0.7 }, { resolution: 'upscale', unit_price: 0.1 },
+      { resolution: 'generation', unit_price: 0.7 }, { resolution: 'select', unit_price: 0.1 }, { resolution: 'upscale', unit_price: 0.2 },
     ] })
   })
 

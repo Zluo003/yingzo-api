@@ -347,7 +347,7 @@ func isAsyncImageSubmission(method, path, prefer string) bool {
 	if method != http.MethodPost {
 		return false
 	}
-	if path == "/v1/midjourney/generations" || path == "/v1/midjourney/generations/imagine" || path == "/v1/midjourney/generations/edits" || path == "/v1/midjourney/generations/upscale" {
+	if path == "/v1/midjourney/generations" || path == "/v1/midjourney/generations/imagine" || path == "/v1/midjourney/generations/edits" || path == "/v1/midjourney/generations/upscale" || path == "/v1/midjourney/generations/select" || path == "/v1/midjourney/generations/variations" {
 		return true
 	}
 	explicit := strings.HasSuffix(path, "/async")

@@ -625,13 +625,16 @@ func (h *AgentHandler) calculateGenerationQuote(ctx context.Context, apiKey *ser
 		var midjourney *service.MidjourneyRequest
 		if input.Model == service.MidjourneyModel {
 			var target struct {
-				TaskID string `json:"task_id"`
+				TaskID    string `json:"task_id"`
+				Operation string `json:"operation"`
 			}
 			_ = json.Unmarshal(input.Request, &target)
 			var err error
 			action := "imagine"
-			if target.TaskID != "" {
-				action = "upscale"
+			if target.Operation != "" {
+				action = target.Operation
+			} else if target.TaskID != "" {
+				return nil, infraerrors.BadRequest("invalid_image_request", "follow-up estimates require operation: select, upscale or variations")
 			}
 			midjourney, err = service.ParseMidjourneyRequest(input.Request, action)
 			if err != nil {

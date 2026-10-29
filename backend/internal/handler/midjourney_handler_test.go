@@ -102,7 +102,7 @@ func TestMidjourneyPublicModelAndOperationEstimates(t *testing.T) {
 		{`{"prompt":"cat","speed":"fast"}`, "generation", 0.2},
 		{`{"prompt":"keep the cat, change background","image_urls":["https://image.example/cat.png"]}`, "generation", 0.2},
 		{`{"prompt":"cat","sref":"https://image.example/style.png","sw":200}`, "generation", 0.2},
-		{`{"task_id":"imgtask_parent","index":3}`, "upscale", 0.05},
+		{`{"operation":"upscale","task_id":"imgtask_parent","mode":"subtle"}`, "upscale", 0.05},
 	} {
 		q, err := h.calculateGenerationQuote(context.Background(), key, agentGenerationEstimateRequest{Kind: "image", Platform: service.PlatformOpenAI, Model: service.MidjourneyModel, Count: 1, Request: json.RawMessage(tc.body)})
 		require.NoError(t, err)

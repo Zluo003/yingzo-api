@@ -106,7 +106,7 @@
           <span class="text-xs text-gray-500">{{ t('seedream.scope') }}</span>
         </button>
         <button type="button" class="mt-3 w-full rounded-lg border-2 border-gray-200 p-3 text-left hover:border-primary-500 dark:border-dark-600" data-testid="image-platform-midjourney" @click="emit('midjourney')">
-          <span class="block text-sm font-semibold">Midjourney v8.2 · APIMart</span>
+          <span class="block text-sm font-semibold">Midjourney v8.2 · Discord</span>
           <span class="text-xs text-gray-500">{{ t('midjourney.scope') }}</span>
         </button>
 

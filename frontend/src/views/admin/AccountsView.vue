@@ -21,6 +21,7 @@
             @create-speech="showCreateSpeech = true"
           >
             <template #after>
+              <button type="button" class="btn btn-secondary" data-testid="add-mj-account" @click="showCreateMidjourney = true">{{ t('midjourney.addAccount') }}</button>
               <!-- Auto Refresh Dropdown -->
               <div class="relative" ref="autoRefreshDropdownRef">
                 <button

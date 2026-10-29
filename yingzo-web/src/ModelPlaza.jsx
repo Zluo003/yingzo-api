@@ -34,7 +34,7 @@ function ModelCard({ model, category }) {
   const tokenPrices = prices.filter(price => price.unit === 'million_tokens')
   const requestPrices = prices.filter(price => price.unit === 'request')
   const hasVideoChannels = model.media_type === 'video' && model.model_code.startsWith('seedance-')
-  const operationLabels = model.model_code === 'midjourney-v8.2' ? { generation: '图片生成', upscale: '放大' } : {}
+  const operationLabels = model.model_code === 'midjourney-v8.2' ? { generation: '图片生成 / 变体', select: '选出单图', upscale: '高清放大' } : {}
   return <article className="mp-card">
     <div className="mp-card-top"><span>{model.model_code === 'suno-v6' ? 'Suno' : platforms[model.platform] || model.platform}</span><span className="mp-enabled"><i />已启用</span></div>
     <h2>{model.model_code}</h2>

@@ -64,6 +64,10 @@ func (h *AsyncImageHandler) Midjourney(c *gin.Context) {
 	action := "imagine"
 	if strings.HasSuffix(c.Request.URL.Path, "/upscale") {
 		action = "upscale"
+	} else if strings.HasSuffix(c.Request.URL.Path, "/select") {
+		action = "select"
+	} else if strings.HasSuffix(c.Request.URL.Path, "/variations") {
+		action = "variations"
 	} else if strings.HasSuffix(c.Request.URL.Path, "/edits") {
 		action = "edits"
 	}
@@ -83,7 +87,7 @@ func (h *AsyncImageHandler) Midjourney(c *gin.Context) {
 		imageTaskJSONError(c, 400, "invalid_request_error", err.Error())
 		return
 	}
-	if !replay && action != "upscale" && h.openAI != nil {
+	if !replay && req.TaskID == "" && h.openAI != nil {
 		subject, ok := middleware.GetAuthSubjectFromContext(c)
 		if !ok {
 			imageTaskJSONError(c, 500, "api_error", "User context not found")

@@ -1,0 +1,20 @@
+{
+  "name": "yingzo-midjourney-discord",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js",
+    "postinstall": "node scripts/patch-sdk.js"
+  },
+  "dependencies": {
+    "midjourney": "4.3.18",
+    "node-fetch": "3.3.2",
+    "proxy-agent": "6.5.0",
+    "ws": "8.18.3"
+  }
+}

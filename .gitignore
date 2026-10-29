@@ -187,3 +187,9 @@ deploy/redis_data*/
 deploy/.env*
 !.env.example
 !*/.env.example
+
+# Midjourney Discord bridge runtime state
+midjourney-discord/node_modules/
+midjourney-discord/*.sqlite*
+!midjourney-discord/scripts/
+!midjourney-discord/scripts/patch-sdk.js

@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"io"
 	"math"
-	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -49,9 +47,9 @@ func TestMidjourneyRequestScope(t *testing.T) {
 	}
 	for _, index := range []int{1, 2, 3, 4} {
 		raw, _ := json.Marshal(map[string]any{"task_id": "imgtask_owned", "index": index})
-		r, err := ParseMidjourneyRequest(raw, "upscale")
+		r, err := ParseMidjourneyRequest(raw, "select")
 		require.NoError(t, err)
-		require.Equal(t, "upscale", r.PriceTier())
+		require.Equal(t, "select", r.PriceTier())
 		require.Equal(t, "fast", r.Speed)
 	}
 	for _, action := range []string{"imagine", "edits", "upscale"} {
@@ -82,7 +80,7 @@ func TestMidjourneyRequestScope(t *testing.T) {
 		{`{"prompt":"cat","image_urls":[]}`, "edits"}, {`{"prompt":"cat"}`, "edits"},
 		{`{"prompt":"cat","image_urls":["https://image.example/x","https://image.example/x","https://image.example/x","https://image.example/x","https://image.example/x"]}`, "edits"},
 		{`{"prompt":"cat","image_urls":["https://image.example/x --repeat 2"]}`, "edits"},
-		{`{"task_id":"upstream_other","index":1}`, "upscale"}, {`{"task_id":"imgtask_x","index":0}`, "upscale"},
+		{`{"task_id":"upstream_other","index":1}`, "upscale"}, {`{"task_id":"imgtask_x","index":0}`, "select"},
 		{`{"task_id":"imgtask_x","index":5}`, "upscale"}, {`{"task_id":"imgtask_x","index":1,"custom_id":"HD"}`, "upscale"},
 		{`{"task_id":"imgtask_x","index":1,"prompt":"cat"}`, "upscale"}, {`{"prompt":"cat","task_id":"imgtask_x"}`, "imagine"},
 		{`{"task_id":"imgtask_x","index":1,"sref":"https://image.example/x"}`, "upscale"},
@@ -163,7 +161,7 @@ func (r *midjourneyAccountRepo) ListSchedulableByGroupIDAndPlatform(context.Cont
 }
 func (r *midjourneyAccountRepo) UpdateLastUsed(context.Context, int64) error { return nil }
 func midjourneyTestAccount(id int64) Account {
-	return Account{ID: id, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"api_key": "secret", "base_url": "https://api.apimart.ai/v1/"}, Extra: map[string]any{"image_provider": MidjourneyProvider}}
+	return Account{ID: id, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"discord_token": "test-token", "discord_server_id": "123456789012345678", "discord_channel_id": "123456789012345679"}, Extra: map[string]any{"image_provider": MidjourneyProvider}}
 }
 
 func midjourneyTestKey() *APIKey {
@@ -188,105 +186,31 @@ func TestMidjourneyUpscaleOwnershipAndAccountAffinity(t *testing.T) {
 	gid := int64(9)
 	key := &APIKey{ID: 2, UserID: 1, GroupID: &gid}
 	encryptor := fileStorageEncryptor{}
-	ref, _ := json.Marshal(midjourneyReference{AccountID: 7, UpstreamID: "provider_task", Action: "imagine"})
+	ref, _ := json.Marshal(midjourneyReference{Provider: MidjourneyProvider, AccountID: 7, MessageID: "message", ChannelID: "123456789012345679", ServerID: "123456789012345678", Hash: "hash", ImageCount: 4, Options: []midjourneyOption{{Label: "U2", Custom: "MJ::JOB::upsample::2::hash"}}})
 	protected, err := encryptor.Encrypt(string(ref))
 	require.NoError(t, err)
 	parent := &DurableImageTask{ImageTaskRecord: ImageTaskRecord{ID: "imgtask_parent", UserID: 1, APIKeyID: 2, Status: ImageTaskStatusCompleted, ExpiresAt: time.Now().Add(time.Hour).Unix()}, Quote: ImageTaskQuote{Model: MidjourneyModel, Size: "imagine_relax", EncryptedProviderReference: protected}}
 	repo := &midjourneyAccountRepo{accounts: []Account{midjourneyTestAccount(3), midjourneyTestAccount(7)}}
 	svc := &DurableImageService{ledger: &midjourneyOwnedLedger{task: parent}, encryptor: encryptor, openAI: &OpenAIGatewayService{accountRepo: repo}}
 	request := &MidjourneyRequest{TaskID: parent.ID, Index: 2, Speed: "fast"}
-	snap, err := svc.prepareMidjourney(context.Background(), key, request, "upscale")
+	snap, err := svc.prepareMidjourney(context.Background(), key, request, "select")
 	require.NoError(t, err)
 	require.Equal(t, int64(7), snap.AccountID)
-	require.Equal(t, "provider_task", snap.ParentUpstreamID)
+	require.Equal(t, "message", snap.Parent.MessageID)
 	key.ID = 8
-	_, err = svc.prepareMidjourney(context.Background(), key, request, "upscale")
+	_, err = svc.prepareMidjourney(context.Background(), key, request, "select")
 	require.ErrorIs(t, err, ErrImageTaskNotFound)
 	key.ID = 2
 	parent.Status = ImageTaskStatusProcessing
-	_, err = svc.prepareMidjourney(context.Background(), key, request, "upscale")
+	_, err = svc.prepareMidjourney(context.Background(), key, request, "select")
 	require.Error(t, err)
 	parent.Status = ImageTaskStatusCompleted
 	repo.accounts = repo.accounts[:1]
-	_, err = svc.prepareMidjourney(context.Background(), key, request, "upscale")
+	_, err = svc.prepareMidjourney(context.Background(), key, request, "select")
 	require.Error(t, err)
 	parent.ExpiresAt = time.Now().Add(-time.Minute).Unix()
-	_, err = svc.prepareMidjourney(context.Background(), key, request, "upscale")
+	_, err = svc.prepareMidjourney(context.Background(), key, request, "select")
 	require.ErrorIs(t, err, ErrImageTaskExpired)
-}
-
-func TestMidjourneyUpstreamProtocol(t *testing.T) {
-	for _, action := range []string{"imagine", "edits", "upscale"} {
-		t.Run(action, func(t *testing.T) {
-			calls := 0
-			a := midjourneyTestAccount(7)
-			upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, id int64, _ int) (*http.Response, error) {
-				calls++
-				require.Equal(t, int64(7), id)
-				require.Equal(t, "Bearer secret", req.Header.Get("Authorization"))
-				body := `{"status":"SUCCESS","grid_image_url":"https://cdn.example/grid.png","image_urls":["https://cdn.example/one.png"]}`
-				if calls == 1 {
-					require.Equal(t, "POST", req.Method)
-					var payload map[string]any
-					require.NoError(t, json.NewDecoder(req.Body).Decode(&payload))
-					require.NotContains(t, payload, "model")
-					switch action {
-					case "imagine":
-						require.Equal(t, "/v1/midjourney/generations", req.URL.Path)
-						require.Equal(t, "8.2", payload["version"])
-						require.Equal(t, "fast", payload["speed"])
-					case "edits":
-						require.Equal(t, "/v1/midjourney/generations/edits", req.URL.Path)
-						require.Equal(t, "8.2", payload["version"])
-						require.Equal(t, "fast", payload["speed"])
-						require.Equal(t, []any{"https://image.example/cat.png"}, payload["image_urls"])
-						require.Equal(t, "https://image.example/style.png", payload["sref"])
-						require.Equal(t, float64(200), payload["sw"])
-					default:
-						require.Equal(t, "/v1/midjourney/generations/upscale", req.URL.Path)
-						require.Equal(t, "provider_parent", payload["task_id"])
-						require.Equal(t, "fast", payload["speed"])
-						require.Equal(t, float64(3), payload["index"])
-					}
-					body = `{"code":200,"data":[{"task_id":"provider_new"}]}`
-				} else {
-					require.Equal(t, "GET", req.Method)
-					require.Equal(t, "/v1/midjourney/provider_new", req.URL.Path)
-				}
-				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, nil
-			}}
-			busy := midjourneyTestAccount(3)
-			busy.Concurrency, a.Concurrency = 1, 1
-			slots := &midjourneySlots{}
-			s := &DurableImageService{openAI: &OpenAIGatewayService{accountRepo: &midjourneyAccountRepo{accounts: []Account{busy, a}}, httpUpstream: upstream, concurrencyService: NewConcurrencyService(slots)}}
-			snap := &MidjourneySnapshot{GroupID: 9, Action: action, Request: MidjourneyRequest{Model: MidjourneyModel, Version: "8.2", Prompt: "cat", Speed: "fast"}}
-			if action == "edits" {
-				weight := 200
-				snap.Request.ImageURLs = []string{"https://image.example/cat.png"}
-				snap.Request.StyleReference = "https://image.example/style.png"
-				snap.Request.StyleWeight = &weight
-			}
-			if action == "upscale" {
-				snap.AccountID = a.ID
-				snap.ParentUpstreamID = "provider_parent"
-				snap.Request = MidjourneyRequest{TaskID: "imgtask_parent", Index: 3, Speed: "fast"}
-			}
-			capture := &AsyncImageExecution{Quote: &ImageTaskQuote{PerImage: &CostBreakdown{TotalCost: 0.2}, Usage: UsageLog{Model: MidjourneyModel}}}
-			status, result, err := s.executeMidjourney(context.Background(), snap, midjourneyTestKey(), capture)
-			require.NoError(t, err)
-			require.Equal(t, 200, status)
-			require.Equal(t, 2, calls)
-			require.Equal(t, int64(7), capture.Usage.AccountID)
-			require.Contains(t, string(result), `"action":"`+action+`"`)
-			require.Contains(t, string(result), `"_midjourney"`)
-			require.Equal(t, []int64{7}, slots.released)
-			if action != "upscale" {
-				require.Equal(t, []int64{3, 7}, slots.attempted)
-			} else {
-				require.Equal(t, []int64{7}, slots.attempted)
-			}
-		})
-	}
 }
 
 type midjourneySlots struct {
@@ -338,18 +262,6 @@ func TestMidjourneyStandardGroupRequiresOperationPrice(t *testing.T) {
 	require.ErrorIs(t, err, ErrModelPricingUnavailable)
 }
 
-func TestMidjourneyUnknownPostOutcomeNeverResubmits(t *testing.T) {
-	calls := 0
-	a := midjourneyTestAccount(7)
-	upstream := &codexModelsHTTPUpstreamStub{do: func(*http.Request, string, int64, int) (*http.Response, error) {
-		calls++
-		return nil, errors.New("connection reset after write")
-	}}
-	s := &DurableImageService{openAI: &OpenAIGatewayService{accountRepo: &midjourneyAccountRepo{accounts: []Account{a}}, httpUpstream: upstream}}
-	_, _, err := s.executeMidjourney(context.Background(), &MidjourneySnapshot{GroupID: 9, AccountID: 7, Request: MidjourneyRequest{Prompt: "cat", Version: "8.2", Speed: "fast"}}, midjourneyTestKey(), &AsyncImageExecution{})
-	require.Error(t, err)
-	require.Equal(t, 1, calls)
-}
 func TestMidjourneyAccountNormalization(t *testing.T) {
 	a := midjourneyTestAccount(7)
 	require.NoError(t, normalizeMidjourneyAccount(&a))
@@ -357,95 +269,8 @@ func TestMidjourneyAccountNormalization(t *testing.T) {
 	require.Equal(t, map[string]string{MidjourneyModel: MidjourneyModel}, a.GetModelMapping())
 	require.False(t, a.SupportsOpenAIImageCapability(OpenAIImagesCapabilityBasic))
 	require.False(t, a.SupportsOpenAIEndpointCapability(OpenAIEndpointCapabilityResponses))
-	a.Credentials["base_url"] = "https://example.com/wrong/path"
+	a.Credentials["discord_server_id"] = "not-a-snowflake"
 	require.Error(t, normalizeMidjourneyAccount(&a))
 	a.Type = AccountTypeOAuth
 	require.Error(t, normalizeMidjourneyAccount(&a))
-}
-
-func TestMidjourneyEditParentSelectionCount(t *testing.T) {
-	key := midjourneyTestKey()
-	encryptor := fileStorageEncryptor{}
-	parent := &DurableImageTask{ImageTaskRecord: ImageTaskRecord{ID: "imgtask_edit", UserID: key.UserID, APIKeyID: key.ID, Status: ImageTaskStatusCompleted, ExpiresAt: time.Now().Add(time.Hour).Unix()}, Quote: ImageTaskQuote{Model: MidjourneyModel, Size: "generation"}}
-	svc := &DurableImageService{ledger: &midjourneyOwnedLedger{task: parent}, encryptor: encryptor, openAI: &OpenAIGatewayService{accountRepo: &midjourneyAccountRepo{accounts: []Account{midjourneyTestAccount(7)}}}}
-	for _, action := range []string{"edits", "imagine", "upscale"} {
-		ref, _ := json.Marshal(midjourneyReference{AccountID: 7, UpstreamID: "provider_task", Action: action, ImageCount: 2})
-		protected, err := encryptor.Encrypt(string(ref))
-		require.NoError(t, err)
-		parent.Quote.EncryptedProviderReference = protected
-		for _, index := range []int{1, 2, 3, 4} {
-			snap, err := svc.prepareMidjourney(context.Background(), key, &MidjourneyRequest{TaskID: parent.ID, Index: index, Speed: "fast"}, "upscale")
-			if index > 2 || action == "upscale" {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, int64(7), snap.AccountID)
-			}
-		}
-	}
-}
-
-func TestMidjourneyEditResultCounts(t *testing.T) {
-	for _, count := range []int{0, 1, 2, 3, 4, 5} {
-		for _, grid := range []string{"", "https://image.example/grid.png"} {
-			calls := 0
-			upstream := &codexModelsHTTPUpstreamStub{do: func(req *http.Request, _ string, _ int64, _ int) (*http.Response, error) {
-				calls++
-				body := []byte(`{"code":200,"data":[{"task_id":"provider_edit"}]}`)
-				if calls > 1 {
-					images := make([]string, count)
-					for i := range images {
-						images[i] = "https://image.example/result.png"
-					}
-					body, _ = json.Marshal(map[string]any{"status": "SUCCESS", "image_urls": images, "grid_image_url": grid})
-				}
-				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body)))}, nil
-			}}
-			svc := &DurableImageService{openAI: &OpenAIGatewayService{accountRepo: &midjourneyAccountRepo{accounts: []Account{midjourneyTestAccount(7)}}, httpUpstream: upstream}}
-			capture := &AsyncImageExecution{Quote: &ImageTaskQuote{PerImage: &CostBreakdown{TotalCost: 0.7}}}
-			status, result, err := svc.executeMidjourney(context.Background(), &MidjourneySnapshot{GroupID: 9, Action: "edits", Request: MidjourneyRequest{Prompt: "change background", ImageURLs: []string{"https://image.example/source.png"}}}, midjourneyTestKey(), capture)
-			if count > 4 || (count == 0 && grid == "") {
-				require.Error(t, err)
-				continue
-			}
-			require.NoError(t, err)
-			require.Equal(t, 200, status)
-			var output struct {
-				Data []map[string]any    `json:"data"`
-				Ref  midjourneyReference `json:"_midjourney"`
-			}
-			require.NoError(t, json.Unmarshal(result, &output))
-			if count == 0 {
-				require.Len(t, output.Data, 1)
-				require.Equal(t, "grid", output.Data[0]["kind"])
-				require.Equal(t, 4, output.Ref.ImageCount)
-			} else {
-				require.Len(t, output.Data, count)
-				require.Equal(t, "image", output.Data[0]["kind"])
-				require.Equal(t, count, output.Ref.ImageCount)
-			}
-			require.Equal(t, 1, capture.Usage.ImageCount)
-			require.Equal(t, 0.7, capture.Usage.TotalCost)
-		}
-	}
-}
-
-func TestMidjourneyQualityDefaultAndValues(t *testing.T) {
-	for _, action := range []string{"imagine", "edits"} {
-		for _, quality := range []string{"", "0.25", "0.5", "1", "2"} {
-			body, _ := json.Marshal(map[string]any{"prompt": "cat", "image_urls": []string{"https://image.example/cat.png"}, "quality": quality})
-			r, err := ParseMidjourneyRequest(body, action)
-			require.NoError(t, err)
-			expected := quality
-			if expected == "" {
-				expected = "2"
-			}
-			require.Equal(t, expected, r.Quality)
-			encoded, err := json.Marshal(r)
-			require.NoError(t, err)
-			require.Contains(t, string(encoded), `"quality":"`+expected+`"`)
-		}
-	}
-	_, err := ParseMidjourneyRequest([]byte(`{"task_id":"imgtask_x","index":1,"quality":"2"}`), "upscale")
-	require.Error(t, err)
 }
