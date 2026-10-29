@@ -57,6 +57,12 @@ func (r *userRepository) CountUsersByEmailDomain(ctx context.Context, domain str
 	return countUsersByEmailDomainWithClient(ctx, clientFromContext(ctx, r.client), domain)
 }
 
+// CountUsersByRegistrationIPKey 统计某注册网络（IPv4 地址 / IPv6 /64 网段）的账号数（含软删除）；
+// since 非 nil 时只统计该时刻及之后创建的账号。
+func (r *userRepository) CountUsersByRegistrationIPKey(ctx context.Context, key string, since *time.Time) (int, error) {
+	return registrationIPCounter{client: clientFromContext(ctx, r.client)}.CountUsersByRegistrationIPKey(ctx, key, since)
+}
+
 // CreateWithEmailAliasGuardAndDomainLimit 串行化非白名单域名的注册请求，
 // 并在用户写入的同一事务内复查域名额度。
 func (r *userRepository) CreateWithEmailAliasGuardAndDomainLimit(ctx context.Context, userIn *service.User, domain string) error {
@@ -105,6 +111,12 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 	if domainLimit != "" {
 		lockKeys = append(lockKeys, registrationEmailDomainLockKey(domainLimit))
 	}
+	// 自助注册携带了按 IP 的注册额度时，按注册网络串行化建号，并在锁内复核额度，
+	// 避免同一网络的并发注册各自通过服务层预检后越过额度。
+	ipQuota, enforceIPQuota := registrationIPQuotaForCreate(ctx, userIn)
+	if enforceIPQuota {
+		lockKeys = append(lockKeys, registrationIPLockKey(userIn.RegistrationIPKey))
+	}
 	releaseEmailLock, err := lockRepositoryScopedKeys(
 		txCtx,
 		txClient,
@@ -123,6 +135,20 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 		}
 		if count > 0 {
 			return service.ErrEmailDomainRegistrationLimit
+		}
+	}
+	if enforceIPQuota {
+		total, today, err := service.CountRegistrationIPUsers(
+			txCtx,
+			registrationIPCounter{client: txClient},
+			userIn.RegistrationIPKey,
+			ipQuota.DayStart,
+		)
+		if err != nil {
+			return err
+		}
+		if err := ipQuota.Check(total, today); err != nil {
+			return err
 		}
 	}
 
@@ -154,6 +180,8 @@ func (r *userRepository) create(ctx context.Context, userIn *service.User, guard
 		SetNillableLastActiveAt(userIn.LastActiveAt).
 		SetRpmLimit(userIn.RPMLimit).
 		SetRestrictPublicGroups(userIn.RestrictPublicGroups).
+		SetRegistrationIP(truncateRegistrationIP(userIn.RegistrationIP)).
+		SetRegistrationIPKey(truncateRegistrationIP(userIn.RegistrationIPKey)).
 		Save(txCtx)
 	if err != nil {
 		return translatePersistenceError(err, nil, service.ErrEmailExists)
@@ -544,6 +572,7 @@ func (r *userRepository) ListWithFilters(ctx context.Context, params pagination.
 				dbuser.EmailContainsFold(filters.Search),
 				dbuser.UsernameContainsFold(filters.Search),
 				dbuser.NotesContainsFold(filters.Search),
+				dbuser.RegistrationIPContainsFold(filters.Search),
 				dbuser.HasAPIKeysWith(apikey.KeyContainsFold(filters.Search)),
 			),
 		)
@@ -1374,6 +1403,54 @@ func userEmailDomainPredicate(domain string) predicate.User {
 				WriteString(")")
 		}))
 	})
+}
+
+func registrationIPLockKey(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+	return "users:registration-ip:" + key
+}
+
+// registrationIPQuotaForCreate 判断本次建号是否需要在锁内复核按 IP 的注册额度：
+// 只有服务层为自助注册挂载了额度、且新用户带有注册网络键时才执行。
+func registrationIPQuotaForCreate(ctx context.Context, userIn *service.User) (service.RegistrationIPQuota, bool) {
+	if userIn == nil || strings.TrimSpace(userIn.RegistrationIPKey) == "" {
+		return service.RegistrationIPQuota{}, false
+	}
+	quota, ok := service.RegistrationIPQuotaFromContext(ctx)
+	if !ok || !quota.Active() {
+		return service.RegistrationIPQuota{}, false
+	}
+	return quota, true
+}
+
+// registrationIPCounter 在给定 client（可为事务 client）上统计注册网络的账号数。
+type registrationIPCounter struct {
+	client *dbent.Client
+}
+
+func (c registrationIPCounter) CountUsersByRegistrationIPKey(ctx context.Context, key string, since *time.Time) (int, error) {
+	key = strings.TrimSpace(key)
+	if c.client == nil || key == "" {
+		return 0, nil
+	}
+	q := c.client.User.Query().Where(dbuser.RegistrationIPKeyEQ(key))
+	if since != nil {
+		q = q.Where(dbuser.CreatedAtGTE(*since))
+	}
+	return q.Count(mixins.SkipSoftDelete(ctx))
+}
+
+// truncateRegistrationIP 防御性截断到列宽：解析后的 IP / 网络键不会超过 64 字节，
+// 这里只为避免异常输入让建号整体失败。
+func truncateRegistrationIP(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) > 64 {
+		return value[:64]
+	}
+	return value
 }
 
 // emailAliasUniquenessLockKey 按收件箱身份（而非邮箱字面量）加锁，使同一收件箱的不同

@@ -65,6 +65,10 @@ const (
 	FieldTotalRecharged = "total_recharged"
 	// FieldRpmLimit holds the string denoting the rpm_limit field in the database.
 	FieldRpmLimit = "rpm_limit"
+	// FieldRegistrationIP holds the string denoting the registration_ip field in the database.
+	FieldRegistrationIP = "registration_ip"
+	// FieldRegistrationIPKey holds the string denoting the registration_ip_key field in the database.
+	FieldRegistrationIPKey = "registration_ip_key"
 	// EdgeAPIKeys holds the string denoting the api_keys edge name in mutations.
 	EdgeAPIKeys = "api_keys"
 	// EdgeRedeemCodes holds the string denoting the redeem_codes edge name in mutations.
@@ -230,6 +234,8 @@ var Columns = []string{
 	FieldBalanceNotifyExtraEmails,
 	FieldTotalRecharged,
 	FieldRpmLimit,
+	FieldRegistrationIP,
+	FieldRegistrationIPKey,
 }
 
 var (
@@ -304,6 +310,14 @@ var (
 	DefaultTotalRecharged float64
 	// DefaultRpmLimit holds the default value on creation for the "rpm_limit" field.
 	DefaultRpmLimit int
+	// DefaultRegistrationIP holds the default value on creation for the "registration_ip" field.
+	DefaultRegistrationIP string
+	// RegistrationIPValidator is a validator for the "registration_ip" field. It is called by the builders before save.
+	RegistrationIPValidator func(string) error
+	// DefaultRegistrationIPKey holds the default value on creation for the "registration_ip_key" field.
+	DefaultRegistrationIPKey string
+	// RegistrationIPKeyValidator is a validator for the "registration_ip_key" field. It is called by the builders before save.
+	RegistrationIPKeyValidator func(string) error
 )
 
 // OrderOption defines the ordering options for the User queries.
@@ -437,6 +451,16 @@ func ByTotalRecharged(opts ...sql.OrderTermOption) OrderOption {
 // ByRpmLimit orders the results by the rpm_limit field.
 func ByRpmLimit(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldRpmLimit, opts...).ToFunc()
+}
+
+// ByRegistrationIP orders the results by the registration_ip field.
+func ByRegistrationIP(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRegistrationIP, opts...).ToFunc()
+}
+
+// ByRegistrationIPKey orders the results by the registration_ip_key field.
+func ByRegistrationIPKey(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRegistrationIPKey, opts...).ToFunc()
 }
 
 // ByAPIKeysCount orders the results by api_keys count.

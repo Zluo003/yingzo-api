@@ -70,6 +70,7 @@
         <div v-if="captchaEnabled">
           <TurnstileWidget
             ref="turnstileRef"
+            :image-enabled="imageCaptchaEnabled"
             :turnstile-enabled="turnstileEnabled"
             :turnstile-site-key="turnstileSiteKey"
             :tencent-enabled="tencentCaptchaEnabled"
@@ -154,6 +155,7 @@ const isSubmitted = ref<boolean>(false)
 const errorMessage = ref<string>('')
 
 // Public settings
+const imageCaptchaEnabled = ref<boolean>(false)
 const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
 const tencentCaptchaEnabled = ref<boolean>(false)
@@ -182,7 +184,7 @@ const actionCaptchaEnabled = computed(
 )
 const captchaEnabled = computed(
   () =>
-    (turnstileEnabled.value && Boolean(turnstileSiteKey.value)) || actionCaptchaEnabled.value
+    imageCaptchaEnabled.value || (turnstileEnabled.value && Boolean(turnstileSiteKey.value)) || actionCaptchaEnabled.value
 )
 
 const formData = reactive({
@@ -207,6 +209,7 @@ watch(validationToastMessage, (value, previousValue) => {
 onMounted(async () => {
   try {
     const settings = await getPublicSettings()
+    imageCaptchaEnabled.value = settings.image_captcha_enabled === true
     turnstileEnabled.value = settings.turnstile_enabled
     turnstileSiteKey.value = settings.turnstile_site_key || ''
     tencentCaptchaEnabled.value = settings.tencent_captcha_enabled === true
@@ -277,7 +280,7 @@ function validateForm(): boolean {
   }
 
   // Turnstile validation
-  if (turnstileEnabled.value && !turnstileToken.value) {
+  if ((turnstileEnabled.value || imageCaptchaEnabled.value) && !turnstileToken.value) {
     errors.turnstile = t('auth.completeVerification')
     isValid = false
   }
@@ -303,6 +306,8 @@ async function handleSubmit(): Promise<void> {
   try {
     await forgotPassword({
       email: formData.email,
+      image_captcha_id: imageCaptchaEnabled.value ? turnstileToken.value : undefined,
+      image_captcha_code: imageCaptchaEnabled.value ? tencentCaptchaRandstr.value : undefined,
       turnstile_token:
         turnstileEnabled.value || aliyunCaptchaEnabled.value ? turnstileToken.value : undefined,
       tencent_captcha_ticket: tencentCaptchaEnabled.value ? turnstileToken.value : undefined,

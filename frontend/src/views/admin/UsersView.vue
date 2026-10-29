@@ -16,7 +16,7 @@
               <input
                 v-model="searchQuery"
                 type="text"
-                :placeholder="t('admin.users.searchUsers')"
+                :placeholder="t('admin.users.searchUsersOrIp')"
                 class="input pl-10"
                 @input="handleSearch"
               />
@@ -239,6 +239,16 @@
               >
                 <Icon name="cog" size="sm" class="md:mr-1.5" />
                 <span class="hidden md:inline">{{ t('admin.users.attributes.configButton') }}</span>
+              </button>
+              <!-- IP Ban Management Button -->
+              <button
+                @click="showIpBanModal = true"
+                class="btn btn-secondary px-2 md:px-3"
+                :title="t('admin.users.ipBan.manageButton')"
+                data-test="ip-ban-manage"
+              >
+                <Icon name="ban" size="sm" class="md:mr-1.5" />
+                <span class="hidden md:inline">{{ t('admin.users.ipBan.manageButton') }}</span>
               </button>
             </div>
 
@@ -583,6 +593,24 @@
             </div>
           </template>
 
+          <template #cell-registration_ip="{ row }">
+            <div v-if="row.registration_ip" class="flex items-center gap-1.5">
+              <button
+                type="button"
+                class="inline-block max-w-[16rem] truncate align-middle font-mono text-sm text-gray-700 underline decoration-dashed decoration-gray-300 underline-offset-4 transition-colors hover:text-primary-600 dark:text-gray-300 dark:decoration-dark-500 dark:hover:text-primary-400"
+                :title="`${row.registration_ip} · ${t('admin.users.registrationIp.inspectTip')}`"
+                :data-test="`registration-ip-${row.id}`"
+                @click="openRegistrationIp(row.registration_ip)"
+              >
+                {{ row.registration_ip }}
+              </button>
+              <span v-if="row.registration_ip_banned" class="badge badge-danger">
+                {{ t('admin.users.registrationIp.bannedBadge') }}
+              </span>
+            </div>
+            <span v-else class="text-sm text-gray-400 dark:text-dark-500">—</span>
+          </template>
+
           <template #cell-created_at="{ value }">
             <span class="text-sm text-gray-500 dark:text-dark-400">{{ formatDateTime(value) }}</span>
           </template>
@@ -768,6 +796,14 @@
     <UserBalanceHistoryModal :show="showBalanceHistoryModal" :user="balanceHistoryUser" @close="closeBalanceHistoryModal" @deposit="handleDepositFromHistory" @withdraw="handleWithdrawFromHistory" />
     <GroupReplaceModal :show="showGroupReplaceModal" :user="groupReplaceUser" :old-group="groupReplaceOldGroup" :all-groups="allGroups" @close="closeGroupReplaceModal" @success="loadUsers" />
     <UserAttributesConfigModal :show="showAttributesModal" @close="handleAttributesModalClose" />
+    <UserRegistrationIpModal
+      :show="showRegistrationIpModal"
+      :ip="registrationIpTarget"
+      @close="closeRegistrationIpModal"
+      @success="loadUsers"
+      @search="handleSearchByRegistrationIp"
+    />
+    <IpBanManagementModal :show="showIpBanModal" @close="showIpBanModal = false" @success="loadUsers" />
   </AppLayout>
 </template>
 
@@ -810,6 +846,8 @@ import UserAllowedGroupsModal from '@/components/admin/user/UserAllowedGroupsMod
 import UserBalanceModal from '@/components/admin/user/UserBalanceModal.vue'
 import UserBalanceHistoryModal from '@/components/admin/user/UserBalanceHistoryModal.vue'
 import GroupReplaceModal from '@/components/admin/user/GroupReplaceModal.vue'
+import UserRegistrationIpModal from '@/components/admin/user/UserRegistrationIpModal.vue'
+import IpBanManagementModal from '@/components/admin/user/IpBanManagementModal.vue'
 
 const appStore = useAppStore()
 
@@ -879,6 +917,7 @@ const allColumns = computed<Column[]>(() => [
   { key: 'usage_antigravity', label: t('admin.users.columns.usageAntigravity'), sortable: false },
   { key: 'concurrency', label: t('admin.users.columns.concurrency'), sortable: true },
   { key: 'status', label: t('admin.users.columns.status'), sortable: true },
+  { key: 'registration_ip', label: t('admin.users.columns.registrationIp'), sortable: false },
   { key: 'last_active_at', label: t('admin.users.columns.lastActive'), sortable: true },
   { key: 'last_used_at', label: t('admin.users.columns.lastUsed'), sortable: true },
   { key: 'created_at', label: t('admin.users.columns.created'), sortable: true },
@@ -1536,6 +1575,11 @@ const balanceOperation = ref<'add' | 'subtract'>('add')
 const showBalanceHistoryModal = ref(false)
 const balanceHistoryUser = ref<AdminUser | null>(null)
 
+// Registration IP inspect modal / IP ban management modal state
+const showRegistrationIpModal = ref(false)
+const registrationIpTarget = ref<string | null>(null)
+const showIpBanModal = ref(false)
+
 // 计算剩余天数
 const getDaysRemaining = (expiresAt: string): number => {
   const now = new Date()
@@ -1824,6 +1868,25 @@ const handleWithdrawFromHistory = () => {
   if (balanceHistoryUser.value) {
     handleWithdraw(balanceHistoryUser.value)
   }
+}
+
+const openRegistrationIp = (ip: string) => {
+  registrationIpTarget.value = ip
+  showRegistrationIpModal.value = true
+}
+
+const closeRegistrationIpModal = () => {
+  showRegistrationIpModal.value = false
+  registrationIpTarget.value = null
+}
+
+// 「查看该 IP 注册的用户」：后端搜索同时匹配注册 IP，直接复用列表搜索框
+const handleSearchByRegistrationIp = (ip: string) => {
+  closeRegistrationIpModal()
+  clearTimeout(searchTimeout)
+  searchQuery.value = ip
+  pagination.page = 1
+  loadUsers()
 }
 
 // 滚动时关闭菜单

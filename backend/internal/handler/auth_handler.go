@@ -2,9 +2,11 @@ package handler
 
 import (
 	"context"
+	"encoding/base64"
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler/dto"
@@ -46,6 +48,12 @@ func NewAuthHandler(cfg *config.Config, authService *service.AuthService, userSe
 	}
 }
 
+// ImageCaptchaFields 自研图形验证码凭证，嵌入到需要人机验证的请求体中。
+type ImageCaptchaFields struct {
+	ImageCaptchaID   string `json:"image_captcha_id"`
+	ImageCaptchaCode string `json:"image_captcha_code"`
+}
+
 // RegisterRequest represents the registration request payload
 type RegisterRequest struct {
 	Email                 string `json:"email" binding:"required,email"`
@@ -54,9 +62,10 @@ type RegisterRequest struct {
 	TurnstileToken        string `json:"turnstile_token"`
 	TencentCaptchaTicket  string `json:"tencent_captcha_ticket"`
 	TencentCaptchaRandstr string `json:"tencent_captcha_randstr"`
-	PromoCode             string `json:"promo_code"`      // 注册优惠码
-	InvitationCode        string `json:"invitation_code"` // 邀请码
-	AffCode               string `json:"aff_code"`        // 邀请返利码
+	ImageCaptchaFields
+	PromoCode      string `json:"promo_code"`      // 注册优惠码
+	InvitationCode string `json:"invitation_code"` // 邀请码
+	AffCode        string `json:"aff_code"`        // 邀请返利码
 }
 
 // SendVerifyCodeRequest 发送验证码请求
@@ -65,6 +74,7 @@ type SendVerifyCodeRequest struct {
 	TurnstileToken        string `json:"turnstile_token"`
 	TencentCaptchaTicket  string `json:"tencent_captcha_ticket"`
 	TencentCaptchaRandstr string `json:"tencent_captcha_randstr"`
+	ImageCaptchaFields
 }
 
 // SendVerifyCodeResponse 发送验证码响应
@@ -80,14 +90,28 @@ type LoginRequest struct {
 	TurnstileToken        string `json:"turnstile_token"`
 	TencentCaptchaTicket  string `json:"tencent_captcha_ticket"`
 	TencentCaptchaRandstr string `json:"tencent_captcha_randstr"`
+	ImageCaptchaFields
 }
 
-func captchaProof(turnstileToken, tencentTicket, tencentRandstr string) service.CaptchaProof {
-	return service.CaptchaProof{
+// captchaProof 汇总请求中各服务商的验证码凭证；image 仅在支持图形验证码的入口传入。
+func captchaProof(turnstileToken, tencentTicket, tencentRandstr string, image ...ImageCaptchaFields) service.CaptchaProof {
+	proof := service.CaptchaProof{
 		TurnstileToken: turnstileToken,
 		TencentTicket:  tencentTicket,
 		TencentRandstr: tencentRandstr,
 	}
+	if len(image) > 0 {
+		proof.ImageCaptchaID = image[0].ImageCaptchaID
+		proof.ImageCaptchaCode = image[0].ImageCaptchaCode
+	}
+	return proof
+}
+
+// ImageCaptchaResponse 图形验证码响应
+type ImageCaptchaResponse struct {
+	CaptchaID string `json:"captcha_id"`
+	Image     string `json:"image"`      // data:image/png;base64,...
+	ExpiresIn int    `json:"expires_in"` // 有效期（秒）
 }
 
 // AuthResponse 认证响应格式（匹配前端期望）
@@ -184,7 +208,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	}
 
 	// 验证当前启用的验证码（邮箱验证码注册场景避免重复校验一次性票据）
-	proof := captchaProof(req.TurnstileToken, req.TencentCaptchaTicket, req.TencentCaptchaRandstr)
+	proof := captchaProof(req.TurnstileToken, req.TencentCaptchaTicket, req.TencentCaptchaRandstr, req.ImageCaptchaFields)
 	if err := h.authService.VerifyCaptchaForRegister(c.Request.Context(), proof, ip.GetClientIP(c), req.VerifyCode); err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -216,7 +240,7 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
 		return
 	}
 
-	proof := captchaProof(req.TurnstileToken, req.TencentCaptchaTicket, req.TencentCaptchaRandstr)
+	proof := captchaProof(req.TurnstileToken, req.TencentCaptchaTicket, req.TencentCaptchaRandstr, req.ImageCaptchaFields)
 	if err := h.authService.VerifyCaptcha(c.Request.Context(), proof, ip.GetClientIP(c)); err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -234,6 +258,22 @@ func (h *AuthHandler) SendVerifyCode(c *gin.Context) {
 	})
 }
 
+// GetImageCaptcha 下发一张自研图形验证码（仅在后台启用图形验证码时可用）
+// GET /api/v1/auth/captcha
+func (h *AuthHandler) GetImageCaptcha(c *gin.Context) {
+	challenge, err := h.authService.IssueImageCaptcha(c.Request.Context())
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	c.Header("Cache-Control", "no-store")
+	response.Success(c, ImageCaptchaResponse{
+		CaptchaID: challenge.ID,
+		Image:     "data:image/png;base64," + base64.StdEncoding.EncodeToString(challenge.PNG),
+		ExpiresIn: int(challenge.ExpiresIn / time.Second),
+	})
+}
+
 // Login handles user login
 // POST /api/v1/auth/login
 func (h *AuthHandler) Login(c *gin.Context) {
@@ -243,7 +283,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	proof := captchaProof(req.TurnstileToken, req.TencentCaptchaTicket, req.TencentCaptchaRandstr)
+	proof := captchaProof(req.TurnstileToken, req.TencentCaptchaTicket, req.TencentCaptchaRandstr, req.ImageCaptchaFields)
 	if err := h.authService.VerifyCaptcha(c.Request.Context(), proof, ip.GetClientIP(c)); err != nil {
 		response.ErrorFrom(c, err)
 		return
@@ -592,6 +632,7 @@ type ForgotPasswordRequest struct {
 	TurnstileToken        string `json:"turnstile_token"`
 	TencentCaptchaTicket  string `json:"tencent_captcha_ticket"`
 	TencentCaptchaRandstr string `json:"tencent_captcha_randstr"`
+	ImageCaptchaFields
 }
 
 // ForgotPasswordResponse 忘记密码响应
@@ -608,7 +649,7 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	proof := captchaProof(req.TurnstileToken, req.TencentCaptchaTicket, req.TencentCaptchaRandstr)
+	proof := captchaProof(req.TurnstileToken, req.TencentCaptchaTicket, req.TencentCaptchaRandstr, req.ImageCaptchaFields)
 	if err := h.authService.VerifyCaptcha(c.Request.Context(), proof, ip.GetClientIP(c)); err != nil {
 		response.ErrorFrom(c, err)
 		return

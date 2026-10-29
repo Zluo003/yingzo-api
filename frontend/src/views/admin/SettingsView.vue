@@ -1551,6 +1551,55 @@
                 />
               </div>
 
+              <!-- 单 IP 注册上限 -->
+              <div class="border-t border-gray-100 pt-4 dark:border-dark-700">
+                <div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                  <div>
+                    <label
+                      class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      {{ t("admin.settings.registration.ipDailyLimit") }}
+                    </label>
+                    <input
+                      v-model.number="form.registration_ip_daily_limit"
+                      data-testid="registration-ip-daily-limit"
+                      type="number"
+                      min="0"
+                      :max="REGISTRATION_IP_LIMIT_MAX"
+                      step="1"
+                      class="input w-40"
+                      placeholder="0"
+                    />
+                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.registration.ipDailyLimitHint") }}
+                    </p>
+                  </div>
+                  <div>
+                    <label
+                      class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                    >
+                      {{ t("admin.settings.registration.ipTotalLimit") }}
+                    </label>
+                    <input
+                      v-model.number="form.registration_ip_total_limit"
+                      data-testid="registration-ip-total-limit"
+                      type="number"
+                      min="0"
+                      :max="REGISTRATION_IP_LIMIT_MAX"
+                      step="1"
+                      class="input w-40"
+                      placeholder="0"
+                    />
+                    <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                      {{ t("admin.settings.registration.ipTotalLimitHint") }}
+                    </p>
+                  </div>
+                </div>
+                <p class="mt-3 text-xs text-gray-500 dark:text-gray-400">
+                  {{ t("admin.settings.registration.ipLimitScopeHint") }}
+                </p>
+              </div>
+
               <!-- Promo Code -->
               <div
                 class="flex items-center justify-between border-t border-gray-100 pt-4 dark:border-dark-700"
@@ -2074,7 +2123,7 @@
                     {{ t("admin.settings.captcha.provider") }}
                   </label>
                   <div
-                    class="grid grid-cols-3 gap-2 rounded-lg bg-gray-100 p-1 dark:bg-dark-700"
+                    class="grid grid-cols-2 gap-2 rounded-lg bg-gray-100 p-1 sm:grid-cols-4 dark:bg-dark-700"
                   >
                     <button
                       type="button"
@@ -2114,6 +2163,19 @@
                       @click="selectCaptchaProvider('aliyun')"
                     >
                       {{ t("admin.settings.captcha.providerAliyun") }}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="captcha-provider-image"
+                      class="inline-flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition"
+                      :class="
+                        captchaProviderSelection === 'image'
+                          ? 'bg-white text-primary-700 shadow-sm dark:bg-dark-800 dark:text-primary-300'
+                          : 'text-gray-600 hover:text-gray-900 dark:text-dark-300 dark:hover:text-white'
+                      "
+                      @click="selectCaptchaProvider('image')"
+                    >
+                      {{ t("admin.settings.captcha.providerImage") }}
                     </button>
                   </div>
                 </div>
@@ -2316,6 +2378,19 @@
                       {{ t("admin.settings.tencentCaptcha.openWebDocs") }}
                     </a>
                   </div>
+                </div>
+
+                <!-- 自研图形验证码：无需任何配置项，仅展示说明 -->
+                <div
+                  v-else-if="captchaProviderSelection === 'image'"
+                  data-testid="image-captcha-info"
+                  class="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600 dark:border-dark-600 dark:bg-dark-800 dark:text-gray-300"
+                >
+                  <p class="font-medium text-gray-900 dark:text-white">
+                    {{ t("admin.settings.imageCaptcha.noConfigNeeded") }}
+                  </p>
+                  <p>{{ t("admin.settings.imageCaptcha.howItWorks") }}</p>
+                  <p>{{ t("admin.settings.imageCaptcha.scope") }}</p>
                 </div>
 
                 <!-- Aliyun Captcha 2.0 fields -->
@@ -9592,6 +9667,8 @@ const form = reactive<SettingsForm>({
   email_verify_enabled: false,
   registration_email_suffix_whitelist: [],
   registration_email_domain_quota_enabled: false,
+  registration_ip_daily_limit: 0,
+  registration_ip_total_limit: 0,
   promo_code_enabled: true,
   invitation_code_enabled: false,
   password_reset_enabled: false,
@@ -9704,6 +9781,7 @@ const form = reactive<SettingsForm>({
   aliyun_captcha_scene_id: "",
   aliyun_captcha_prefix: "",
   aliyun_captcha_region: "cn",
+  image_captcha_enabled: false,
   api_key_acl_trust_forwarded_ip: true,
   forwarded_client_ip_headers: [],
   // LinuxDo Connect OAuth 登录
@@ -9877,9 +9955,9 @@ const form = reactive<SettingsForm>({
   allow_user_view_error_requests: false,
 });
 
-// 人机验证 UI 状态：单卡片「总开关 + 服务商单选」，落库仍是三个独立
+// 人机验证 UI 状态：单卡片「总开关 + 服务商单选」，落库仍是四个独立
 // enabled 键（与上游一致），由下面的映射保证同一时间至多一家启用。
-type CaptchaProviderSelection = "turnstile" | "tencent" | "aliyun";
+type CaptchaProviderSelection = "turnstile" | "tencent" | "aliyun" | "image";
 
 const captchaProviderSelection = ref<CaptchaProviderSelection>("turnstile");
 
@@ -9887,6 +9965,7 @@ function applyCaptchaSelection(provider: CaptchaProviderSelection | null): void 
   form.turnstile_enabled = provider === "turnstile";
   form.tencent_captcha_enabled = provider === "tencent";
   form.aliyun_captcha_enabled = provider === "aliyun";
+  form.image_captcha_enabled = provider === "image";
 }
 
 const affiliateRebateFreezeDays = computed({
@@ -9901,7 +9980,8 @@ const captchaMasterEnabled = computed({
   get: () =>
     form.turnstile_enabled ||
     form.tencent_captcha_enabled ||
-    form.aliyun_captcha_enabled,
+    form.aliyun_captcha_enabled ||
+    form.image_captcha_enabled,
   set: (enabled: boolean) =>
     applyCaptchaSelection(enabled ? captchaProviderSelection.value : null),
 });
@@ -9932,6 +10012,8 @@ function syncCaptchaProviderSelection(): void {
     captchaProviderSelection.value = "tencent";
   } else if (form.aliyun_captcha_enabled) {
     captchaProviderSelection.value = "aliyun";
+  } else if (form.image_captcha_enabled) {
+    captchaProviderSelection.value = "image";
   } else if (form.turnstile_enabled) {
     captchaProviderSelection.value = "turnstile";
   }
@@ -10298,6 +10380,17 @@ const defaultSubscriptionGroupOptions = computed<
     rate: group.rate_multiplier,
   })),
 );
+
+// 单 IP 注册上限与后端 RegistrationIPLimitMax 一致；0 表示不限制。
+const REGISTRATION_IP_LIMIT_MAX = 1_000_000;
+
+// 后端为 int 字段：清空数字框时 v-model.number 得到空串、小数或负数都会让整次保存 400，
+// 这里把空/非法值按 0（不限制）提交，并收敛到 [0, REGISTRATION_IP_LIMIT_MAX] 的整数。
+function normalizeRegistrationIPLimit(value: unknown): number {
+  const parsed = Math.floor(Number(value));
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return Math.min(parsed, REGISTRATION_IP_LIMIT_MAX);
+}
 
 const registrationEmailSuffixWhitelistSeparatorKeys = new Set([
   " ",
@@ -11255,6 +11348,12 @@ async function saveSettings() {
         ),
       registration_email_domain_quota_enabled:
         form.registration_email_domain_quota_enabled,
+      registration_ip_daily_limit: normalizeRegistrationIPLimit(
+        form.registration_ip_daily_limit,
+      ),
+      registration_ip_total_limit: normalizeRegistrationIPLimit(
+        form.registration_ip_total_limit,
+      ),
       promo_code_enabled: form.promo_code_enabled,
       invitation_code_enabled: form.invitation_code_enabled,
       password_reset_enabled: form.password_reset_enabled,
@@ -11328,6 +11427,7 @@ async function saveSettings() {
       aliyun_captcha_scene_id: form.aliyun_captcha_scene_id,
       aliyun_captcha_prefix: form.aliyun_captcha_prefix,
       aliyun_captcha_region: form.aliyun_captcha_region,
+      image_captcha_enabled: form.image_captcha_enabled,
       api_key_acl_trust_forwarded_ip: form.api_key_acl_trust_forwarded_ip,
       forwarded_client_ip_headers: form.forwarded_client_ip_headers,
       linuxdo_connect_enabled: form.linuxdo_connect_enabled,

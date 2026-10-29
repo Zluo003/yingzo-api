@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { apiErrorCode, clearAuthKeys, request } from './lib.js'
+import { captchaPayload, hasCaptchaCode } from './auth-captcha.js'
+import ImageCaptcha from './ImageCaptcha.jsx'
 import './auth.css'
 
 const COPY = {
@@ -19,6 +21,11 @@ const ERROR_MESSAGES = {
   INVALID_RESET_TOKEN: '重设链接无效或已过期，请重新申请。',
   AFFILIATE_CODE_INVALID: '邀请返利码无效，请确认后重试或留空。',
   EMAIL_EXISTS: '该邮箱已注册，请登录或找回密码。',
+  IMAGE_CAPTCHA_REQUIRED: '请输入图形验证码。',
+  IMAGE_CAPTCHA_INVALID: '图形验证码错误或已过期，请重新输入。',
+  REGISTRATION_IP_DAILY_LIMIT: '当前网络最近 24 小时注册的账号数量已达上限，请稍后再试。',
+  REGISTRATION_IP_TOTAL_LIMIT: '当前网络可注册的账号数量已达上限。',
+  IP_BANNED: '你所在的网络已被禁止访问。',
 }
 
 function errorMessage(error) {
@@ -47,9 +54,19 @@ export default function Auth({ mode, setPage, setUser }) {
   const [success, setSuccess] = useState(false)
   const [resendAt, setResendAt] = useState(0)
   const [now, setNow] = useState(Date.now)
+  const [captcha, setCaptcha] = useState({ id: '', code: '' })
+  const [captchaNonce, setCaptchaNonce] = useState(0)
+  const [captchaForced, setCaptchaForced] = useState(false)
+  const [captchaUnavailable, setCaptchaUnavailable] = useState(false)
   const emailRef = useRef(null)
   const countdown = Math.max(0, Math.ceil((resendAt - now) / 1000))
   const emailVerification = register && settings?.email_verify_enabled === true
+  // 图形验证码：后台启用后登录、注册、找回密码都要填写；设置还没加载到或已过期时，
+  // 以服务端返回的 IMAGE_CAPTCHA_REQUIRED 为准再显示出来。
+  const captchaEnabled = !reset && !captchaUnavailable && (settings?.image_captcha_enabled === true || captchaForced)
+  // 开启邮箱验证的注册在「获取验证码」时校验图形验证码，提交注册时服务端不再重复校验。
+  const captchaOnSendCode = captchaEnabled && emailVerification
+  const captchaOnSubmit = captchaEnabled && !emailVerification
   const passwordResetEnabled = settings?.email_verify_enabled === true && settings?.password_reset_enabled === true
   const invalidResetLink = reset && (!resetLink.email || !resetLink.token)
   const settingsBlocked = (register || forgot) && !settings
@@ -102,21 +119,44 @@ export default function Auth({ mode, setPage, setUser }) {
     setError('')
   }
 
+  // 每张图形验证码只能校验一次，提交过就换一张新的。
+  function renewCaptcha() {
+    setCaptcha({ id: '', code: '' })
+    setCaptchaNonce(nonce => nonce + 1)
+  }
+
+  function showError(err) {
+    if (['IMAGE_CAPTCHA_REQUIRED', 'IMAGE_CAPTCHA_INVALID'].includes(apiErrorCode(err))) {
+      setCaptchaForced(true)
+      setCaptchaUnavailable(false)
+    }
+    setError(errorMessage(err))
+  }
+
+  function captchaField(required = true) {
+    return <ImageCaptcha value={captcha} onChange={setCaptcha} onUnavailable={() => setCaptchaUnavailable(true)} nonce={captchaNonce} disabled={busy || sending} required={required} />
+  }
+
   async function sendCode() {
     if (sending || busy || countdown || settingsBlocked || featureDisabled) return
     if (!emailRef.current.reportValidity()) return
+    if (captchaOnSendCode && !hasCaptchaCode(captcha)) {
+      setError('请先输入图形验证码，再获取邮箱验证码。')
+      return
+    }
     setSending(true)
     setError('')
     setNotice('')
     try {
       const data = await request('/auth/send-verify-code', {
-        method: 'POST', body: JSON.stringify({ email: form.email.trim() }),
+        method: 'POST', body: JSON.stringify({ email: form.email.trim(), ...captchaPayload(captchaOnSendCode, captcha) }),
       })
       startCountdown(data.countdown ?? 60)
       setNotice('验证码已发送，请查收邮箱；如未收到，请检查垃圾邮件。')
     } catch (err) {
-      setError(errorMessage(err))
+      showError(err)
     } finally {
+      if (captchaOnSendCode) renewCaptcha()
       setSending(false)
     }
   }
@@ -130,13 +170,21 @@ export default function Auth({ mode, setPage, setUser }) {
       setError('两次输入的密码不一致。')
       return
     }
+    if (forgot && countdown) return
+    if (captchaOnSubmit && !hasCaptchaCode(captcha)) {
+      setError('请输入图形验证码。')
+      return
+    }
     setBusy(true)
     try {
       if (forgot) {
-        if (countdown) return
-        await request('/auth/forgot-password', {
-          method: 'POST', body: JSON.stringify({ email: form.email.trim() }),
-        })
+        try {
+          await request('/auth/forgot-password', {
+            method: 'POST', body: JSON.stringify({ email: form.email.trim(), ...captchaPayload(captchaOnSubmit, captcha) }),
+          })
+        } finally {
+          if (captchaOnSubmit) renewCaptcha()
+        }
         startCountdown()
         setSuccess(true)
         return
@@ -152,7 +200,7 @@ export default function Auth({ mode, setPage, setUser }) {
         setSuccess(true)
         return
       }
-      const payload = { email: form.email.trim(), password: form.password }
+      const payload = { email: form.email.trim(), password: form.password, ...captchaPayload(captchaOnSubmit, captcha) }
       if (register) {
         payload.username = form.name.trim()
         if (emailVerification) payload.verify_code = form.verifyCode.trim()
@@ -175,7 +223,9 @@ export default function Auth({ mode, setPage, setUser }) {
         setPage('keys')
       }
     } catch (err) {
-      setError(errorMessage(err))
+      // 登录 / 注册失败时验证码已被消费，换一张新的再让用户重试（找回密码已在上面换过）。
+      if (captchaOnSubmit && !forgot) renewCaptcha()
+      showError(err)
       if (reset) setResetExpired(apiErrorCode(err) === 'INVALID_RESET_TOKEN')
     } finally {
       setBusy(false)
@@ -196,6 +246,7 @@ export default function Auth({ mode, setPage, setUser }) {
         </div>
         {error && <div className="error" role="alert">{error}</div>}
         {forgot && <>
+          {captchaOnSubmit && countdown === 0 && captchaField(false)}
           <button className="outline full" onClick={submit} disabled={busy || countdown > 0}>{busy ? '发送中…' : countdown > 0 ? `${countdown} 秒后可重新发送` : '重新发送链接'}</button>
           <button className="text-link" onClick={() => { setSuccess(false); setError('') }}>换一个邮箱</button>
         </>}
@@ -214,6 +265,7 @@ export default function Auth({ mode, setPage, setUser }) {
           {reset ? <p className="auth-reset-email">重设账户：<strong>{resetLink.email}</strong></p> : <label>邮箱<input ref={emailRef} type="email" name="email" autoComplete="email" value={form.email} onChange={event => changeEmail(event.target.value)} disabled={busy || sending} required /></label>}
           {!forgot && <label>{reset ? '新密码' : '密码'}<input type="password" name="password" autoComplete={login ? 'current-password' : 'new-password'} minLength={login ? undefined : 6} value={form.password} onChange={event => setForm({ ...form, password: event.target.value })} disabled={busy || sending} aria-describedby={login ? undefined : 'auth-password-hint'} required />{!login && <small id="auth-password-hint" className="auth-field-hint">密码至少 6 位。</small>}</label>}
           {reset && <label>确认新密码<input type="password" name="confirm-password" autoComplete="new-password" minLength={6} value={form.confirmPassword} onChange={event => setForm({ ...form, confirmPassword: event.target.value })} disabled={busy} required /></label>}
+          {captchaOnSendCode && countdown === 0 && captchaField(false)}
           {emailVerification && <div className="auth-verification">
             <label htmlFor="auth-verify-code">邮箱验证码</label>
             <div className="auth-code-row">
@@ -224,6 +276,7 @@ export default function Auth({ mode, setPage, setUser }) {
           </div>}
           {register && settings?.affiliate_enabled && <label>邀请返利码（选填）<input name="aff_code" value={form.affiliateCode} onChange={event => setForm({ ...form, affiliateCode: event.target.value })} maxLength={32} disabled={busy || sending} placeholder="填写邀请人的专属邀请码"/><small>使用有效邀请码注册，首次充值可享余额赠送。</small></label>}
           {register && settings?.invitation_code_enabled && <label>邀请码<input name="invitation_code" value={form.invitationCode} onChange={event => setForm({ ...form, invitationCode: event.target.value })} disabled={busy || sending} required /></label>}
+          {captchaOnSubmit && captchaField()}
           {login && passwordResetEnabled && authLink('forgot-password', '忘记密码？', 'auth-forgot-link')}
           {notice && <div className="auth-notice" role="status">{notice}</div>}
           {error && <div className="error" role="alert">{error}</div>}

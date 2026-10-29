@@ -2287,6 +2287,18 @@ func init() {
 	userDescRpmLimit := userFields[21].Descriptor()
 	// user.DefaultRpmLimit holds the default value on creation for the rpm_limit field.
 	user.DefaultRpmLimit = userDescRpmLimit.Default.(int)
+	// userDescRegistrationIP is the schema descriptor for registration_ip field.
+	userDescRegistrationIP := userFields[22].Descriptor()
+	// user.DefaultRegistrationIP holds the default value on creation for the registration_ip field.
+	user.DefaultRegistrationIP = userDescRegistrationIP.Default.(string)
+	// user.RegistrationIPValidator is a validator for the "registration_ip" field. It is called by the builders before save.
+	user.RegistrationIPValidator = userDescRegistrationIP.Validators[0].(func(string) error)
+	// userDescRegistrationIPKey is the schema descriptor for registration_ip_key field.
+	userDescRegistrationIPKey := userFields[23].Descriptor()
+	// user.DefaultRegistrationIPKey holds the default value on creation for the registration_ip_key field.
+	user.DefaultRegistrationIPKey = userDescRegistrationIPKey.Default.(string)
+	// user.RegistrationIPKeyValidator is a validator for the "registration_ip_key" field. It is called by the builders before save.
+	user.RegistrationIPKeyValidator = userDescRegistrationIPKey.Validators[0].(func(string) error)
 	userallowedgroupFields := schema.UserAllowedGroup{}.Fields()
 	_ = userallowedgroupFields
 	// userallowedgroupDescCreatedAt is the schema descriptor for created_at field.

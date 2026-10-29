@@ -59,6 +59,9 @@ func (s *SettingService) InitializeDefaultSettings(ctx context.Context) error {
 		SettingKeyEmailVerifyEnabled:                        "false",
 		SettingKeyRegistrationEmailSuffixWhitelist:          "[]",
 		SettingKeyRegistrationEmailDomainQuotaEnabled:       "false",
+		SettingKeyRegistrationIPDailyLimit:                  "0",
+		SettingKeyRegistrationIPTotalLimit:                  "0",
+		SettingKeyImageCaptchaEnabled:                       "false",
 		SettingKeyPromoCodeEnabled:                          "true", // 默认启用优惠码功能
 		SettingKeyLoginAgreementEnabled:                     "false",
 		SettingKeyLoginAgreementMode:                        defaultLoginAgreementMode,
@@ -353,6 +356,7 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 		AliyunCaptchaSceneID:                   settings[SettingKeyAliyunCaptchaSceneID],
 		AliyunCaptchaPrefix:                    settings[SettingKeyAliyunCaptchaPrefix],
 		AliyunCaptchaRegion:                    normalizeAliyunCaptchaRegion(settings[SettingKeyAliyunCaptchaRegion]),
+		ImageCaptchaEnabled:                    settings[SettingKeyImageCaptchaEnabled] == "true",
 		APIKeyACLTrustForwardedIP:              apiKeyACLTrustForwardedIP,
 		ForwardedClientIPHeaders:               forwardedClientIPHeaders,
 		SiteName:                               s.getStringOrDefault(settings, SettingKeySiteName, "Sub2API"),
@@ -391,6 +395,8 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 	if rpm, err := strconv.Atoi(settings[SettingKeyDefaultUserRPMLimit]); err == nil && rpm >= 0 {
 		result.DefaultUserRPMLimit = rpm
 	}
+	result.RegistrationIPDailyLimit = parseRegistrationIPLimit(settings[SettingKeyRegistrationIPDailyLimit])
+	result.RegistrationIPTotalLimit = parseRegistrationIPLimit(settings[SettingKeyRegistrationIPTotalLimit])
 
 	// 解析浮点数类型
 	if balance, err := strconv.ParseFloat(settings[SettingKeyDefaultBalance], 64); err == nil {

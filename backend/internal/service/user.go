@@ -32,12 +32,16 @@ type User struct {
 	// value expected in JWT claims and refresh-token state.
 	TokenVersionResolved bool
 	SignupSource         string
-	LastLoginAt          *time.Time
-	LastActiveAt         *time.Time
-	LastUsedAt           *time.Time
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-	DeletedAt            *time.Time // 非 nil 表示用户已软删除
+	// RegistrationIP 自助注册时的客户端 IP；管理员后台创建的用户为空。
+	RegistrationIP string
+	// RegistrationIPKey 注册额度计数键：IPv4 为地址本身，IPv6 为 /64 网段。
+	RegistrationIPKey string
+	LastLoginAt       *time.Time
+	LastActiveAt      *time.Time
+	LastUsedAt        *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	DeletedAt         *time.Time // 非 nil 表示用户已软删除
 
 	// GroupRates 用户专属分组倍率配置
 	// map[groupID]rateMultiplier

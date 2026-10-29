@@ -67,10 +67,11 @@
         </div>
 
         <!-- Turnstile Widget for Resend -->
-        <div v-if="actionCaptchaEnabled || (turnstileEnabled && showResendTurnstile)">
+        <div v-if="imageCaptchaEnabled || actionCaptchaEnabled || (turnstileEnabled && showResendTurnstile)">
           <TurnstileWidget
             ref="turnstileRef"
             :site-key="turnstileSiteKey"
+            :image-enabled="imageCaptchaEnabled"
             :turnstile-enabled="turnstileEnabled"
             :turnstile-site-key="turnstileSiteKey"
             :tencent-enabled="tencentCaptchaEnabled"
@@ -90,6 +91,7 @@
           <TurnstileWidget
             ref="createAccountTurnstileRef"
             :site-key="turnstileSiteKey"
+            :image-enabled="imageCaptchaEnabled"
             :turnstile-enabled="turnstileEnabled"
             :turnstile-site-key="turnstileSiteKey"
             :tencent-enabled="tencentCaptchaEnabled"
@@ -261,6 +263,7 @@ const pendingAdoptionDecision = ref<{
 const hasRegisterData = ref<boolean>(false)
 
 // Public settings
+const imageCaptchaEnabled = ref<boolean>(false)
 const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
 const tencentCaptchaEnabled = ref<boolean>(false)
@@ -297,7 +300,7 @@ const actionCaptchaEnabled = computed(
 )
 const captchaEnabled = computed(
   () =>
-    (turnstileEnabled.value && Boolean(turnstileSiteKey.value)) || actionCaptchaEnabled.value
+    imageCaptchaEnabled.value || (turnstileEnabled.value && Boolean(turnstileSiteKey.value)) || actionCaptchaEnabled.value
 )
 
 const errors = ref({
@@ -334,8 +337,8 @@ onMounted(async () => {
       email.value = registerData.email || ''
       password.value = registerData.password || ''
       initialTurnstileToken.value =
-        registerData.tencent_captcha_ticket || registerData.turnstile_token || ''
-      initialTencentCaptchaRandstr.value = registerData.tencent_captcha_randstr || ''
+        registerData.image_captcha_id || registerData.tencent_captcha_ticket || registerData.turnstile_token || ''
+      initialTencentCaptchaRandstr.value = registerData.image_captcha_code || registerData.tencent_captcha_randstr || ''
       promoCode.value = registerData.promo_code || ''
       invitationCode.value = registerData.invitation_code || ''
       affCode.value = registerData.aff_code || loadAffiliateReferralCode()
@@ -363,6 +366,7 @@ onMounted(async () => {
   // Load public settings
   try {
     const settings = await getPublicSettings()
+    imageCaptchaEnabled.value = settings.image_captcha_enabled === true
     turnstileEnabled.value = settings.turnstile_enabled
     turnstileSiteKey.value = settings.turnstile_site_key || ''
     tencentCaptchaEnabled.value = settings.tencent_captcha_enabled === true
@@ -541,6 +545,8 @@ async function sendCode(): Promise<void> {
 
     const requestPayload = {
       email: email.value,
+      image_captcha_id: imageCaptchaEnabled.value ? resendTurnstileToken.value || initialTurnstileToken.value : undefined,
+      image_captcha_code: imageCaptchaEnabled.value ? resendTencentCaptchaRandstr.value || initialTencentCaptchaRandstr.value : undefined,
       [pendingAuthTokenField.value]: pendingAuthToken.value || undefined,
       // 优先使用重发时新获取的 token（因为初始 token 可能已被使用）
       turnstile_token:
@@ -555,7 +561,7 @@ async function sendCode(): Promise<void> {
         : undefined
     } as Parameters<typeof sendVerifyCode>[0]
     captchaProofUsed = Boolean(
-      requestPayload.turnstile_token || requestPayload.tencent_captcha_ticket
+      requestPayload.image_captcha_id || requestPayload.turnstile_token || requestPayload.tencent_captcha_ticket
     )
     const response = isPendingOAuthFlow()
       ? await sendPendingOAuthVerifyCode(requestPayload)
@@ -607,6 +613,8 @@ function clearStoredCaptchaProof(): void {
 
   try {
     const registerData = JSON.parse(registerDataStr) as Record<string, unknown>
+    delete registerData.image_captcha_id
+    delete registerData.image_captcha_code
     delete registerData.turnstile_token
     delete registerData.tencent_captcha_ticket
     delete registerData.tencent_captcha_randstr

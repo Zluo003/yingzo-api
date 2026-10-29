@@ -368,6 +368,8 @@ const baseSettingsResponse = {
   registration_enabled: true,
   email_verify_enabled: false,
   registration_email_suffix_whitelist: [],
+  registration_ip_daily_limit: 0,
+  registration_ip_total_limit: 0,
   promo_code_enabled: true,
   invitation_code_enabled: false,
   password_reset_enabled: false,
@@ -410,6 +412,7 @@ const baseSettingsResponse = {
   tencent_captcha_app_secret_key_configured: false,
   tencent_captcha_cloud_secret_id_configured: false,
   tencent_captcha_cloud_secret_key_configured: false,
+  image_captcha_enabled: false,
   api_key_acl_trust_forwarded_ip: true,
   forwarded_client_ip_headers: [],
   linuxdo_connect_enabled: false,
@@ -843,6 +846,7 @@ describe("admin SettingsView payment visible method controls", () => {
         turnstile_enabled: false,
         tencent_captcha_enabled: true,
         aliyun_captcha_enabled: false,
+        image_captcha_enabled: false,
         tencent_captcha_app_id: "123456789",
         tencent_captcha_app_secret_key: "app-secret-value",
         tencent_captcha_cloud_secret_id: "cloud-secret-id-value",
@@ -912,6 +916,7 @@ describe("admin SettingsView payment visible method controls", () => {
         turnstile_enabled: false,
         tencent_captcha_enabled: false,
         aliyun_captcha_enabled: true,
+        image_captcha_enabled: false,
         aliyun_captcha_prefix: "prefix-1",
         aliyun_captcha_scene_id: "scene-1",
         aliyun_captcha_access_key_id: "ak-id",
@@ -948,8 +953,140 @@ describe("admin SettingsView payment visible method controls", () => {
         turnstile_enabled: false,
         tencent_captcha_enabled: false,
         aliyun_captcha_enabled: false,
+        image_captcha_enabled: false,
       }),
     );
+  });
+
+  it("人机验证切换到自研图形验证码：无需配置项并保存互斥开关", async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+
+    await wrapper.get('[data-testid="captcha-enabled-toggle"]').setValue(true);
+    await wrapper.get('[data-testid="captcha-provider-image"]').trigger("click");
+    await flushPromises();
+
+    const card = wrapper
+      .findAll(".card")
+      .find((node) => node.text().includes("admin.settings.captcha.title"));
+    expect(card).toBeDefined();
+    expect(card!.get('[data-testid="captcha-provider-image"]').text()).toBe(
+      "admin.settings.captcha.providerImage",
+    );
+    const info = card!.get('[data-testid="image-captcha-info"]');
+    expect(info.text()).toContain("admin.settings.imageCaptcha.noConfigNeeded");
+    expect(info.text()).toContain("admin.settings.imageCaptcha.howItWorks");
+    expect(info.text()).toContain("admin.settings.imageCaptcha.scope");
+    // 图形验证码没有任何额外配置项
+    expect(
+      card!.findAll("input").filter((input) => input.attributes("type") !== "checkbox"),
+    ).toHaveLength(0);
+
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        turnstile_enabled: false,
+        tencent_captcha_enabled: false,
+        aliyun_captcha_enabled: false,
+        image_captcha_enabled: true,
+      }),
+    );
+  });
+
+  it("加载已启用的图形验证码时选中该服务商", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      image_captcha_enabled: true,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+
+    const masterToggle = wrapper.get('[data-testid="captcha-enabled-toggle"]');
+    expect((masterToggle.element as HTMLInputElement).checked).toBe(true);
+    expect(wrapper.find('[data-testid="image-captcha-info"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("admin.settings.turnstile.siteKey");
+
+    // 切到其他服务商后图形验证码随之关闭
+    await wrapper.get('[data-testid="captcha-provider-turnstile"]').trigger("click");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        turnstile_enabled: true,
+        image_captcha_enabled: false,
+      }),
+    );
+  });
+
+  it("加载并保存单 IP 注册上限，空值按不限制提交并收敛到合法范围", async () => {
+    getSettings.mockResolvedValueOnce({
+      ...baseSettingsResponse,
+      registration_ip_daily_limit: 3,
+      registration_ip_total_limit: 20,
+    });
+    const wrapper = mountView();
+    await flushPromises();
+    await openSecurityTab(wrapper);
+
+    const daily = wrapper.get('[data-testid="registration-ip-daily-limit"]');
+    const total = wrapper.get('[data-testid="registration-ip-total-limit"]');
+    expect((daily.element as HTMLInputElement).value).toBe("3");
+    expect((total.element as HTMLInputElement).value).toBe("20");
+    expect(wrapper.text()).toContain("admin.settings.registration.ipLimitScopeHint");
+
+    await daily.setValue("5");
+    await total.setValue("");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        registration_ip_daily_limit: 5,
+        registration_ip_total_limit: 0,
+      }),
+    );
+
+    await daily.setValue("2.7");
+    await total.setValue("2000000");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        registration_ip_daily_limit: 2,
+        registration_ip_total_limit: 1000000,
+      }),
+    );
+
+    await daily.setValue("-1");
+    await wrapper.find("form").trigger("submit.prevent");
+    await flushPromises();
+
+    expect(updateSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ registration_ip_daily_limit: 0 }),
+    );
+  });
+
+  it("documents the per-IP registration limits in both locales", () => {
+    for (const registration of [
+      zhSettings.settings.registration,
+      enSettings.settings.registration,
+    ]) {
+      expect(registration.ipDailyLimit).toBeTruthy();
+      expect(registration.ipTotalLimit).toBeTruthy();
+    }
+    expect(zhSettings.settings.registration.ipDailyLimitHint).toContain("0 = 不限制");
+    expect(zhSettings.settings.registration.ipTotalLimitHint).toContain("0 = 不限制");
+    expect(zhSettings.settings.registration.ipLimitScopeHint).toContain("/64");
+    expect(zhSettings.settings.registration.ipLimitScopeHint).toContain("已删除账号仍计入");
+    expect(zhSettings.settings.registration.ipDailyLimitHint).toContain("最近 24 小时");
+    expect(enSettings.settings.registration.ipLimitScopeHint).toContain("/64");
+    expect(zhSettings.settings.captcha.providerImage).toBe("图形验证码（自研）");
   });
 
   it("disables passkey sign-in when the RP configuration is unavailable", async () => {

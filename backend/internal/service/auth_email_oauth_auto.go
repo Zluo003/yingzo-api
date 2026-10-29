@@ -190,13 +190,20 @@ func (s *AuthService) createEmailOAuthUser(ctx context.Context, email, username,
 		Status:       StatusActive,
 		SignupSource: providerType,
 	}
-	if err := s.userRepo.Create(ctx, user); err != nil {
+	createCtx, err := s.stampRegistrationIP(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.userRepo.Create(createCtx, user); err != nil {
 		if errors.Is(err, ErrEmailExists) {
 			existing, loadErr := s.userRepo.GetByEmail(ctx, email)
 			if loadErr != nil {
 				return nil, ErrServiceUnavailable
 			}
 			return existing, nil
+		}
+		if isRegistrationIPLimitError(err) {
+			return nil, err
 		}
 		return nil, ErrServiceUnavailable
 	}

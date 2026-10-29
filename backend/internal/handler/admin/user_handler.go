@@ -23,6 +23,8 @@ import (
 type UserWithConcurrency struct {
 	dto.AdminUser
 	CurrentConcurrency int `json:"current_concurrency"`
+	// RegistrationIPBanned 注册 IP 当前是否命中封禁规则（单个 IP 或网段）。
+	RegistrationIPBanned bool `json:"registration_ip_banned"`
 }
 
 // UserHandler handles admin user management
@@ -34,6 +36,12 @@ type UserHandler struct {
 	totpService           *service.TotpService                // 角色提升为管理员的 step-up 门控
 	userService           *service.UserService
 	settingService        *service.SettingService // step-up 功能开关
+	ipBanService          *service.IPBanService   // 用户列表标注注册 IP 封禁状态
+}
+
+// SetIPBanService 注入 IP 封禁服务（可选：未注入时列表不标注封禁状态）。
+func (h *UserHandler) SetIPBanService(ipBanService *service.IPBanService) {
+	h.ipBanService = ipBanService
 }
 
 // NewUserHandler creates a new admin user handler
@@ -118,7 +126,7 @@ type BindUserAuthIdentityChannelRequest struct {
 // Query params:
 //   - status: filter by user status
 //   - role: filter by user role
-//   - search: search in email, username
+//   - search: search in email, username, notes, registration IP, API key
 //   - attr[{id}]: filter by custom attribute value, e.g. attr[1]=company
 //   - group_name: fuzzy filter by allowed group name
 //   - api_key_group_id: filter by the exact group bound to the user's API keys
@@ -178,6 +186,9 @@ func (h *UserHandler) List(c *gin.Context) {
 		}
 		if info := loadInfo[users[i].ID]; info != nil {
 			out[i].CurrentConcurrency = info.CurrentConcurrency
+		}
+		if h.ipBanService != nil && users[i].RegistrationIP != "" {
+			_, out[i].RegistrationIPBanned = h.ipBanService.Match(c.Request.Context(), users[i].RegistrationIP)
 		}
 	}
 

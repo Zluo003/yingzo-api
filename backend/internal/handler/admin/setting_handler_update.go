@@ -27,6 +27,8 @@ type UpdateSettingsRequest struct {
 	EmailVerifyEnabled                  bool                         `json:"email_verify_enabled"`
 	RegistrationEmailSuffixWhitelist    []string                     `json:"registration_email_suffix_whitelist"`
 	RegistrationEmailDomainQuotaEnabled *bool                        `json:"registration_email_domain_quota_enabled"` // 非白名单域名限量注册开关（省略=保持现值）
+	RegistrationIPDailyLimit            int                          `json:"registration_ip_daily_limit"`             // 单 IP 最近 24 小时注册上限（0=不限制）
+	RegistrationIPTotalLimit            int                          `json:"registration_ip_total_limit"`             // 单 IP 累计注册上限（0=不限制）
 	PromoCodeEnabled                    bool                         `json:"promo_code_enabled"`
 	PasswordResetEnabled                bool                         `json:"password_reset_enabled"`
 	FrontendURL                         string                       `json:"frontend_url"`
@@ -70,6 +72,9 @@ type UpdateSettingsRequest struct {
 	AliyunCaptchaSceneID         string `json:"aliyun_captcha_scene_id"`
 	AliyunCaptchaPrefix          string `json:"aliyun_captcha_prefix"`
 	AliyunCaptchaRegion          string `json:"aliyun_captcha_region"`
+
+	// 自研图形验证码
+	ImageCaptchaEnabled bool `json:"image_captcha_enabled"`
 
 	// API Key IP 访问控制设置
 	APIKeyACLTrustForwardedIP *bool     `json:"api_key_acl_trust_forwarded_ip"`
@@ -652,14 +657,18 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 	if _, sent := sentFields["aliyun_captcha_enabled"]; !sent {
 		aliyunCaptchaEnabled = previousSettings.AliyunCaptchaEnabled
 	}
+	imageCaptchaEnabled := req.ImageCaptchaEnabled
+	if _, sent := sentFields["image_captcha_enabled"]; !sent {
+		imageCaptchaEnabled = previousSettings.ImageCaptchaEnabled
+	}
 	enabledCaptchaProviders := 0
-	for _, enabled := range []bool{turnstileEnabled, tencentCaptchaEnabled, aliyunCaptchaEnabled} {
+	for _, enabled := range []bool{turnstileEnabled, tencentCaptchaEnabled, aliyunCaptchaEnabled, imageCaptchaEnabled} {
 		if enabled {
 			enabledCaptchaProviders++
 		}
 	}
 	if enabledCaptchaProviders > 1 {
-		response.BadRequest(c, "Multiple captcha providers (Cloudflare Turnstile / Tencent Captcha / Aliyun Captcha) cannot be enabled at the same time")
+		response.BadRequest(c, "Multiple captcha providers (Cloudflare Turnstile / Tencent Captcha / Aliyun Captcha / Image Captcha) cannot be enabled at the same time")
 		return
 	}
 	// 阿里云地域 normalize：未发送保留已存值，非法值一律按中国内地落库
@@ -1507,6 +1516,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		EmailVerifyEnabled:                  req.EmailVerifyEnabled,
 		RegistrationEmailSuffixWhitelist:    req.RegistrationEmailSuffixWhitelist,
 		RegistrationEmailDomainQuotaEnabled: registrationEmailDomainQuotaEnabled,
+		RegistrationIPDailyLimit:            service.NormalizeRegistrationIPLimit(req.RegistrationIPDailyLimit),
+		RegistrationIPTotalLimit:            service.NormalizeRegistrationIPLimit(req.RegistrationIPTotalLimit),
 		PromoCodeEnabled:                    req.PromoCodeEnabled,
 		PasswordResetEnabled:                req.PasswordResetEnabled,
 		FrontendURL:                         req.FrontendURL,
@@ -1537,6 +1548,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		TencentCaptchaCloudSecretKey:        req.TencentCaptchaCloudSecretKey,
 		TencentCaptchaRegion:                req.TencentCaptchaRegion,
 		AliyunCaptchaEnabled:                req.AliyunCaptchaEnabled,
+		ImageCaptchaEnabled:                 req.ImageCaptchaEnabled,
 		AliyunCaptchaAccessKeyID:            req.AliyunCaptchaAccessKeyID,
 		AliyunCaptchaAccessKeySecret:        req.AliyunCaptchaAccessKeySecret,
 		AliyunCaptchaSceneID:                req.AliyunCaptchaSceneID,
@@ -2160,6 +2172,8 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		EmailVerifyEnabled:                                     updatedSettings.EmailVerifyEnabled,
 		RegistrationEmailSuffixWhitelist:                       updatedSettings.RegistrationEmailSuffixWhitelist,
 		RegistrationEmailDomainQuotaEnabled:                    updatedSettings.RegistrationEmailDomainQuotaEnabled,
+		RegistrationIPDailyLimit:                               updatedSettings.RegistrationIPDailyLimit,
+		RegistrationIPTotalLimit:                               updatedSettings.RegistrationIPTotalLimit,
 		PromoCodeEnabled:                                       updatedSettings.PromoCodeEnabled,
 		PasswordResetEnabled:                                   updatedSettings.PasswordResetEnabled,
 		FrontendURL:                                            updatedSettings.FrontendURL,
@@ -2199,6 +2213,7 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 		AliyunCaptchaSceneID:                                   updatedSettings.AliyunCaptchaSceneID,
 		AliyunCaptchaPrefix:                                    updatedSettings.AliyunCaptchaPrefix,
 		AliyunCaptchaRegion:                                    updatedSettings.AliyunCaptchaRegion,
+		ImageCaptchaEnabled:                                    updatedSettings.ImageCaptchaEnabled,
 		APIKeyACLTrustForwardedIP:                              updatedSettings.APIKeyACLTrustForwardedIP,
 		ForwardedClientIPHeaders:                               updatedSettings.ForwardedClientIPHeaders,
 		LinuxDoConnectEnabled:                                  updatedSettings.LinuxDoConnectEnabled,

@@ -209,27 +209,31 @@ const (
 	// 白名单非空时，是否放行非白名单域名按主域名限量注册（每域名 1 个账户）。
 	// 默认 false：非白名单域名直接拒绝（白名单严格模式）。
 	SettingKeyRegistrationEmailDomainQuotaEnabled = "registration_email_domain_quota_enabled"
-	SettingKeyPromoCodeEnabled                    = "promo_code_enabled"      // 是否启用优惠码功能
-	SettingKeyPasswordResetEnabled                = "password_reset_enabled"  // 是否启用忘记密码功能（需要先开启邮件验证）
-	SettingKeyFrontendURL                         = "frontend_url"            // 前端基础URL，用于生成邮件中的重置密码链接
-	SettingKeyInvitationCodeEnabled               = "invitation_code_enabled" // 是否启用邀请码注册
-	SettingKeyAffiliateFirstRechargeBonusPercent  = "affiliate_first_recharge_bonus_percent"
-	SettingKeyAffiliateWithdrawMinimum            = "affiliate_withdraw_minimum"
-	SettingKeyAffiliateTransferMinimum            = "affiliate_transfer_minimum"
-	SettingKeyAffiliateEnabled                    = "affiliate_enabled"                // 邀请返利功能总开关
-	SettingKeyAffiliateRebateRate                 = "affiliate_rebate_rate"            // 邀请返利比例（百分比，0-100）
-	SettingKeyAffiliateRebateFreezeHours          = "affiliate_rebate_freeze_hours"    // 返利冻结期（小时，0=不冻结）
-	SettingKeyAffiliateRebateDurationDays         = "affiliate_rebate_duration_days"   // 返利有效期（天，0=永久）
-	SettingKeyAffiliateRebatePerInviteeCap        = "affiliate_rebate_per_invitee_cap" // 单人返利上限（0=无上限）
-	SettingKeyAffiliateAdminRechargeEnabled       = "affiliate_admin_recharge_enabled" // 管理员充值是否产生返利
-	SettingKeyRiskControlEnabled                  = "risk_control_enabled"             // 是否启用风控中心入口与审计链路
-	SettingKeyContentModerationConfig             = "content_moderation_config"        // 内容审计配置（JSON）
-	SettingKeyCyberSessionBlockEnabled            = "cyber_session_block_enabled"      // cyber 命中后会话级自动屏蔽总开关(默认关)
-	SettingKeyCyberSessionBlockTTLSeconds         = "cyber_session_block_ttl_seconds"  // 会话屏蔽 TTL 秒数(默认 3600)
-	SettingKeyLoginAgreementEnabled               = "login_agreement_enabled"          // 登录前是否要求同意条款
-	SettingKeyLoginAgreementMode                  = "login_agreement_mode"             // 条款确认展示模式：modal / checkbox
-	SettingKeyLoginAgreementUpdatedAt             = "login_agreement_updated_at"       // 条款更新日期（展示用）
-	SettingKeyLoginAgreementDocuments             = "login_agreement_documents"        // 条款文档列表（JSON，Markdown 内容）
+	// 按来源 IP 限制自助注册（0 = 不限制）。IPv4 按地址、IPv6 按 /64 网段计数，
+	// 统计包含软删除账号，避免删除账号后重复领取注册名额。
+	SettingKeyRegistrationIPDailyLimit           = "registration_ip_daily_limit" // 单 IP 最近 24 小时可注册账号数
+	SettingKeyRegistrationIPTotalLimit           = "registration_ip_total_limit" // 单 IP 累计可注册账号数（含已删除账号）
+	SettingKeyPromoCodeEnabled                   = "promo_code_enabled"          // 是否启用优惠码功能
+	SettingKeyPasswordResetEnabled               = "password_reset_enabled"      // 是否启用忘记密码功能（需要先开启邮件验证）
+	SettingKeyFrontendURL                        = "frontend_url"                // 前端基础URL，用于生成邮件中的重置密码链接
+	SettingKeyInvitationCodeEnabled              = "invitation_code_enabled"     // 是否启用邀请码注册
+	SettingKeyAffiliateFirstRechargeBonusPercent = "affiliate_first_recharge_bonus_percent"
+	SettingKeyAffiliateWithdrawMinimum           = "affiliate_withdraw_minimum"
+	SettingKeyAffiliateTransferMinimum           = "affiliate_transfer_minimum"
+	SettingKeyAffiliateEnabled                   = "affiliate_enabled"                // 邀请返利功能总开关
+	SettingKeyAffiliateRebateRate                = "affiliate_rebate_rate"            // 邀请返利比例（百分比，0-100）
+	SettingKeyAffiliateRebateFreezeHours         = "affiliate_rebate_freeze_hours"    // 返利冻结期（小时，0=不冻结）
+	SettingKeyAffiliateRebateDurationDays        = "affiliate_rebate_duration_days"   // 返利有效期（天，0=永久）
+	SettingKeyAffiliateRebatePerInviteeCap       = "affiliate_rebate_per_invitee_cap" // 单人返利上限（0=无上限）
+	SettingKeyAffiliateAdminRechargeEnabled      = "affiliate_admin_recharge_enabled" // 管理员充值是否产生返利
+	SettingKeyRiskControlEnabled                 = "risk_control_enabled"             // 是否启用风控中心入口与审计链路
+	SettingKeyContentModerationConfig            = "content_moderation_config"        // 内容审计配置（JSON）
+	SettingKeyCyberSessionBlockEnabled           = "cyber_session_block_enabled"      // cyber 命中后会话级自动屏蔽总开关(默认关)
+	SettingKeyCyberSessionBlockTTLSeconds        = "cyber_session_block_ttl_seconds"  // 会话屏蔽 TTL 秒数(默认 3600)
+	SettingKeyLoginAgreementEnabled              = "login_agreement_enabled"          // 登录前是否要求同意条款
+	SettingKeyLoginAgreementMode                 = "login_agreement_mode"             // 条款确认展示模式：modal / checkbox
+	SettingKeyLoginAgreementUpdatedAt            = "login_agreement_updated_at"       // 条款更新日期（展示用）
+	SettingKeyLoginAgreementDocuments            = "login_agreement_documents"        // 条款文档列表（JSON，Markdown 内容）
 
 	// 邮件服务设置
 	SettingKeySMTPHost     = "smtp_host"      // SMTP服务器地址
@@ -260,6 +264,9 @@ const (
 	SettingKeyAliyunCaptchaSceneID         = "aliyun_captcha_scene_id"          // 验证场景 ID（所有认证流程共用）
 	SettingKeyAliyunCaptchaPrefix          = "aliyun_captcha_prefix"            // 身份标，前端 SDK 初始化用
 	SettingKeyAliyunCaptchaRegion          = "aliyun_captcha_region"            // 地域："cn"|"sgp"，决定前端脚本区域与服务端接入点
+
+	// 自研图形验证码（与 Turnstile、腾讯天御、阿里云验证码互斥，同一时间仅可启用一家）
+	SettingKeyImageCaptchaEnabled = "image_captcha_enabled"
 
 	// API Key IP 访问控制设置
 	SettingKeyAPIKeyACLTrustForwardedIP = "api_key_acl_trust_forwarded_ip" // API Key IP 白/黑名单是否信任转发 IP

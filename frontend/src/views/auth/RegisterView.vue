@@ -207,6 +207,7 @@
         <div v-if="captchaEnabled" data-testid="registration-turnstile">
           <TurnstileWidget
             ref="turnstileRef"
+            :image-enabled="imageCaptchaEnabled"
             :turnstile-enabled="turnstileEnabled"
             :turnstile-site-key="turnstileSiteKey"
             :tencent-enabled="tencentCaptchaEnabled"
@@ -391,6 +392,7 @@ const emailVerifyEnabled = ref<boolean>(false)
 const promoCodeEnabled = ref<boolean>(true)
 const invitationCodeEnabled = ref<boolean>(false)
 const affiliateEnabled = ref<boolean>(false)
+const imageCaptchaEnabled = ref<boolean>(false)
 const turnstileEnabled = ref<boolean>(false)
 const turnstileSiteKey = ref<string>('')
 const tencentCaptchaEnabled = ref<boolean>(false)
@@ -436,7 +438,7 @@ const actionCaptchaEnabled = computed(
 )
 const captchaEnabled = computed(
   () =>
-    (turnstileEnabled.value && Boolean(turnstileSiteKey.value)) || actionCaptchaEnabled.value
+    imageCaptchaEnabled.value || (turnstileEnabled.value && Boolean(turnstileSiteKey.value)) || actionCaptchaEnabled.value
 )
 
 // Promo code validation
@@ -526,6 +528,7 @@ onMounted(async () => {
     promoCodeEnabled.value = settings.promo_code_enabled
     invitationCodeEnabled.value = settings.invitation_code_enabled
     affiliateEnabled.value = settings.affiliate_enabled
+    imageCaptchaEnabled.value = settings.image_captcha_enabled === true
     turnstileEnabled.value = settings.turnstile_enabled
     turnstileSiteKey.value = settings.turnstile_site_key || ''
     tencentCaptchaEnabled.value = settings.tencent_captcha_enabled === true
@@ -931,7 +934,7 @@ function validateForm(): boolean {
   }
 
   // Turnstile validation
-  if (turnstileEnabled.value && !turnstileToken.value) {
+  if ((turnstileEnabled.value || imageCaptchaEnabled.value) && !turnstileToken.value) {
     errors.turnstile = t('auth.completeVerification')
     isValid = false
   }
@@ -1007,6 +1010,8 @@ async function handleRegister(): Promise<void> {
         'register_data',
         JSON.stringify({
           email: formData.email,
+          image_captcha_id: imageCaptchaEnabled.value ? turnstileToken.value : undefined,
+          image_captcha_code: imageCaptchaEnabled.value ? tencentCaptchaRandstr.value : undefined,
           password: formData.password,
           turnstile_token:
             turnstileEnabled.value || aliyunCaptchaEnabled.value ? turnstileToken.value : undefined,
@@ -1026,6 +1031,8 @@ async function handleRegister(): Promise<void> {
     // Otherwise, directly register
     await authStore.register({
       email: formData.email,
+      image_captcha_id: imageCaptchaEnabled.value ? turnstileToken.value : undefined,
+      image_captcha_code: imageCaptchaEnabled.value ? tencentCaptchaRandstr.value : undefined,
       password: formData.password,
       turnstile_token:
         turnstileEnabled.value || aliyunCaptchaEnabled.value ? turnstileToken.value : undefined,

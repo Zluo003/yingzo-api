@@ -31,6 +31,8 @@ type SystemSettings struct {
 	EmailVerifyEnabled                  bool                     `json:"email_verify_enabled"`
 	RegistrationEmailSuffixWhitelist    []string                 `json:"registration_email_suffix_whitelist"`
 	RegistrationEmailDomainQuotaEnabled bool                     `json:"registration_email_domain_quota_enabled"`
+	RegistrationIPDailyLimit            int                      `json:"registration_ip_daily_limit"`
+	RegistrationIPTotalLimit            int                      `json:"registration_ip_total_limit"`
 	PromoCodeEnabled                    bool                     `json:"promo_code_enabled"`
 	PasswordResetEnabled                bool                     `json:"password_reset_enabled"`
 	FrontendURL                         string                   `json:"frontend_url"`
@@ -72,6 +74,7 @@ type SystemSettings struct {
 	AliyunCaptchaSceneID                   string   `json:"aliyun_captcha_scene_id"`
 	AliyunCaptchaPrefix                    string   `json:"aliyun_captcha_prefix"`
 	AliyunCaptchaRegion                    string   `json:"aliyun_captcha_region"`
+	ImageCaptchaEnabled                    bool     `json:"image_captcha_enabled"`
 	APIKeyACLTrustForwardedIP              bool     `json:"api_key_acl_trust_forwarded_ip"`
 	ForwardedClientIPHeaders               []string `json:"forwarded_client_ip_headers"`
 
@@ -379,6 +382,7 @@ type PublicSettings struct {
 	AliyunCaptchaSceneID                string                   `json:"aliyun_captcha_scene_id"`
 	AliyunCaptchaPrefix                 string                   `json:"aliyun_captcha_prefix"`
 	AliyunCaptchaRegion                 string                   `json:"aliyun_captcha_region"`
+	ImageCaptchaEnabled                 bool                     `json:"image_captcha_enabled"`
 	SiteName                            string                   `json:"site_name"`
 	SiteLogo                            string                   `json:"site_logo"`
 	SiteSubtitle                        string                   `json:"site_subtitle"`

@@ -508,6 +508,8 @@ type CaptchaProviderConfig struct {
 	TurnstileSecretKey string
 	Tencent            TencentCaptchaConfig
 	Aliyun             AliyunCaptchaConfig
+	// ImageEnabled 自研图形验证码，无外部凭证。
+	ImageEnabled bool
 }
 
 func (s *SettingService) GetCaptchaProviderConfig(ctx context.Context) (CaptchaProviderConfig, error) {
@@ -525,6 +527,7 @@ func (s *SettingService) GetCaptchaProviderConfig(ctx context.Context) (CaptchaP
 		SettingKeyAliyunCaptchaAccessKeySecret,
 		SettingKeyAliyunCaptchaSceneID,
 		SettingKeyAliyunCaptchaRegion,
+		SettingKeyImageCaptchaEnabled,
 	})
 	if err != nil {
 		return CaptchaProviderConfig{}, fmt.Errorf("read captcha provider settings: %w", err)
@@ -547,7 +550,14 @@ func (s *SettingService) GetCaptchaProviderConfig(ctx context.Context) (CaptchaP
 			SceneID:         values[SettingKeyAliyunCaptchaSceneID],
 			Region:          normalizeAliyunCaptchaRegion(values[SettingKeyAliyunCaptchaRegion]),
 		},
+		ImageEnabled: values[SettingKeyImageCaptchaEnabled] == "true",
 	}, nil
+}
+
+// IsImageCaptchaEnabled 检查是否启用自研图形验证码。
+func (s *SettingService) IsImageCaptchaEnabled(ctx context.Context) bool {
+	value, err := s.settingRepo.GetValue(ctx, SettingKeyImageCaptchaEnabled)
+	return err == nil && value == "true"
 }
 
 func (s *SettingService) IsTencentCaptchaEnabled(ctx context.Context) bool {

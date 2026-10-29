@@ -38,6 +38,7 @@ import adminComplianceAPI from './compliance'
 import auditAPI from './audit'
 import pluginsAPI from './plugins'
 import desktopUpdatesAPI from './desktopUpdates'
+import ipBansAPI from './ipBans'
 
 /**
  * Unified admin API object for convenient access
@@ -77,7 +78,8 @@ export const adminAPI = {
   compliance: adminComplianceAPI,
   audit: auditAPI,
   plugins: pluginsAPI,
-  desktopUpdates: desktopUpdatesAPI
+  desktopUpdates: desktopUpdatesAPI,
+  ipBans: ipBansAPI
 }
 
 export {
@@ -115,7 +117,8 @@ export {
   adminComplianceAPI,
   auditAPI,
   pluginsAPI,
-  desktopUpdatesAPI
+  desktopUpdatesAPI,
+  ipBansAPI
 }
 
 export default adminAPI
@@ -127,6 +130,7 @@ export type { ErrorPassthroughRule, CreateRuleRequest, UpdateRuleRequest } from 
 export type { BackupAgentHealth, DataManagementConfig } from './dataManagement'
 export type { TLSFingerprintProfile, CreateProfileRequest, UpdateProfileRequest } from './tlsFingerprintProfile'
 export type { ContentModerationConfig, ContentModerationLog, ModerationMode } from './riskControl'
+export type { IPBan, IPInspection, CreateIPBanRequest, CreateIPBanResponse } from './ipBans'
 export type {
   PluginInstallation,
   PluginCompatibility,

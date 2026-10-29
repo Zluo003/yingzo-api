@@ -369,6 +369,34 @@ func (_c *UserCreate) SetNillableRpmLimit(v *int) *UserCreate {
 	return _c
 }
 
+// SetRegistrationIP sets the "registration_ip" field.
+func (_c *UserCreate) SetRegistrationIP(v string) *UserCreate {
+	_c.mutation.SetRegistrationIP(v)
+	return _c
+}
+
+// SetNillableRegistrationIP sets the "registration_ip" field if the given value is not nil.
+func (_c *UserCreate) SetNillableRegistrationIP(v *string) *UserCreate {
+	if v != nil {
+		_c.SetRegistrationIP(*v)
+	}
+	return _c
+}
+
+// SetRegistrationIPKey sets the "registration_ip_key" field.
+func (_c *UserCreate) SetRegistrationIPKey(v string) *UserCreate {
+	_c.mutation.SetRegistrationIPKey(v)
+	return _c
+}
+
+// SetNillableRegistrationIPKey sets the "registration_ip_key" field if the given value is not nil.
+func (_c *UserCreate) SetNillableRegistrationIPKey(v *string) *UserCreate {
+	if v != nil {
+		_c.SetRegistrationIPKey(*v)
+	}
+	return _c
+}
+
 // AddAPIKeyIDs adds the "api_keys" edge to the APIKey entity by IDs.
 func (_c *UserCreate) AddAPIKeyIDs(ids ...int64) *UserCreate {
 	_c.mutation.AddAPIKeyIDs(ids...)
@@ -690,6 +718,14 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultRpmLimit
 		_c.mutation.SetRpmLimit(v)
 	}
+	if _, ok := _c.mutation.RegistrationIP(); !ok {
+		v := user.DefaultRegistrationIP
+		_c.mutation.SetRegistrationIP(v)
+	}
+	if _, ok := _c.mutation.RegistrationIPKey(); !ok {
+		v := user.DefaultRegistrationIPKey
+		_c.mutation.SetRegistrationIPKey(v)
+	}
 	return nil
 }
 
@@ -781,6 +817,22 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.RpmLimit(); !ok {
 		return &ValidationError{Name: "rpm_limit", err: errors.New(`ent: missing required field "User.rpm_limit"`)}
+	}
+	if _, ok := _c.mutation.RegistrationIP(); !ok {
+		return &ValidationError{Name: "registration_ip", err: errors.New(`ent: missing required field "User.registration_ip"`)}
+	}
+	if v, ok := _c.mutation.RegistrationIP(); ok {
+		if err := user.RegistrationIPValidator(v); err != nil {
+			return &ValidationError{Name: "registration_ip", err: fmt.Errorf(`ent: validator failed for field "User.registration_ip": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.RegistrationIPKey(); !ok {
+		return &ValidationError{Name: "registration_ip_key", err: errors.New(`ent: missing required field "User.registration_ip_key"`)}
+	}
+	if v, ok := _c.mutation.RegistrationIPKey(); ok {
+		if err := user.RegistrationIPKeyValidator(v); err != nil {
+			return &ValidationError{Name: "registration_ip_key", err: fmt.Errorf(`ent: validator failed for field "User.registration_ip_key": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -908,6 +960,14 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.RpmLimit(); ok {
 		_spec.SetField(user.FieldRpmLimit, field.TypeInt, value)
 		_node.RpmLimit = value
+	}
+	if value, ok := _c.mutation.RegistrationIP(); ok {
+		_spec.SetField(user.FieldRegistrationIP, field.TypeString, value)
+		_node.RegistrationIP = value
+	}
+	if value, ok := _c.mutation.RegistrationIPKey(); ok {
+		_spec.SetField(user.FieldRegistrationIPKey, field.TypeString, value)
+		_node.RegistrationIPKey = value
 	}
 	if nodes := _c.mutation.APIKeysIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -1549,6 +1609,30 @@ func (u *UserUpsert) AddRpmLimit(v int) *UserUpsert {
 	return u
 }
 
+// SetRegistrationIP sets the "registration_ip" field.
+func (u *UserUpsert) SetRegistrationIP(v string) *UserUpsert {
+	u.Set(user.FieldRegistrationIP, v)
+	return u
+}
+
+// UpdateRegistrationIP sets the "registration_ip" field to the value that was provided on create.
+func (u *UserUpsert) UpdateRegistrationIP() *UserUpsert {
+	u.SetExcluded(user.FieldRegistrationIP)
+	return u
+}
+
+// SetRegistrationIPKey sets the "registration_ip_key" field.
+func (u *UserUpsert) SetRegistrationIPKey(v string) *UserUpsert {
+	u.Set(user.FieldRegistrationIPKey, v)
+	return u
+}
+
+// UpdateRegistrationIPKey sets the "registration_ip_key" field to the value that was provided on create.
+func (u *UserUpsert) UpdateRegistrationIPKey() *UserUpsert {
+	u.SetExcluded(user.FieldRegistrationIPKey)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -2011,6 +2095,34 @@ func (u *UserUpsertOne) AddRpmLimit(v int) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateRpmLimit() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetRegistrationIP sets the "registration_ip" field.
+func (u *UserUpsertOne) SetRegistrationIP(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetRegistrationIP(v)
+	})
+}
+
+// UpdateRegistrationIP sets the "registration_ip" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateRegistrationIP() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateRegistrationIP()
+	})
+}
+
+// SetRegistrationIPKey sets the "registration_ip_key" field.
+func (u *UserUpsertOne) SetRegistrationIPKey(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetRegistrationIPKey(v)
+	})
+}
+
+// UpdateRegistrationIPKey sets the "registration_ip_key" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateRegistrationIPKey() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateRegistrationIPKey()
 	})
 }
 
@@ -2642,6 +2754,34 @@ func (u *UserUpsertBulk) AddRpmLimit(v int) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateRpmLimit() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateRpmLimit()
+	})
+}
+
+// SetRegistrationIP sets the "registration_ip" field.
+func (u *UserUpsertBulk) SetRegistrationIP(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetRegistrationIP(v)
+	})
+}
+
+// UpdateRegistrationIP sets the "registration_ip" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateRegistrationIP() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateRegistrationIP()
+	})
+}
+
+// SetRegistrationIPKey sets the "registration_ip_key" field.
+func (u *UserUpsertBulk) SetRegistrationIPKey(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetRegistrationIPKey(v)
+	})
+}
+
+// UpdateRegistrationIPKey sets the "registration_ip_key" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateRegistrationIPKey() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateRegistrationIPKey()
 	})
 }
 

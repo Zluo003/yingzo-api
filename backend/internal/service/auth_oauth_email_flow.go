@@ -45,6 +45,9 @@ func (s *AuthService) SendPendingOAuthVerifyCode(ctx context.Context, email stri
 	if err := s.validateRegistrationEmailQuota(ctx, email); err != nil {
 		return nil, err
 	}
+	if err := s.ensureRegistrationIPQuotaAvailable(ctx); err != nil {
+		return nil, err
+	}
 
 	siteName := "Sub2API"
 	if s.settingService != nil {
@@ -163,12 +166,18 @@ func (s *AuthService) RegisterOAuthEmailAccount(
 		SignupSource: signupSource,
 	}
 
-	if err := s.createUserWithRegistrationEmailGuard(ctx, user); err != nil {
+	createCtx, err := s.stampRegistrationIP(ctx, user)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.createUserWithRegistrationEmailGuard(createCtx, user); err != nil {
 		switch {
 		case errors.Is(err, ErrEmailExists):
 			return nil, nil, ErrEmailExists
 		case errors.Is(err, ErrEmailDomainRegistrationLimit):
 			return nil, nil, ErrEmailDomainRegistrationLimit
+		case isRegistrationIPLimitError(err):
+			return nil, nil, err
 		default:
 			slog.Error("oauth email register: userRepo.Create failed", "email", email, "signup_source", signupSource, "error", err.Error())
 			return nil, nil, ErrServiceUnavailable
@@ -250,12 +259,18 @@ func (s *AuthService) RegisterVerifiedOAuthEmailAccount(
 		SignupSource: signupSource,
 	}
 
-	if err := s.createUserWithRegistrationEmailGuard(ctx, user); err != nil {
+	createCtx, err := s.stampRegistrationIP(ctx, user)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := s.createUserWithRegistrationEmailGuard(createCtx, user); err != nil {
 		switch {
 		case errors.Is(err, ErrEmailExists):
 			return nil, nil, ErrEmailExists
 		case errors.Is(err, ErrEmailDomainRegistrationLimit):
 			return nil, nil, ErrEmailDomainRegistrationLimit
+		case isRegistrationIPLimitError(err):
+			return nil, nil, err
 		default:
 			return nil, nil, ErrServiceUnavailable
 		}

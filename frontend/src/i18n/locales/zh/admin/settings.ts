@@ -148,6 +148,12 @@ export default {
         emailDomainQuota: '非白名单域名限量注册',
         emailDomainQuotaHint:
           '开启后，白名单非空时，其他可注册主域名各限注册一个账户；关闭时非白名单域名直接拒绝注册。白名单为空时本开关无效果',
+        ipDailyLimit: '同一 IP 24 小时注册上限',
+        ipDailyLimitHint: '同一来源网络在最近 24 小时内最多可自助注册的账号数（滚动统计，不在零点重置），0 = 不限制',
+        ipTotalLimit: '单 IP 注册总数上限',
+        ipTotalLimitHint: '同一来源网络累计最多可自助注册的账号数，0 = 不限制',
+        ipLimitScopeHint:
+          'IPv6 按 /64 网段计数；已删除账号仍计入。适用于邮箱注册与第三方登录自动注册，管理员在后台创建的用户不受限制。',
         promoCode: '优惠码',
         promoCodeHint: '允许用户在注册时使用优惠码',
         invitationCode: '邀请码注册',
@@ -217,7 +223,13 @@ export default {
         provider: '验证服务商',
         providerTurnstile: 'Cloudflare Turnstile',
         providerTencent: '腾讯天御验证码',
-        providerAliyun: '阿里云验证码 2.0'
+        providerAliyun: '阿里云验证码 2.0',
+        providerImage: '图形验证码（自研）'
+      },
+      imageCaptcha: {
+        noConfigNeeded: '无需注册第三方服务，也无需填写任何密钥。',
+        howItWorks: '由本服务器生成带扭曲字符的图片，用户输入图中字符即可通过；每张验证码仅能使用一次，5 分钟内有效。',
+        scope: '启用后将保护登录、注册、找回密码与发送邮箱验证码。'
       },
       tencentCaptcha: {
         title: '腾讯天御验证码',

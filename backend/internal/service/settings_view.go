@@ -16,6 +16,8 @@ type SystemSettings struct {
 	EmailVerifyEnabled                  bool
 	RegistrationEmailSuffixWhitelist    []string
 	RegistrationEmailDomainQuotaEnabled bool // 白名单非空时放行非白名单域名限量注册（默认关闭）
+	RegistrationIPDailyLimit            int  // 单 IP 最近 24 小时可注册账号数（0 = 不限制）
+	RegistrationIPTotalLimit            int  // 单 IP 累计可注册账号数（0 = 不限制）
 	PromoCodeEnabled                    bool
 	PasswordResetEnabled                bool
 	FrontendURL                         string
@@ -59,6 +61,7 @@ type SystemSettings struct {
 	AliyunCaptchaSceneID                   string
 	AliyunCaptchaPrefix                    string
 	AliyunCaptchaRegion                    string
+	ImageCaptchaEnabled                    bool // 自研图形验证码
 	APIKeyACLTrustForwardedIP              bool
 	ForwardedClientIPHeaders               []string
 
@@ -344,6 +347,7 @@ type PublicSettings struct {
 	AliyunCaptchaSceneID                string
 	AliyunCaptchaPrefix                 string
 	AliyunCaptchaRegion                 string
+	ImageCaptchaEnabled                 bool
 	SiteName                            string
 	SiteLogo                            string
 	SiteSubtitle                        string

@@ -170,6 +170,8 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	}
 	updates[SettingKeyRegistrationEmailSuffixWhitelist] = string(registrationEmailSuffixWhitelistJSON)
 	updates[SettingKeyRegistrationEmailDomainQuotaEnabled] = strconv.FormatBool(settings.RegistrationEmailDomainQuotaEnabled)
+	updates[SettingKeyRegistrationIPDailyLimit] = strconv.Itoa(NormalizeRegistrationIPLimit(settings.RegistrationIPDailyLimit))
+	updates[SettingKeyRegistrationIPTotalLimit] = strconv.Itoa(NormalizeRegistrationIPLimit(settings.RegistrationIPTotalLimit))
 	updates[SettingKeyPromoCodeEnabled] = strconv.FormatBool(settings.PromoCodeEnabled)
 	updates[SettingKeyPasswordResetEnabled] = strconv.FormatBool(settings.PasswordResetEnabled)
 	updates[SettingKeyFrontendURL] = settings.FrontendURL
@@ -232,6 +234,7 @@ func (s *SettingService) buildSystemSettingsUpdates(ctx context.Context, setting
 	updates[SettingKeyAliyunCaptchaSceneID] = settings.AliyunCaptchaSceneID
 	updates[SettingKeyAliyunCaptchaPrefix] = settings.AliyunCaptchaPrefix
 	updates[SettingKeyAliyunCaptchaRegion] = normalizeAliyunCaptchaRegion(settings.AliyunCaptchaRegion)
+	updates[SettingKeyImageCaptchaEnabled] = strconv.FormatBool(settings.ImageCaptchaEnabled)
 	updates[SettingKeyAPIKeyACLTrustForwardedIP] = strconv.FormatBool(settings.APIKeyACLTrustForwardedIP)
 	forwardedClientIPHeadersJSON, err := json.Marshal(settings.ForwardedClientIPHeaders)
 	if err != nil {

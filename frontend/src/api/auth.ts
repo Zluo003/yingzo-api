@@ -15,6 +15,8 @@ import type {
   SendVerifyCodeResponse,
   PublicSettings,
   ActionCaptchaRequestProof,
+  ImageCaptchaChallenge,
+  ImageCaptchaRequestProof,
   TotpLoginResponse,
   TotpLogin2FARequest
 } from '@/types'
@@ -355,6 +357,16 @@ export async function getPublicSettings(): Promise<PublicSettings> {
   return data
 }
 
+/**
+ * Get a new self-hosted image captcha (only available when the image provider is enabled)
+ * 每张验证码只能校验一次（无论对错），提交后需重新获取
+ * @returns Captcha id, PNG data URL and lifetime in seconds
+ */
+export async function getImageCaptcha(): Promise<ImageCaptchaChallenge> {
+  const { data } = await apiClient.get<ImageCaptchaChallenge>('/auth/captcha')
+  return data
+}
+
 export type WeChatOAuthMode = 'open' | 'mp'
 export type WeChatOAuthUnavailableReason =
   | 'not_configured'
@@ -528,7 +540,7 @@ export async function validateInvitationCode(code: string): Promise<ValidateInvi
 /**
  * Forgot password request
  */
-export interface ForgotPasswordRequest {
+export interface ForgotPasswordRequest extends ImageCaptchaRequestProof {
   email: string
   turnstile_token?: string
   tencent_captcha_ticket?: string
@@ -694,6 +706,7 @@ export const authAPI = {
   getTokenExpiresAt,
   clearAuthToken,
   getPublicSettings,
+  getImageCaptcha,
   sendVerifyCode,
   sendPendingOAuthVerifyCode,
   validatePromoCode,

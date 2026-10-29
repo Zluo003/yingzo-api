@@ -1813,6 +1813,8 @@ var (
 		{Name: "balance_notify_extra_emails", Type: field.TypeString, Default: "[]", SchemaType: map[string]string{"postgres": "text"}},
 		{Name: "total_recharged", Type: field.TypeFloat64, Default: 0, SchemaType: map[string]string{"postgres": "decimal(20,8)"}},
 		{Name: "rpm_limit", Type: field.TypeInt, Default: 0},
+		{Name: "registration_ip", Type: field.TypeString, Size: 64, Default: ""},
+		{Name: "registration_ip_key", Type: field.TypeString, Size: 64, Default: ""},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{
@@ -1829,6 +1831,11 @@ var (
 				Name:    "user_deleted_at",
 				Unique:  false,
 				Columns: []*schema.Column{UsersColumns[3]},
+			},
+			{
+				Name:    "user_registration_ip_key_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[27], UsersColumns[1]},
 			},
 		},
 	}

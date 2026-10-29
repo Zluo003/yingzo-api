@@ -81,6 +81,7 @@ type AuthService struct {
 	turnstileService      *TurnstileService
 	tencentCaptchaService *TencentCaptchaService
 	aliyunCaptchaService  *AliyunCaptchaService
+	imageCaptchaService   *ImageCaptchaService
 	emailQueueService     *EmailQueueService
 	promoService          *PromoService
 	affiliateService      *AffiliateService
@@ -93,6 +94,9 @@ type CaptchaProof struct {
 	TurnstileToken string
 	TencentTicket  string
 	TencentRandstr string
+	// ImageCaptchaID / ImageCaptchaCode 承载自研图形验证码的编号与用户输入
+	ImageCaptchaID   string
+	ImageCaptchaCode string
 }
 
 type DefaultSubscriptionAssigner interface {
@@ -152,6 +156,18 @@ func (s *AuthService) SetTencentCaptchaService(tencentCaptchaService *TencentCap
 
 func (s *AuthService) SetAliyunCaptchaService(aliyunCaptchaService *AliyunCaptchaService) {
 	s.aliyunCaptchaService = aliyunCaptchaService
+}
+
+func (s *AuthService) SetImageCaptchaService(imageCaptchaService *ImageCaptchaService) {
+	s.imageCaptchaService = imageCaptchaService
+}
+
+// IssueImageCaptcha 下发一张自研图形验证码（仅在后台启用图形验证码时可用）。
+func (s *AuthService) IssueImageCaptcha(ctx context.Context) (*ImageCaptchaChallenge, error) {
+	if s == nil || s.imageCaptchaService == nil {
+		return nil, ErrImageCaptchaNotConfigured
+	}
+	return s.imageCaptchaService.Issue(ctx)
 }
 
 // Register 用户注册，返回token和用户
@@ -245,11 +261,17 @@ func (s *AuthService) RegisterWithVerification(ctx context.Context, email, passw
 		Status:       StatusActive,
 	}
 
-	if err := s.createUserAndClaimInvitation(ctx, user, invitationRedeemCode, affiliateCode); err != nil {
+	createCtx, err := s.stampRegistrationIP(ctx, user)
+	if err != nil {
+		return "", nil, err
+	}
+	if err := s.createUserAndClaimInvitation(createCtx, user, invitationRedeemCode, affiliateCode); err != nil {
 		// 优先检查邮箱冲突错误（竞态条件下可能发生）
 		switch {
 		case errors.Is(err, ErrEmailExists):
 			return "", nil, ErrEmailExists
+		case isRegistrationIPLimitError(err):
+			return "", nil, err
 		case errors.Is(err, ErrEmailDomainRegistrationLimit):
 			return "", nil, ErrEmailDomainRegistrationLimit
 		case errors.Is(err, ErrInvitationCodeInvalid):
@@ -328,6 +350,9 @@ func (s *AuthService) SendVerifyCode(ctx context.Context, email string, locale .
 	if err := s.validateRegistrationEmailQuota(ctx, email); err != nil {
 		return err
 	}
+	if err := s.ensureRegistrationIPQuotaAvailable(ctx); err != nil {
+		return err
+	}
 
 	// 发送验证码
 	if s.emailService == nil {
@@ -367,6 +392,9 @@ func (s *AuthService) SendVerifyCodeAsync(ctx context.Context, email string, loc
 		return nil, ErrEmailExists
 	}
 	if err := s.validateRegistrationEmailQuota(ctx, email); err != nil {
+		return nil, err
+	}
+	if err := s.ensureRegistrationIPQuotaAvailable(ctx); err != nil {
 		return nil, err
 	}
 
@@ -423,8 +451,15 @@ func (s *AuthService) VerifyCaptcha(ctx context.Context, proof CaptchaProof, rem
 	turnstileEnabled := providerConfig.TurnstileEnabled
 	tencentEnabled := providerConfig.Tencent.Enabled
 	aliyunEnabled := providerConfig.Aliyun.Enabled
-	if captchaProvidersConflict(turnstileEnabled, tencentEnabled, aliyunEnabled) {
+	imageEnabled := providerConfig.ImageEnabled
+	if captchaProvidersConflict(turnstileEnabled, tencentEnabled, aliyunEnabled, imageEnabled) {
 		return ErrCaptchaProviderConflict
+	}
+	if imageEnabled {
+		if s.imageCaptchaService == nil {
+			return ErrImageCaptchaNotConfigured
+		}
+		return s.imageCaptchaService.Verify(ctx, proof.ImageCaptchaID, proof.ImageCaptchaCode)
 	}
 	if tencentEnabled {
 		if s.tencentCaptchaService == nil {
@@ -478,7 +513,7 @@ func (s *AuthService) VerifyActionCaptchaIfEnabled(ctx context.Context, proof Ca
 	if !tencentEnabled && !aliyunEnabled {
 		return nil
 	}
-	if captchaProvidersConflict(providerConfig.TurnstileEnabled, tencentEnabled, aliyunEnabled) {
+	if captchaProvidersConflict(providerConfig.TurnstileEnabled, tencentEnabled, aliyunEnabled, providerConfig.ImageEnabled) {
 		return ErrCaptchaProviderConflict
 	}
 	if aliyunEnabled {
@@ -622,7 +657,11 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 				SignupSource: signupSource,
 			}
 
-			if err := s.userRepo.Create(ctx, newUser); err != nil {
+			createCtx, err := s.stampRegistrationIP(ctx, newUser)
+			if err != nil {
+				return "", nil, err
+			}
+			if err := s.userRepo.Create(createCtx, newUser); err != nil {
 				if errors.Is(err, ErrEmailExists) {
 					// 并发场景：GetByEmail 与 Create 之间用户被创建。
 					user, err = s.userRepo.GetByEmail(ctx, email)
@@ -630,6 +669,8 @@ func (s *AuthService) LoginOrRegisterOAuth(ctx context.Context, email, username 
 						logger.LegacyPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
 						return "", nil, ErrServiceUnavailable
 					}
+				} else if isRegistrationIPLimitError(err) {
+					return "", nil, err
 				} else {
 					logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
 					return "", nil, ErrServiceUnavailable
@@ -771,6 +812,11 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 				SignupSource: signupSource,
 			}
 
+			createCtx, err := s.stampRegistrationIP(ctx, newUser)
+			if err != nil {
+				return nil, nil, err
+			}
+
 			if s.entClient != nil && invitationRedeemCode != nil {
 				tx, err := s.entClient.Tx(ctx)
 				if err != nil {
@@ -778,7 +824,7 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 					return nil, nil, ErrServiceUnavailable
 				}
 				defer func() { _ = tx.Rollback() }()
-				txCtx := dbent.NewTxContext(ctx, tx)
+				txCtx := dbent.NewTxContext(createCtx, tx)
 
 				if err := s.userRepo.Create(txCtx, newUser); err != nil {
 					if errors.Is(err, ErrEmailExists) {
@@ -787,6 +833,8 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 							logger.LegacyPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
 							return nil, nil, ErrServiceUnavailable
 						}
+					} else if isRegistrationIPLimitError(err) {
+						return nil, nil, err
 					} else {
 						logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
 						return nil, nil, ErrServiceUnavailable
@@ -808,13 +856,15 @@ func (s *AuthService) loginOrRegisterOAuthWithTokenPair(ctx context.Context, ema
 					s.bindOAuthAffiliate(ctx, user.ID, affiliateCode)
 				}
 			} else {
-				if err := s.userRepo.Create(ctx, newUser); err != nil {
+				if err := s.userRepo.Create(createCtx, newUser); err != nil {
 					if errors.Is(err, ErrEmailExists) {
 						user, err = s.userRepo.GetByEmail(ctx, email)
 						if err != nil {
 							logger.LegacyPrintf("service.auth", "[Auth] Database error getting user after conflict: %v", err)
 							return nil, nil, ErrServiceUnavailable
 						}
+					} else if isRegistrationIPLimitError(err) {
+						return nil, nil, err
 					} else {
 						logger.LegacyPrintf("service.auth", "[Auth] Database error creating oauth user: %v", err)
 						return nil, nil, ErrServiceUnavailable

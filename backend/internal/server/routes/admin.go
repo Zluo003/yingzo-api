@@ -372,6 +372,15 @@ func registerUserManagementRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		users.GET("/:id/attributes", h.Admin.UserAttribute.GetUserAttributes)
 		users.PUT("/:id/attributes", h.Admin.UserAttribute.UpdateUserAttributes)
 	}
+
+	// IP / 网段封禁：用户列表点击注册 IP 时查看与封禁，命中后拒绝该来源的全部访问。
+	ipBans := admin.Group("/ip-bans")
+	{
+		ipBans.GET("", h.Admin.IPBan.List)
+		ipBans.GET("/inspect", h.Admin.IPBan.Inspect)
+		ipBans.POST("", h.Admin.IPBan.Create)
+		ipBans.DELETE("/:id", h.Admin.IPBan.Delete)
+	}
 }
 
 func registerGroupRoutes(admin *gin.RouterGroup, h *handler.Handlers) {

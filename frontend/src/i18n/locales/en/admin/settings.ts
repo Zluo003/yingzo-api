@@ -148,6 +148,12 @@ export default {
         emailDomainQuota: 'Non-allowlist Domain Quota',
         emailDomainQuotaHint:
           'When enabled and the allowlist is not empty, every other registrable domain can register one account. When disabled, non-allowlist domains are rejected. Has no effect while the allowlist is empty',
+        ipDailyLimit: 'Registrations per IP in 24 hours',
+        ipDailyLimitHint: 'Maximum accounts that can self-register from one network in a rolling 24-hour window (no midnight reset). 0 = unlimited',
+        ipTotalLimit: 'Total registrations per IP',
+        ipTotalLimitHint: 'Maximum accounts that can self-register from one network in total. 0 = unlimited',
+        ipLimitScopeHint:
+          'IPv6 addresses are counted per /64 network; deleted accounts still count. Applies to email registration and third-party sign-ups; users created by administrators are not limited.',
         promoCode: 'Promo Code',
         promoCodeHint: 'Allow users to use promo codes during registration',
         invitationCode: 'Invitation Code Registration',
@@ -217,7 +223,13 @@ export default {
         provider: 'Provider',
         providerTurnstile: 'Cloudflare Turnstile',
         providerTencent: 'Tencent Captcha',
-        providerAliyun: 'Aliyun Captcha 2.0'
+        providerAliyun: 'Aliyun Captcha 2.0',
+        providerImage: 'Image CAPTCHA (built-in)'
+      },
+      imageCaptcha: {
+        noConfigNeeded: 'No third-party account or keys required.',
+        howItWorks: 'This server generates an image of distorted characters that the user types in. Each code can be used only once and expires after 5 minutes.',
+        scope: 'Protects login, registration, password reset and email verification code sending.'
       },
       tencentCaptcha: {
         title: 'Tencent Captcha',

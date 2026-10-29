@@ -112,9 +112,26 @@ export interface AdminUser extends User {
   restrict_public_groups?: boolean
   // 当前并发数（仅管理员列表接口返回）
   current_concurrency?: number
+  // 自助注册时的客户端 IP；管理员后台创建的用户与无法回填的历史账号为空字符串
+  registration_ip?: string
+  // 注册 IP 当前是否命中封禁规则（仅管理员列表接口返回）
+  registration_ip_banned?: boolean
 }
 
-export interface LoginRequest {
+// 自研图形验证码凭据：image_captcha_id 为下发的验证码编号，image_captcha_code 为用户输入
+export interface ImageCaptchaRequestProof {
+  image_captcha_id?: string
+  image_captcha_code?: string
+}
+
+// GET /auth/captcha 响应：image 为 data:image/png;base64 URL，expires_in 为有效期（秒）
+export interface ImageCaptchaChallenge {
+  captcha_id: string
+  image: string
+  expires_in: number
+}
+
+export interface LoginRequest extends ImageCaptchaRequestProof {
   email: string
   password: string
   turnstile_token?: string
@@ -133,7 +150,7 @@ export interface ActionCaptchaRequestProof extends Partial<TencentCaptchaRequest
   turnstile_token?: string
 }
 
-export interface RegisterRequest {
+export interface RegisterRequest extends ImageCaptchaRequestProof {
   email: string
   password: string
   verify_code?: string
@@ -178,7 +195,7 @@ export interface AffiliateTransferResponse {
   balance: number
 }
 
-export interface SendVerifyCodeRequest {
+export interface SendVerifyCodeRequest extends ImageCaptchaRequestProof {
   email: string
   turnstile_token?: string
   tencent_captcha_ticket?: string
@@ -238,6 +255,8 @@ export interface PublicSettings {
   aliyun_captcha_scene_id?: string
   aliyun_captcha_prefix?: string
   aliyun_captcha_region?: string
+  // 自研图形验证码（与 Turnstile / 腾讯 / 阿里云互斥）
+  image_captcha_enabled?: boolean
   site_name: string
   site_logo: string
   site_subtitle: string

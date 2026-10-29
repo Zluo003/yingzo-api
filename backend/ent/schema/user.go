@@ -116,6 +116,15 @@ func (User) Fields() []ent.Field {
 		// 用户级每分钟请求数上限（0 = 不限制）。仅当所在分组未设置 rpm_limit 时作为兜底生效。
 		field.Int("rpm_limit").
 			Default(0),
+
+		// 自助注册时的客户端 IP（与审计日志同源的安全客户端 IP）；管理员后台创建的用户为空。
+		field.String("registration_ip").
+			MaxLen(64).
+			Default(""),
+		// 按 IP 注册额度的计数键：IPv4 为地址本身，IPv6 为所在 /64 网段。
+		field.String("registration_ip_key").
+			MaxLen(64).
+			Default(""),
 	}
 }
 
@@ -145,5 +154,7 @@ func (User) Indexes() []ent.Index {
 		// email 字段已在 Fields() 中声明 Unique()，无需重复索引
 		index.Fields("status"),
 		index.Fields("deleted_at"),
+		// 见迁移 270：部分索引（WHERE registration_ip_key 非空），按注册网络统计账号数。
+		index.Fields("registration_ip_key", "created_at"),
 	}
 }

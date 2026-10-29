@@ -44,6 +44,12 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	if before.RegistrationEmailDomainQuotaEnabled != after.RegistrationEmailDomainQuotaEnabled {
 		changed = append(changed, "registration_email_domain_quota_enabled")
 	}
+	if before.RegistrationIPDailyLimit != after.RegistrationIPDailyLimit {
+		changed = append(changed, "registration_ip_daily_limit")
+	}
+	if before.RegistrationIPTotalLimit != after.RegistrationIPTotalLimit {
+		changed = append(changed, "registration_ip_total_limit")
+	}
 	if before.PromoCodeEnabled != after.PromoCodeEnabled {
 		changed = append(changed, "promo_code_enabled")
 	}
@@ -130,6 +136,9 @@ func diffSettings(before *service.SystemSettings, after *service.SystemSettings,
 	}
 	if before.AliyunCaptchaEnabled != after.AliyunCaptchaEnabled {
 		changed = append(changed, "aliyun_captcha_enabled")
+	}
+	if before.ImageCaptchaEnabled != after.ImageCaptchaEnabled {
+		changed = append(changed, "image_captcha_enabled")
 	}
 	if before.AliyunCaptchaAccessKeyID != after.AliyunCaptchaAccessKeyID {
 		changed = append(changed, "aliyun_captcha_access_key_id")

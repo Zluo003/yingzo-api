@@ -32,6 +32,8 @@ func backendModeAllowsAuthPath(path string) bool {
 	for _, suffix := range []string{
 		"/auth/login",
 		"/auth/login/2fa",
+		// 启用图形验证码时，管理员登录前需要先领取验证码
+		"/auth/captcha",
 		"/auth/passkey/login/begin",
 		"/auth/passkey/login/finish",
 		"/auth/logout",

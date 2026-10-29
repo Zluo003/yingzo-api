@@ -1,6 +1,12 @@
 <template>
+  <ImageCaptchaInput
+    v-if="imageEnabled"
+    ref="imageRef"
+    @verify="(id: string, code: string) => emit('verify', id, code)"
+    @expire="emit('expire')"
+  />
   <TurnstileWidget
-    v-if="turnstileEnabled && turnstileSiteKey"
+    v-else-if="turnstileEnabled && turnstileSiteKey"
     ref="turnstileRef"
     :site-key="turnstileSiteKey"
     @verify="(token) => emit('verify', token, '')"
@@ -30,6 +36,7 @@ import { ref } from 'vue'
 import TurnstileWidget from '@/components/TurnstileWidget.vue'
 import TencentCaptchaGate from '@/components/TencentCaptchaGate.vue'
 import AliyunCaptchaWidget from '@/components/AliyunCaptchaWidget.vue'
+import ImageCaptchaInput from '@/components/ImageCaptchaInput.vue'
 
 // ActionCaptchaResult 动作触发式验证（腾讯/阿里云弹窗）的结果：
 // 腾讯 token=ticket、randstr 非空；阿里云 token=captchaVerifyParam、randstr 恒为空。
@@ -39,6 +46,7 @@ export interface ActionCaptchaResult {
 }
 
 const props = defineProps<{
+  imageEnabled?: boolean
   siteKey?: string
   turnstileEnabled: boolean
   turnstileSiteKey: string
@@ -60,11 +68,13 @@ const emit = defineEmits<{
 const turnstileRef = ref<InstanceType<typeof TurnstileWidget> | null>(null)
 const tencentRef = ref<InstanceType<typeof TencentCaptchaGate> | null>(null)
 const aliyunRef = ref<InstanceType<typeof AliyunCaptchaWidget> | null>(null)
+const imageRef = ref<InstanceType<typeof ImageCaptchaInput> | null>(null)
 
 function reset(): void {
   turnstileRef.value?.reset()
   tencentRef.value?.reset()
   aliyunRef.value?.reset()
+  imageRef.value?.reset()
 }
 
 // verifyAction 弹出当前启用的动作触发式验证码（腾讯/阿里云）并等待结果；

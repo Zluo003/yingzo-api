@@ -50,6 +50,10 @@ func RegisterAuthRoutes(
 		auth.POST("/send-verify-code", rateLimiter.LimitWithOptions("auth-send-verify-code", 5, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,
 		}), h.Auth.SendVerifyCode)
+		// 自研图形验证码下发：每张验证码都会占用 Redis，按 IP 限流（Redis 故障时 fail-close）
+		auth.GET("/captcha", rateLimiter.LimitWithOptions("auth-image-captcha", 30, time.Minute, middleware.RateLimitOptions{
+			FailureMode: middleware.RateLimitFailClose,
+		}), h.Auth.GetImageCaptcha)
 		// Token刷新接口添加速率限制：每分钟最多 30 次（Redis 故障时 fail-close）
 		auth.POST("/refresh", rateLimiter.LimitWithOptions("refresh-token", 30, time.Minute, middleware.RateLimitOptions{
 			FailureMode: middleware.RateLimitFailClose,

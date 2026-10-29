@@ -98,6 +98,9 @@ const DataTableStub = {
       </template>
       <div v-for="row in data" :key="row.id">
         <slot name="cell-last_used_at" :value="row.last_used_at" :row="row" />
+        <div :data-test="'registration-ip-cell-' + row.id">
+          <slot name="cell-registration_ip" :value="row.registration_ip" :row="row" />
+        </div>
       </div>
     </div>
   `
@@ -118,6 +121,61 @@ const BulkEditUserModalStub = {
     </div>
   `
 }
+
+const UserRegistrationIpModalStub = {
+  props: ['show', 'ip'],
+  emits: ['close', 'success', 'search'],
+  template: `
+    <div v-if="show" data-test="registration-ip-modal">
+      <span data-test="registration-ip-modal-ip">{{ ip }}</span>
+      <button data-test="registration-ip-modal-search" @click="$emit('search', ip)">search</button>
+      <button data-test="registration-ip-modal-success" @click="$emit('success')">success</button>
+    </div>
+  `
+}
+
+const IpBanManagementModalStub = {
+  props: ['show'],
+  emits: ['close', 'success'],
+  template: `
+    <div v-if="show" data-test="ip-ban-modal">
+      <button data-test="ip-ban-modal-success" @click="$emit('success')">success</button>
+    </div>
+  `
+}
+
+const mountUsersView = () =>
+  mount(UsersView, {
+    global: {
+      stubs: {
+        AppLayout: { template: '<div><slot /></div>' },
+        TablePageLayout: {
+          template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>'
+        },
+        DataTable: DataTableStub,
+        Pagination: true,
+        ConfirmDialog: true,
+        EmptyState: true,
+        GroupBadge: true,
+        Select: true,
+        UserAttributesConfigModal: true,
+        UserConcurrencyCell: true,
+        UserCreateModal: true,
+        UserEditModal: true,
+        BulkEditUserModal: BulkEditUserModalStub,
+        UserPlatformQuotaModal: true,
+        UserApiKeysModal: true,
+        UserAllowedGroupsModal: true,
+        UserBalanceModal: true,
+        UserBalanceHistoryModal: true,
+        GroupReplaceModal: true,
+        UserRegistrationIpModal: UserRegistrationIpModalStub,
+        IpBanManagementModal: IpBanManagementModalStub,
+        Icon: true,
+        Teleport: true
+      }
+    }
+  })
 
 describe('admin UsersView', () => {
   beforeEach(() => {
@@ -368,5 +426,89 @@ describe('admin UsersView', () => {
     expect(wrapper.get('[data-test="row-order"]').text()).toBe('refreshed-page-two@example.com')
     expect(wrapper.find('[data-test="bulk-edit-limits"]').exists()).toBe(false)
     expect(wrapper.get('[data-test="selected-keys"]').text()).toBe('')
+  })
+
+  it('shows the registration IP column with a banned badge and an em dash for missing IPs', async () => {
+    listUsers.mockResolvedValue({
+      items: [
+        createAdminUser({ id: 1, email: 'banned@example.com', registration_ip: '203.0.113.7', registration_ip_banned: true }),
+        createAdminUser({ id: 2, email: 'clean@example.com', registration_ip: '198.51.100.9', registration_ip_banned: false }),
+        createAdminUser({ id: 3, email: 'admin-created@example.com', registration_ip: '' })
+      ],
+      total: 3,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+
+    const wrapper = mountUsersView()
+    await flushPromises()
+
+    const columns = wrapper.get('[data-test="columns"]').text().split(',')
+    expect(columns).toContain('registration_ip')
+    expect(columns.indexOf('registration_ip')).toBe(columns.indexOf('last_active_at') - 1)
+
+    const banned = wrapper.get('[data-test="registration-ip-cell-1"]')
+    expect(banned.get('[data-test="registration-ip-1"]').text()).toBe('203.0.113.7')
+    expect(banned.text()).toContain('admin.users.registrationIp.bannedBadge')
+
+    const clean = wrapper.get('[data-test="registration-ip-cell-2"]')
+    expect(clean.get('[data-test="registration-ip-2"]').text()).toBe('198.51.100.9')
+    expect(clean.text()).not.toContain('admin.users.registrationIp.bannedBadge')
+
+    const missing = wrapper.get('[data-test="registration-ip-cell-3"]')
+    expect(missing.find('button').exists()).toBe(false)
+    expect(missing.text()).toBe('—')
+  })
+
+  it('opens the registration IP dialog and filters the list by that IP', async () => {
+    listUsers.mockResolvedValue({
+      items: [createAdminUser({ id: 1, registration_ip: '203.0.113.7' })],
+      total: 1,
+      page: 1,
+      page_size: 20,
+      pages: 1
+    })
+
+    const wrapper = mountUsersView()
+    await flushPromises()
+    expect(wrapper.find('[data-test="registration-ip-modal"]').exists()).toBe(false)
+
+    await wrapper.get('[data-test="registration-ip-1"]').trigger('click')
+    expect(wrapper.get('[data-test="registration-ip-modal-ip"]').text()).toBe('203.0.113.7')
+
+    // 封禁/解封成功后刷新列表
+    const callsBeforeSuccess = listUsers.mock.calls.length
+    await wrapper.get('[data-test="registration-ip-modal-success"]').trigger('click')
+    await flushPromises()
+    expect(listUsers.mock.calls.length).toBe(callsBeforeSuccess + 1)
+
+    await wrapper.get('[data-test="registration-ip-modal-search"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="registration-ip-modal"]').exists()).toBe(false)
+    expect(
+      (wrapper.get('input[placeholder="admin.users.searchUsersOrIp"]').element as HTMLInputElement).value
+    ).toBe('203.0.113.7')
+    expect(listUsers).toHaveBeenLastCalledWith(
+      1,
+      20,
+      expect.objectContaining({ search: '203.0.113.7' }),
+      expect.any(Object)
+    )
+  })
+
+  it('opens IP ban management from the toolbar and refreshes the list after changes', async () => {
+    const wrapper = mountUsersView()
+    await flushPromises()
+    expect(wrapper.find('[data-test="ip-ban-modal"]').exists()).toBe(false)
+
+    await wrapper.get('[data-test="ip-ban-manage"]').trigger('click')
+    expect(wrapper.find('[data-test="ip-ban-modal"]').exists()).toBe(true)
+
+    const callsBeforeSuccess = listUsers.mock.calls.length
+    await wrapper.get('[data-test="ip-ban-modal-success"]').trigger('click')
+    await flushPromises()
+    expect(listUsers.mock.calls.length).toBe(callsBeforeSuccess + 1)
   })
 })

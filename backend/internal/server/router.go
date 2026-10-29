@@ -34,6 +34,7 @@ func SetupRouter(
 	opsService *service.OpsService,
 	settingService *service.SettingService,
 	compositeResolver *service.CompositeRouteResolver,
+	ipBanService *service.IPBanService,
 	cfg *config.Config,
 	redisClient *redis.Client,
 ) *gin.Engine {
@@ -69,6 +70,8 @@ func SetupRouter(
 		return nil
 	}))
 	r.Use(middleware2.ServerTiming(cfg.Server.EnableServerTiming))
+	// 管理员封禁的 IP / 网段：在前端页面与全部接口之前拦截（健康检查除外）。
+	r.Use(middleware2.IPBanGuard(ipBanService))
 
 	// Serve embedded frontend with settings injection if available
 	if web.HasEmbeddedFrontend() {

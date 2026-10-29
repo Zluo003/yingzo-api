@@ -68,7 +68,12 @@ function mountRegister() {
       stubs: {
         AuthLayout: { template: '<div><slot /><slot name="footer" /></div>' },
         Icon: true,
-        TurnstileWidget: { template: '<div data-testid="turnstile-widget" />' },
+        TurnstileWidget: {
+          props: ['imageEnabled'],
+          emits: ['verify', 'expire'],
+          methods: { reset() {} },
+          template: '<div data-testid="turnstile-widget" />'
+        },
         LoginAgreementPrompt: true,
         EmailOAuthButtons: true,
         LinuxDoOAuthSection: true,
@@ -88,6 +93,34 @@ describe('RegisterView invitation layout', () => {
     showErrorMock.mockReset()
     getPublicSettingsMock.mockResolvedValue(publicSettings)
     registerMock.mockResolvedValue({})
+  })
+
+  it('requires the self-hosted captcha and sends its dedicated proof fields', async () => {
+    getPublicSettingsMock.mockResolvedValueOnce({
+      ...publicSettings, turnstile_enabled: false, image_captcha_enabled: true
+    })
+    const wrapper = mountRegister()
+    await flushPromises()
+    await wrapper.get('#email').setValue('captcha@example.com')
+    await wrapper.get('#password').setValue('secret-123')
+    await wrapper.get('form').trigger('submit.prevent')
+    expect(registerMock).not.toHaveBeenCalled()
+    wrapper.getComponent({ ref: 'turnstileRef' }).vm.$emit('verify', 'local-captcha-id', 'K7MP')
+    await wrapper.get('form').trigger('submit.prevent')
+    await flushPromises()
+    expect(registerMock).toHaveBeenCalledWith(expect.objectContaining({
+      image_captcha_id: 'local-captcha-id', image_captcha_code: 'K7MP',
+      turnstile_token: undefined, tencent_captcha_ticket: undefined
+    }))
+  })
+
+  it('hides the captcha when the administrator disables all providers', async () => {
+    getPublicSettingsMock.mockResolvedValueOnce({
+      ...publicSettings, turnstile_enabled: false, image_captcha_enabled: false
+    })
+    const wrapper = mountRegister()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="registration-turnstile"]').exists()).toBe(false)
   })
 
   it('keeps the optional affiliate invitation field before Turnstile', async () => {

@@ -401,6 +401,9 @@ export interface SystemSettings {
   email_verify_enabled: boolean;
   registration_email_suffix_whitelist: string[];
   registration_email_domain_quota_enabled: boolean;
+  // 单 IP（IPv4 地址 / IPv6 /64 网段）自助注册上限：0 = 不限制，最大 1000000
+  registration_ip_daily_limit: number;
+  registration_ip_total_limit: number;
   promo_code_enabled: boolean;
   password_reset_enabled: boolean;
   frontend_url: string;
@@ -515,6 +518,8 @@ export interface SystemSettings {
   aliyun_captcha_scene_id: string;
   aliyun_captcha_prefix: string;
   aliyun_captcha_region: string;
+  // 自研图形验证码（与 Turnstile / 腾讯 / 阿里云互斥）
+  image_captcha_enabled: boolean;
   api_key_acl_trust_forwarded_ip: boolean;
   forwarded_client_ip_headers: string[];
 
@@ -751,6 +756,8 @@ export interface UpdateSettingsRequest {
   email_verify_enabled?: boolean;
   registration_email_suffix_whitelist?: string[];
   registration_email_domain_quota_enabled?: boolean;
+  registration_ip_daily_limit?: number;
+  registration_ip_total_limit?: number;
   promo_code_enabled?: boolean;
   password_reset_enabled?: boolean;
   frontend_url?: string;
@@ -857,6 +864,7 @@ export interface UpdateSettingsRequest {
   aliyun_captcha_scene_id?: string;
   aliyun_captcha_prefix?: string;
   aliyun_captcha_region?: string;
+  image_captcha_enabled?: boolean;
   api_key_acl_trust_forwarded_ip?: boolean;
   forwarded_client_ip_headers?: string[];
   linuxdo_connect_enabled?: boolean;
