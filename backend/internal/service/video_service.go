@@ -261,6 +261,18 @@ func (s *VideoService) createTask(ctx context.Context, input *VideoCreateInput) 
 	}
 	inboundEndpoint := normalizedVideoEndpoint(input.InboundEndpoint)
 	if err := s.billCreatedTask(ctx, task, input.APIKey, input.Subscription, account, input.RequestPayloadHash, input.UserAgent, input.IPAddress, inboundEndpoint, upstreamEndpoint); err != nil {
+		// A rejected precharge must not leave an unstarted task queued forever.
+		if errors.Is(err, ErrInsufficientBalance) || errors.Is(err, ErrBillingServiceUnavailable) {
+			failureCtx, cancel := detachedBillingContext(ctx)
+			defer cancel()
+			now := time.Now().UTC()
+			if _, updateErr := s.taskRepo.UpdateByPublicID(failureCtx, task.PublicID, VideoTaskUpdate{
+				Status: stringPtr(VideoTaskStatusFailed), CompletedAt: &now,
+				ErrorJSON: map[string]any{"code": "video_precharge_rejected", "message": "Video precharge rejected"},
+			}); updateErr != nil {
+				slog.Error("failed to close rejected video task", "task_id", task.PublicID, "error", updateErr)
+			}
+		}
 		return nil, err
 	}
 
@@ -1373,16 +1385,17 @@ func (s *VideoService) applyVideoUsageBilling(ctx context.Context, usageLog *Usa
 		billingMode = string(BillingModeVideo)
 	}
 	applied, billingErr := applyUsageBilling(ctx, usageLog.RequestID, usageLog, &postUsageBillingParams{
-		Cost:                  &CostBreakdown{OutputCost: usageLog.OutputCost, TotalCost: usageLog.TotalCost, ActualCost: usageLog.ActualCost, BillingMode: billingMode},
-		User:                  apiKey.User,
-		APIKey:                apiKey,
-		Account:               account,
-		Subscription:          subscription,
-		RequestPayloadHash:    payloadHash,
-		IsSubscriptionBill:    isSubscriptionBill,
-		AccountRateMultiplier: account.BillingRateMultiplier(),
-		APIKeyService:         s.apiKeyService,
-		Platform:              PlatformVideo,
+		Cost:                     &CostBreakdown{OutputCost: usageLog.OutputCost, TotalCost: usageLog.TotalCost, ActualCost: usageLog.ActualCost, BillingMode: billingMode},
+		User:                     apiKey.User,
+		APIKey:                   apiKey,
+		Account:                  account,
+		Subscription:             subscription,
+		RequestPayloadHash:       payloadHash,
+		IsSubscriptionBill:       isSubscriptionBill,
+		AccountRateMultiplier:    account.BillingRateMultiplier(),
+		APIKeyService:            s.apiKeyService,
+		Platform:                 PlatformVideo,
+		RequireSufficientBalance: true,
 	}, s.billingDeps(), s.usageBillingRepo)
 	if billingErr != nil {
 		return billingErr

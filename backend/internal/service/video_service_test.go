@@ -948,6 +948,69 @@ func TestVideoServiceCreateTaskReturnsQueuedLocalTaskAndStartsLifecycle(t *testi
 	require.Empty(t, task.UpstreamResponseJSON)
 }
 
+type concurrentVideoBillingRepo struct {
+	UsageBillingRepository
+	mu      sync.Mutex
+	balance float64
+}
+
+func (r *concurrentVideoBillingRepo) Apply(_ context.Context, cmd *UsageBillingCommand) (*UsageBillingApplyResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if cmd.RequiresSufficientBalance() && r.balance < cmd.BalanceCost {
+		return nil, ErrInsufficientBalance
+	}
+	r.balance -= cmd.BalanceCost
+	return &UsageBillingApplyResult{Applied: true}, nil
+}
+
+func TestVideoConcurrentPrechargeRejectsUnaffordableTasksBeforeLifecycle(t *testing.T) {
+	groupID := int64(20)
+	key := &APIKey{ID: 10, UserID: 100, GroupID: &groupID, User: &User{ID: 100, Balance: 100}, Group: &Group{ID: groupID, Platform: PlatformVideo, RateMultiplier: 1}}
+	account := Account{ID: 30, Platform: PlatformVideo, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Credentials: map[string]any{"api_key": "fixture", "model_mapping": map[string]any{VideoModelSeedance20: VideoModelSeedance20}}}
+	tasks := newVideoTaskMemoryRepo()
+	billing := &concurrentVideoBillingRepo{balance: 4}
+	svc := NewVideoService(&videoAccountRepoStub{accounts: []Account{account}}, tasks,
+		&videoPricingMemoryRepo{rule: &VideoGroupPricingRule{GroupID: groupID, ModelCode: VideoModelSeedance20, Resolution: VideoResolution720P, CreditsPerSecond: 0.2, Enabled: true}},
+		nil, billing, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	var lifecycleMu sync.Mutex
+	started := 0
+	svc.startLifecycleFunc = func(VideoTaskLifecycleInput) {
+		lifecycleMu.Lock()
+		started++
+		lifecycleMu.Unlock()
+	}
+	var wg sync.WaitGroup
+	errs := make(chan error, 20)
+	for i := 0; i < cap(errs); i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := svc.CreateTask(context.Background(), &VideoCreateInput{APIKey: key, Request: &VideoCreateRequest{Model: VideoModelSeedance20, Prompt: "move", Duration: 8, Resolution: VideoResolution720P}})
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	accepted := 0
+	for err := range errs {
+		if err == nil {
+			accepted++
+		} else {
+			require.ErrorIs(t, err, ErrInsufficientBalance)
+		}
+	}
+	require.Equal(t, 2, accepted)
+	require.Equal(t, accepted, started)
+	require.InDelta(t, 0.8, billing.balance, 1e-8)
+	for _, task := range tasks.tasks {
+		if task.BilledAt == nil {
+			require.Equal(t, VideoTaskStatusFailed, task.Status)
+			require.NotNil(t, task.CompletedAt)
+		}
+	}
+}
+
 func TestVideoServiceCreateTaskIdempotencyReplaysWithoutDuplicateTaskOrBilling(t *testing.T) {
 	previousCoordinator := DefaultIdempotencyCoordinator()
 	SetDefaultIdempotencyCoordinator(NewIdempotencyCoordinator(newInMemoryIdempotencyRepo(), DefaultIdempotencyConfig()))
@@ -1711,10 +1774,13 @@ func (r *videoPricingMemoryRepo) GetEnabledRule(ctx context.Context, groupID int
 }
 
 type videoAccountRepoStub struct {
+	mu       sync.Mutex
 	accounts []Account
 }
 
 func (r *videoAccountRepoStub) GetByID(ctx context.Context, id int64) (*Account, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	for i := range r.accounts {
 		if r.accounts[i].ID == id {
 			account := r.accounts[i]
@@ -1725,6 +1791,8 @@ func (r *videoAccountRepoStub) GetByID(ctx context.Context, id int64) (*Account,
 }
 
 func (r *videoAccountRepoStub) ListSchedulableByGroupIDAndPlatform(ctx context.Context, groupID int64, platform string) ([]Account, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var out []Account
 	for _, account := range r.accounts {
 		if account.Platform == platform && account.IsSchedulable() {
@@ -1735,6 +1803,8 @@ func (r *videoAccountRepoStub) ListSchedulableByGroupIDAndPlatform(ctx context.C
 }
 
 func (r *videoAccountRepoStub) UpdateLastUsed(ctx context.Context, id int64) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	for i := range r.accounts {
 		if r.accounts[i].ID == id {
 			now := time.Now()

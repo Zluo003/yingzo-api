@@ -72,16 +72,17 @@ type usageLogBestEffortWriter interface {
 
 // postUsageBillingParams 统一扣费所需的参数
 type postUsageBillingParams struct {
-	Cost                  *CostBreakdown
-	User                  *User
-	APIKey                *APIKey
-	Account               *Account
-	Subscription          *UserSubscription
-	RequestPayloadHash    string
-	IsSubscriptionBill    bool
-	AccountRateMultiplier float64
-	APIKeyService         APIKeyQuotaUpdater
-	Platform              string // 来自 APIKey 关联 Group 的平台标识
+	Cost                     *CostBreakdown
+	User                     *User
+	APIKey                   *APIKey
+	Account                  *Account
+	Subscription             *UserSubscription
+	RequestPayloadHash       string
+	IsSubscriptionBill       bool
+	AccountRateMultiplier    float64
+	APIKeyService            APIKeyQuotaUpdater
+	Platform                 string // 来自 APIKey 关联 Group 的平台标识
+	RequireSufficientBalance bool
 }
 
 // PlatformFromAPIKey 从 APIKey 关联的 Group 推导 platform 名称。
@@ -280,12 +281,13 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 	}
 
 	cmd := &UsageBillingCommand{
-		RequestID:          requestID,
-		APIKeyID:           p.APIKey.ID,
-		UserID:             p.User.ID,
-		AccountID:          p.Account.ID,
-		AccountType:        p.Account.Type,
-		RequestPayloadHash: strings.TrimSpace(p.RequestPayloadHash),
+		RequestID:                requestID,
+		APIKeyID:                 p.APIKey.ID,
+		UserID:                   p.User.ID,
+		AccountID:                p.Account.ID,
+		AccountType:              p.Account.Type,
+		RequestPayloadHash:       strings.TrimSpace(p.RequestPayloadHash),
+		RequireSufficientBalance: p.RequireSufficientBalance,
 	}
 	if usageLog != nil {
 		cmd.Model = usageLog.Model
@@ -295,6 +297,13 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 		cmd.CacheCreationTokens = usageLog.CacheCreationTokens
 		cmd.CacheReadTokens = usageLog.CacheReadTokens
 		cmd.ImageCount = usageLog.ImageCount
+		if usageLog.ImageCount > 0 || usageLog.VideoCount > 0 || usageLog.VideoTaskID != nil || usageLog.MusicMode != nil {
+			cmd.RequireSufficientBalance = true
+		}
+		if usageLog.MediaType != nil {
+			media := &UsageBillingCommand{MediaType: *usageLog.MediaType}
+			cmd.RequireSufficientBalance = cmd.RequireSufficientBalance || media.RequiresSufficientBalance()
+		}
 		if usageLog.ServiceTier != nil {
 			cmd.ServiceTier = *usageLog.ServiceTier
 		}
@@ -304,6 +313,12 @@ func buildUsageBillingCommand(requestID string, usageLog *UsageLog, p *postUsage
 		if usageLog.SubscriptionID != nil {
 			cmd.SubscriptionID = usageLog.SubscriptionID
 		}
+	}
+	// The policy flag is intentionally excluded from the fingerprint so retries
+	// of already billed media requests remain compatible across this upgrade.
+	switch p.Cost.BillingMode {
+	case string(BillingModeImage), string(BillingModeVideo), string(BillingModeVideoDuration):
+		cmd.RequireSufficientBalance = true
 	}
 
 	// Record subscription / balance cost using ActualCost so the group (and any
@@ -352,6 +367,9 @@ func applyUsageBilling(ctx context.Context, requestID string, usageLog *UsageLog
 	}
 
 	cmd := buildUsageBillingCommand(requestID, usageLog, p)
+	if cmd != nil && cmd.RequiresSufficientBalance() && (cmd.RequestID == "" || repo == nil) {
+		return false, ErrBillingServiceUnavailable
+	}
 	if cmd == nil || cmd.RequestID == "" || repo == nil {
 		postUsageBilling(ctx, p, deps)
 		return true, nil

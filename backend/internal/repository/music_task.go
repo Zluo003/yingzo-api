@@ -75,9 +75,10 @@ func (r *durableMusicLedger) Accept(ctx context.Context, t *service.DurableMusic
 		return nil, false, err
 	}
 	cmd := t.Quote.Charge
-	// Admission is stricter than postpaid settlement: never send an unaffordable job.
+	cmd.RequireSufficientBalance = true
+	// balance already excludes frozen batch holds; do not subtract them twice.
 	var balance float64
-	if err := tx.QueryRowContext(ctx, `SELECT balance-frozen_balance FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, t.UserID).Scan(&balance); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT balance FROM users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, t.UserID).Scan(&balance); err != nil {
 		return nil, false, err
 	}
 	if cmd.BalanceCost > 0 && cmd.BalanceCost > balance {
@@ -260,6 +261,7 @@ func (r *durableMusicLedger) Finalize(ctx context.Context, t *service.DurableMus
 	billing := &usageBillingRepository{db: r.db}
 	if delta != 0 {
 		cmd := t.Quote.Charge
+		cmd.RequireSufficientBalance = true
 		cmd.RequestID = "music:" + t.ID + ":" + event
 		cmd.RequestFingerprint = ""
 		cmd.AccountQuotaCost = 0

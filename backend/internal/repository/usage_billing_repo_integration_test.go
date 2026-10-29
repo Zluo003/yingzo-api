@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +15,59 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
+
+func TestUsageBillingRepositoryApply_ConcurrentMediaCannotOverdrawAcrossAPIKeys(t *testing.T) {
+	ctx := context.Background()
+	client := testEntClient(t)
+	repo := NewUsageBillingRepository(client, integrationDB)
+	user := mustCreateUser(t, client, &service.User{Email: uuid.NewString() + "@media-billing.test", PasswordHash: "hash", Balance: 5})
+	keys := []*service.APIKey{
+		mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-" + uuid.NewString(), Name: "media-one"}),
+		mustCreateApiKey(t, client, &service.APIKey{UserID: user.ID, Key: "sk-" + uuid.NewString(), Name: "media-two"}),
+	}
+	media := []string{"video", "image", "music"}
+	commands := make([]*service.UsageBillingCommand, 30)
+	var wg sync.WaitGroup
+	errs := make(chan error, len(commands))
+	for i := range commands {
+		cmd := &service.UsageBillingCommand{RequestID: media[i%3] + ":" + uuid.NewString(), APIKeyID: keys[i%2].ID, UserID: user.ID, BalanceCost: 2, APIKeyQuotaCost: 2}
+		commands[i] = cmd
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := repo.Apply(ctx, cmd)
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	accepted := 0
+	for err := range errs {
+		if err == nil {
+			accepted++
+		} else {
+			require.ErrorIs(t, err, service.ErrInsufficientBalance)
+		}
+	}
+	require.Equal(t, 2, accepted)
+	var balance, quotaUsed float64
+	var claims int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT balance FROM users WHERE id=$1`, user.ID).Scan(&balance))
+	require.Equal(t, 1.0, balance)
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT SUM(quota_used) FROM api_keys WHERE user_id=$1`, user.ID).Scan(&quotaUsed))
+	require.Equal(t, 4.0, quotaUsed)
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_billing_dedup WHERE api_key_id IN ($1,$2)`, keys[0].ID, keys[1].ID).Scan(&claims))
+	require.Equal(t, accepted, claims, "rejected debits must roll back both quota and idempotency claims")
+	// Failed attempts remain retryable after recharge; successful ones remain deduplicated.
+	_, err := integrationDB.ExecContext(ctx, `UPDATE users SET balance=balance+100 WHERE id=$1`, user.ID)
+	require.NoError(t, err)
+	for _, cmd := range commands {
+		_, err := repo.Apply(ctx, cmd)
+		require.NoError(t, err)
+	}
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT balance FROM users WHERE id=$1`, user.ID).Scan(&balance))
+	require.Equal(t, 45.0, balance)
+}
 
 func TestUsageBillingRepositoryApply_DeduplicatesBalanceBilling(t *testing.T) {
 	ctx := context.Background()

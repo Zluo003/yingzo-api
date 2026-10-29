@@ -36,7 +36,7 @@ func TestDeductUsageBillingBalance_UsesSufficientBalanceGuard(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(7.5))
 	mock.ExpectCommit()
 
-	newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, 42, 2.5)
+	newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, 42, 2.5, false)
 	require.NoError(t, err)
 	require.True(t, sufficient)
 	require.InDelta(t, 7.5, newBalance, 0.000001)
@@ -61,7 +61,7 @@ func TestDeductUsageBillingBalance_RecordsOverdraftWhenGuardMisses(t *testing.T)
 		WillReturnRows(sqlmock.NewRows([]string{"balance"}).AddRow(-5.0))
 	mock.ExpectCommit()
 
-	newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, 42, 10)
+	newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, 42, 10, false)
 	require.NoError(t, err)
 	require.False(t, sufficient)
 	require.InDelta(t, -5.0, newBalance, 0.000001)
@@ -99,6 +99,29 @@ func TestApplyUsageBillingEffects_FlagsBalanceOverdraft(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestApplyUsageBillingEffects_RejectsMediaOverdraft(t *testing.T) {
+	for _, media := range []string{"image", "video", "music"} {
+		t.Run(media, func(t *testing.T) {
+			ctx := context.Background()
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer func() { _ = db.Close() }()
+			mock.ExpectBegin()
+			tx, err := db.BeginTx(ctx, nil)
+			require.NoError(t, err)
+			mock.ExpectQuery(conditionalBalanceDeductSQL).WithArgs(10.0, int64(42)).WillReturnError(sql.ErrNoRows)
+			mock.ExpectQuery(userExistsForBillingSQL).WithArgs(int64(42)).WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(1))
+			mock.ExpectRollback()
+			err = (&usageBillingRepository{}).applyUsageBillingEffects(ctx, tx, &service.UsageBillingCommand{
+				UserID: 42, MediaType: media, BalanceCost: 10, APIKeyQuotaCost: 10, APIKeyRateLimitCost: 10,
+			}, &service.UsageBillingApplyResult{})
+			require.ErrorIs(t, err, service.ErrInsufficientBalance)
+			require.NoError(t, tx.Rollback())
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
 func TestDeductUsageBillingBalance_ReturnsUserNotFoundWhenNoUserUpdated(t *testing.T) {
 	ctx := context.Background()
 	db, mock, err := sqlmock.New()
@@ -116,7 +139,7 @@ func TestDeductUsageBillingBalance_ReturnsUserNotFoundWhenNoUserUpdated(t *testi
 		WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 
-	_, _, err = deductUsageBillingBalance(ctx, tx, 42, 10)
+	_, _, err = deductUsageBillingBalance(ctx, tx, 42, 10, false)
 	require.ErrorIs(t, err, service.ErrUserNotFound)
 	require.NoError(t, tx.Rollback())
 	require.NoError(t, mock.ExpectationsWereMet())

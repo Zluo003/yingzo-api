@@ -166,7 +166,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		ctx := context.WithValue(c.Request.Context(), ctxkey.UserID, apiKey.User.ID)
 		c.Request = c.Request.WithContext(ctx)
 		billingInfoRequest := c.Request.URL.Path == "/v1/sub2api/billing"
-		// Async image task polling only reads data that already belongs to the
+		// Prepaid media task polling only reads data that already belongs to the
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
 		replay := isAsyncImageSubmission(c.Request.Method, c.Request.URL.Path, c.GetHeader("Prefer")) && apiKeyService.HasAcceptedImageTask(c.Request.Context(), apiKey.ID, c.GetHeader("Idempotency-Key"))
@@ -174,7 +174,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		musicReplay := c.Request.Method == http.MethodPost && (c.Request.URL.Path == "/v1/music/generations" || strings.HasPrefix(c.Request.URL.Path, "/v1/music/generations/")) && apiKeyService.HasAcceptedMusicTask(c.Request.Context(), apiKey.ID, c.GetHeader("Idempotency-Key"))
 		c.Set("async_music_accepted_replay", musicReplay)
 		c.Set(ContextKeyAsyncImageTaskReplay, replay)
-		skipBilling := service.IsAsyncImageExecution(c.Request.Context()) || replay || musicReplay || (c.Request.Method == http.MethodGet && strings.HasPrefix(c.Request.URL.Path, "/v1/music/tasks/")) || c.Request.URL.Path == "/v1/usage" || c.Request.URL.Path == "/v1/account" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		skipBilling := service.IsAsyncImageExecution(c.Request.Context()) || replay || musicReplay || (c.Request.Method == http.MethodGet && strings.HasPrefix(c.Request.URL.Path, "/v1/music/tasks/")) || c.Request.URL.Path == "/v1/usage" || c.Request.URL.Path == "/v1/account" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path) || isPrepaidVideoTaskRead(c.Request.Method, c.Request.URL.Path, apiKey.Group)
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
@@ -373,6 +373,19 @@ func isAsyncImageTaskRead(method, path string) bool {
 		return false
 	}
 	return strings.HasPrefix(path, "/v1/images/tasks/") || strings.HasPrefix(path, "/images/tasks/")
+}
+
+func isPrepaidVideoTaskRead(method, path string, group *service.Group) bool {
+	if method != http.MethodGet || group == nil || group.Platform == service.PlatformGrok || (group.Platform != service.PlatformVideo && !group.IsAgent()) {
+		return false
+	}
+	for _, root := range []string{"/v1/videos/", "/videos/"} {
+		if strings.HasPrefix(path, root) {
+			id := strings.TrimSuffix(strings.TrimPrefix(path, root), "/content")
+			return strings.HasPrefix(id, "video_") && len(id) > len("video_") && !strings.Contains(id, "/")
+		}
+	}
+	return false
 }
 
 // GetAPIKeyFromContext 从上下文中获取API key

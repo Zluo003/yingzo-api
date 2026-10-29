@@ -186,7 +186,7 @@ func (r *usageBillingRepository) applyUsageBillingEffects(ctx context.Context, t
 	}
 
 	if cmd.BalanceCost > 0 {
-		newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, cmd.BalanceCost)
+		newBalance, sufficient, err := deductUsageBillingBalance(ctx, tx, cmd.UserID, cmd.BalanceCost, cmd.RequiresSufficientBalance())
 		if err != nil {
 			return err
 		}
@@ -402,7 +402,7 @@ func decrementUsageBillingAccountQuota(ctx context.Context, tx *sql.Tx, accountI
 	return service.ErrUserNotFound
 }
 
-func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64) (float64, bool, error) {
+func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, amount float64, requireSufficientBalance bool) (float64, bool, error) {
 	var newBalance float64
 	err := tx.QueryRowContext(ctx, `
 		UPDATE users
@@ -416,6 +416,16 @@ func deductUsageBillingBalance(ctx context.Context, tx *sql.Tx, userID int64, am
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return 0, false, err
+	}
+	if requireSufficientBalance {
+		exists, err := userExistsForBilling(ctx, tx, userID)
+		if err != nil {
+			return 0, false, err
+		}
+		if !exists {
+			return 0, false, service.ErrUserNotFound
+		}
+		return 0, false, service.ErrInsufficientBalance
 	}
 
 	err = tx.QueryRowContext(ctx, `

@@ -154,6 +154,32 @@ func TestDurableImageLedger(t *testing.T) {
 		require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM image_tasks WHERE id=$1`, task.ID).Scan(&count))
 		require.Zero(t, count)
 	})
+	t.Run("settlement_cannot_overdraw_and_can_refund", func(t *testing.T) {
+		start := balance()
+		t.Cleanup(func() {
+			_, err := integrationDB.Exec(`UPDATE users SET balance=$2 WHERE id=$1`, user.ID, start)
+			require.NoError(t, err)
+		})
+		task, _, err := ledger.Accept(ctx, makeTask("settlement-no-overdraft", 2))
+		require.NoError(t, err)
+		claimed, err := ledger.Claim(ctx)
+		require.NoError(t, err)
+		require.Equal(t, task.ID, claimed.ID)
+		_, err = integrationDB.Exec(`UPDATE users SET balance=0 WHERE id=$1`, user.ID)
+		require.NoError(t, err)
+		err = ledger.Finalize(ctx, claimed, &service.UsageLog{ActualCost: 3, ImageCount: 1}, true)
+		require.ErrorIs(t, err, service.ErrInsufficientBalance)
+		require.Zero(t, balance())
+		stored, err := ledger.Find(ctx, service.ImageTaskOwner{UserID: user.ID, APIKeyID: key.ID}, task.ID, false)
+		require.NoError(t, err)
+		require.Equal(t, service.ImageTaskStatusProcessing, stored.Status)
+		var events int
+		require.NoError(t, integrationDB.QueryRow(`SELECT COUNT(*) FROM usage_logs WHERE image_task_id=$1`, task.ID).Scan(&events))
+		require.Equal(t, 1, events, "failed settlement must leave no partial ledger entries")
+		require.NoError(t, ledger.Finalize(ctx, claimed, nil, false))
+		require.NoError(t, ledger.Finalize(ctx, claimed, nil, false))
+		require.Equal(t, 2.0, balance())
+	})
 	t.Run("execution_lease_loss_is_not_replayed", func(t *testing.T) {
 		start := balance()
 		task, _, err := ledger.Accept(ctx, makeTask("lost-execution", 2))
@@ -325,11 +351,11 @@ func TestDurableImageLedger(t *testing.T) {
 		repo := newUsageLogRepositoryWithSQL(client, integrationDB)
 		stats, err := repo.GetStatsWithFilters(ctx, usagestats.UsageLogFilters{UserID: user.ID})
 		require.NoError(t, err)
-		// Include the six successful Midjourney operations at 0.7 each.
-		require.Equal(t, int64(20), stats.TotalRequests)
+		// Include six Midjourney operations and the refunded settlement rejection.
+		require.Equal(t, int64(21), stats.TotalRequests)
 		require.InDelta(t, 12.8, stats.TotalActualCost, 1e-8)
 		require.Len(t, stats.Endpoints, 1)
-		require.Equal(t, int64(20), stats.Endpoints[0].Requests)
+		require.Equal(t, int64(21), stats.Endpoints[0].Requests)
 		require.InDelta(t, 12.8, stats.Endpoints[0].ActualCost, 1e-8)
 	})
 }

@@ -198,4 +198,23 @@ func TestMusicLedger(t *testing.T) {
 	var state string
 	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT record->>'refund_status' FROM music_tasks WHERE id=$1`, free.ID).Scan(&state))
 	require.Equal(t, "refunded", state)
+
+	// A final adjustment must not turn an exhausted balance into debt, including
+	// tasks persisted before the strict-balance policy was introduced.
+	_, err = integrationDB.ExecContext(ctx, `UPDATE users SET balance=2 WHERE id=$1`, user.ID)
+	require.NoError(t, err)
+	settlementTask, _, err := ledger.Accept(ctx, makeTask("settlement-no-overdraft", "song", 2))
+	require.NoError(t, err)
+	claimed, err := ledger.Claim(ctx)
+	require.NoError(t, err)
+	require.Equal(t, settlementTask.ID, claimed.ID)
+	err = ledger.Finalize(ctx, claimed, &service.UsageLog{ActualCost: 3}, true)
+	require.ErrorIs(t, err, service.ErrInsufficientBalance)
+	require.Zero(t, balance())
+	var events int
+	require.NoError(t, integrationDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM usage_logs WHERE music_task_id=$1`, settlementTask.ID).Scan(&events))
+	require.Equal(t, 1, events)
+	require.NoError(t, ledger.Finalize(ctx, claimed, nil, false))
+	require.NoError(t, ledger.Finalize(ctx, claimed, nil, false))
+	require.Equal(t, 2.0, balance())
 }

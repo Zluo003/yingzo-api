@@ -42,6 +42,29 @@ type UsageBillingCommand struct {
 	APIKeyQuotaCost     float64
 	APIKeyRateLimitCost float64
 	AccountQuotaCost    float64
+	// Prepaid media must reject an unaffordable debit inside the billing transaction.
+	RequireSufficientBalance bool
+}
+
+// RequiresSufficientBalance also covers persisted media commands from older versions.
+func (c *UsageBillingCommand) RequiresSufficientBalance() bool {
+	if c == nil {
+		return false
+	}
+	if c.RequireSufficientBalance || c.ImageCount > 0 {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(c.MediaType)) {
+	case "image", "video", "music":
+		return true
+	}
+	// Persisted quotes from older versions may not carry a media type or flag.
+	for _, prefix := range []string{"image:", "video:", "music:"} {
+		if strings.HasPrefix(strings.TrimSpace(c.RequestID), prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *UsageBillingCommand) Normalize() {
