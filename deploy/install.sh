@@ -37,6 +37,7 @@ INSTALL_DIR="/opt/yingzo-api"
 SERVICE_NAME="yingzo-api"
 SERVICE_USER="yingzo-api"
 CONFIG_DIR="/etc/yingzo-api"
+SYSTEMD_DIR="/etc/systemd/system"
 
 # Server configuration (will be set by user)
 SERVER_HOST="0.0.0.0"
@@ -668,6 +669,13 @@ download_and_extract() {
         cp -r "$TEMP_DIR/deploy/"* "$INSTALL_DIR/" 2>/dev/null || true
     fi
 
+    # Keep release sources separate from the running Node service. Its installer
+    # stages dependencies and health-checks the replacement before restarting Go.
+    rm -rf "$INSTALL_DIR/midjourney-discord-source"
+    if [ -d "$TEMP_DIR/midjourney-discord" ]; then
+        cp -R "$TEMP_DIR/midjourney-discord" "$INSTALL_DIR/midjourney-discord-source"
+    fi
+
     print_success "$(msg 'binary_installed') $INSTALL_DIR/yingzo-api"
 }
 
@@ -709,6 +717,10 @@ setup_directories() {
     # Set ownership
     chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
     chown -R "$SERVICE_USER:$SERVICE_USER" "$CONFIG_DIR"
+    if [ -f "$CONFIG_DIR/midjourney.env" ]; then
+        chown root:root "$CONFIG_DIR/midjourney.env"
+        chmod 0600 "$CONFIG_DIR/midjourney.env"
+    fi
 
     print_success "$(msg 'dirs_configured')"
 }
@@ -718,7 +730,7 @@ install_service() {
     print_info "$(msg 'installing_service')"
 
     # Create service file with configured host and port
-    cat > /etc/systemd/system/yingzo-api.service << EOF
+    cat > "$SYSTEMD_DIR/yingzo-api.service" << EOF
 [Unit]
 Description=Sub2API - AI API Gateway Platform
 Documentation=https://github.com/Zluo003/yingzo-api
@@ -803,9 +815,50 @@ prepare_media_runtime() {
     fi
 }
 
+# Optional native Discord companion. Older gateway releases can use the latest
+# helper to fetch their matching companion archive without replacing Go itself.
+install_midjourney() (
+    set -e
+    local version="${1:-}" helper helper_dir source_dir="$INSTALL_DIR/midjourney-discord-source"
+    local helper_args=()
+    helper="$INSTALL_DIR/install-midjourney.sh"
+    if [ ! -f "$helper" ]; then
+        helper="$(dirname "${BASH_SOURCE[0]}")/install-midjourney.sh"
+    fi
+    if [ ! -f "$helper" ]; then
+        helper_dir=$(mktemp -d)
+        trap 'rm -rf "$helper_dir"' EXIT
+        helper="$helper_dir/install-midjourney.sh"
+        curl -q --fail --location --silent --show-error --connect-timeout 10 --max-time 60 \
+            "https://raw.githubusercontent.com/$GITHUB_REPO/main/deploy/install-midjourney.sh" -o "$helper" || return 1
+    fi
+    if [ -n "$version" ]; then
+        helper_args=(--version "$version")
+    elif [ -d "$source_dir" ]; then
+        helper_args=(--source "$source_dir")
+    fi
+    MJ_INSTALL_DIR="$INSTALL_DIR" MJ_CONFIG_DIR="$CONFIG_DIR" MJ_SYSTEMD_DIR="$SYSTEMD_DIR" \
+        MJ_SERVICE_USER="$SERVICE_USER" MJ_GATEWAY_SERVICE="$SERVICE_NAME" GITHUB_REPO="$GITHUB_REPO" \
+        bash "$helper" "${helper_args[@]}"
+)
+
+prepare_midjourney_runtime() {
+    # A normal gateway install stays independent of Node unless MJ was enabled.
+    if [ ! -f "$SYSTEMD_DIR/yingzo-midjourney-discord.service" ] || \
+        ! systemctl is-enabled --quiet yingzo-midjourney-discord; then
+        return 0
+    fi
+    if [ ! -d "$INSTALL_DIR/midjourney-discord-source" ]; then
+        print_warning 'This release has no Discord companion; keeping the existing MJ service.'
+        return 0
+    fi
+    install_midjourney
+}
+
 # Start service
 start_service() {
     prepare_media_runtime
+    prepare_midjourney_runtime || { systemctl start "$SERVICE_NAME" || true; return 1; }
     print_info "$(msg 'starting_service')"
 
     if systemctl start yingzo-api; then
@@ -904,6 +957,7 @@ upgrade() {
     chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/yingzo-api"
 
     prepare_media_runtime
+    prepare_midjourney_runtime || { systemctl start "$SERVICE_NAME" || true; return 1; }
 
     # Start service
     print_info "$(msg 'starting_service')"
@@ -968,6 +1022,7 @@ install_version() {
     chown "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR/yingzo-api"
 
     prepare_media_runtime
+    prepare_midjourney_runtime || { systemctl start "$SERVICE_NAME" || true; return 1; }
 
     # Start service
     print_info "$(msg 'starting_service')"
@@ -1012,9 +1067,12 @@ uninstall() {
     print_info "$(msg 'stopping_service')"
     systemctl stop yingzo-api 2>/dev/null || true
     systemctl disable yingzo-api 2>/dev/null || true
+    systemctl stop yingzo-midjourney-discord 2>/dev/null || true
+    systemctl disable yingzo-midjourney-discord 2>/dev/null || true
 
     print_info "$(msg 'removing_files')"
-    rm -f /etc/systemd/system/yingzo-api.service
+    rm -f "$SYSTEMD_DIR/yingzo-api.service" "$SYSTEMD_DIR/yingzo-midjourney-discord.service"
+    rm -f "$SYSTEMD_DIR/yingzo-api.service.d/midjourney.conf"
     systemctl daemon-reload
 
     print_info "$(msg 'removing_install_dir')"
@@ -1183,6 +1241,13 @@ main() {
             list_versions
             exit 0
             ;;
+        install-mj)
+            check_root
+            detect_platform
+            check_dependencies
+            install_midjourney "$target_version"
+            exit 0
+            ;;
         uninstall|remove)
             check_root
             uninstall
@@ -1195,6 +1260,7 @@ main() {
             echo "  $(msg 'cmd_none')            $(msg 'cmd_install')"
             echo "  install              $(msg 'cmd_install')"
             echo "  upgrade              $(msg 'cmd_upgrade')"
+            echo "  install-mj           Install/configure the optional Midjourney Discord service"
             echo "  rollback <version>   $(msg 'cmd_install_version')"
             echo "  list-versions        $(msg 'cmd_list_versions')"
             echo "  uninstall            $(msg 'cmd_uninstall')"
@@ -1207,6 +1273,7 @@ main() {
             echo "  $0                        # Install latest version"
             echo "  $0 install -v v0.1.0      # Install specific version"
             echo "  $0 upgrade                # Upgrade to latest"
+            echo "  $0 install-mj             # Enable Discord for the installed gateway"
             echo "  $0 upgrade -v v0.2.0      # Upgrade to specific version"
             echo "  $0 rollback v0.1.0        # Rollback to v0.1.0"
             echo "  $0 list-versions          # List available versions"

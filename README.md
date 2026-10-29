@@ -118,6 +118,8 @@ curl -sSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/insta
 
 安装到 `/opt/yingzo-api`，注册 systemd 服务 `yingzo-api.service`（`systemctl status yingzo-api`）。脚本会拉取 GitHub Release 产物，可用 `UPDATE_GITHUB_TOKEN` 提高 API 限额。
 
+需要 Discord Midjourney 时，在已安装网关的服务器上，用新版安装脚本执行 `install-mj` 命令。脚本自动安装 Node.js 配套服务、生成共享密钥并配置 systemd；旧版 `v0.3.68` 网关也可单独使用新版 `deploy/install-midjourney.sh` 补装，详见 [MJ 部署指南](docs/MIDJOURNEY_AGENT_INTEGRATION.md#一键脚本--systemd-部署linux)。
+
 发行程序内嵌对应平台的 `ffprobe`，首次启动自动释放并校验，用于参考视频和音频探测；无需额外安装系统包。Docker 镜像也包含 `ffmpeg`。
 
 ### 方式三：手动运行二进制

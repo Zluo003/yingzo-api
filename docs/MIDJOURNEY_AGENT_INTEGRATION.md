@@ -8,11 +8,38 @@
 
 需要 Node.js 24 或对应容器。主网关仍是 Go；Discord 服务常驻以保持 WebSocket 连接。
 
+### 一键脚本 / systemd 部署（Linux）
+
+使用 `deploy/install.sh` 安装网关后，用新版安装脚本单独启用 MJ 伴随服务：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/install.sh | sudo bash -s -- install-mj
+```
+
+也可以从新版源码仓库或新版安装包中取得配套脚本。对于已经通过旧安装脚本部署的 `v0.3.68`，无需重装 Go 网关：
+
+```bash
+sudo bash deploy/install-midjourney.sh --version v0.3.68
+```
+
+以上路径是源码仓库中的路径；从 Release 解压安装包后也有 `deploy/` 目录。只复制了配套脚本时，运行 `sudo bash ./install-midjourney.sh --version v0.3.68` 即可。脚本未指定 `--version` 时会读取当前网关版本，下载并校验同一 Release 中的 MJ 源码。
+
+脚本自动安装所需 Node.js 24 运行时，以 `yingzo-api` 服务用户安装锁定依赖，创建并启用 `yingzo-midjourney-discord.service`，仅监听 `127.0.0.1:8081`。共享密钥自动生成到 root 专用文件 `/etc/yingzo-api/midjourney.env`，网关的 systemd drop-in 与 MJ 服务引用同一个文件；重复安装保留密钥与 `/opt/yingzo-api/data/midjourney-discord/` 中的任务数据。健康检查通过后，才重启原本正在运行的网关。
+
+```bash
+sudo systemctl status yingzo-midjourney-discord
+sudo journalctl -u yingzo-midjourney-discord -n 50
+```
+
+随后在管理后台对 MJ 账号执行连接测试。旧版 `v0.3.68` 主安装脚本仅安装 Go 网关，不会自动安装 MJ 服务；后台填写 Discord Token 无法替代这一步。新版主安装脚本会在升级时同步更新已经启用的 MJ 服务，普通网关安装无需 Node.js。
+
+### Docker Compose 部署
+
 在部署使用的 `.env` 中添加随机共享密钥（至少 32 字符）：
 
 ```dotenv
 MIDJOURNEY_BRIDGE_SECRET=替换为至少32字符的随机密钥
-MIDJOURNEY_BRIDGE_VERSION=0.3.68
+MIDJOURNEY_BRIDGE_VERSION=0.3.69
 ```
 
 从仓库根目录启动标准 Compose 和 Discord 服务叠加配置：
@@ -23,11 +50,11 @@ docker compose --env-file deploy/.env \
   -f deploy/docker-compose.midjourney.yml up -d --build
 ```
 
-Release 同时提供 `ghcr.io/zluo003/yingzo-midjourney-discord:0.3.68` 镜像（Linux amd64 / arm64）。使用已发布镜像时，将上面的 `up -d --build` 改为 `up -d --no-build`，可先运行相同 Compose 配置的 `pull`；只编译源码时保留 `--build`。安装包包含 Discord 服务源码、锁文件和本指南。
+Release 同时提供 `ghcr.io/zluo003/yingzo-midjourney-discord:0.3.69` 镜像（Linux amd64 / arm64）。使用已发布镜像时，将上面的 `up -d --build` 改为 `up -d --no-build`，可先运行相同 Compose 配置的 `pull`；只编译源码时保留 `--build`。安装包包含 Discord 服务源码、锁文件和本指南。
 
 桥接端口不对公网发布。其 SQLite 卷需要持久化；当前桥接服务部署一个实例，维护多个 Discord 用户会话。不要启动多个实例共享同一 SQLite 文件。网关可多实例部署，账号并发由现有 Redis 分布式并发锁约束。
 
-裸机部署：
+### 手动启动（开发或自定义进程管理）
 
 ```bash
 cd midjourney-discord
@@ -45,6 +72,8 @@ MIDJOURNEY_BRIDGE_SECRET=与桥接服务一致的密钥
 ```
 
 跨主机连接需使用受保护的内网或 HTTPS，桥接请求携带 Discord 用户令牌。
+
+### 账号池
 
 管理后台 → 账号管理 → **添加 MJ 账号**：
 
