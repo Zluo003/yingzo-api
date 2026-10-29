@@ -64,6 +64,7 @@ func TestSunoRejectsUnsupportedRequests(t *testing.T) {
 }
 func TestSunoAccountAndCatalog(t *testing.T) {
 	a := midjourneyTestAccount(7)
+	a.Credentials = map[string]any{"api_key": "secret", "base_url": "https://api.apimart.ai/v1/"}
 	a.Extra = map[string]any{"music_provider": SunoProvider}
 	require.NoError(t, normalizeSunoAccount(&a))
 	require.True(t, a.IsSuno())
@@ -168,6 +169,7 @@ func TestMusicWorkerDurableStages(t *testing.T) {
 			key.Group.Kind = "agent"
 			key.Group.SystemCode = "yingzo"
 			a := midjourneyTestAccount(7)
+			a.Credentials = map[string]any{"api_key": "secret", "base_url": "https://api.apimart.ai/v1/"}
 			a.Extra = map[string]any{"music_provider": SunoProvider}
 			ledger := &musicWorkerLedger{}
 			posts, gets := 0, 0

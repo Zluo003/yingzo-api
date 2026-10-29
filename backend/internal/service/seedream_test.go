@@ -129,6 +129,7 @@ func TestSeedreamPriceTierAliases(t *testing.T) {
 
 func seedreamTestAccount() Account {
 	a := midjourneyTestAccount(7)
+	a.Credentials = map[string]any{"api_key": "secret", "base_url": "https://api.apimart.ai/v1/"}
 	a.Extra["image_provider"] = SeedreamProvider
 	_ = normalizeSeedreamAccount(&a)
 	return a

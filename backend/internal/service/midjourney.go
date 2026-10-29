@@ -99,7 +99,8 @@ func ParseMidjourneyRequest(body []byte, action string) (*MidjourneyRequest, err
 			if r.Mode == "" {
 				r.Mode = "subtle"
 			}
-			if r.Mode != "subtle" && !((action == "upscale" && r.Mode == "creative") || (action == "variations" && r.Mode == "strong")) {
+			validMode := r.Mode == "subtle" || action == "upscale" && r.Mode == "creative" || action == "variations" && r.Mode == "strong"
+			if !validMode {
 				return nil, errors.New("unsupported action mode")
 			}
 		}
@@ -156,7 +157,7 @@ func ParseMidjourneyRequest(body []byte, action string) (*MidjourneyRequest, err
 	switch r.Quality {
 	case "", "1":
 	default:
-		return nil, errors.New("Discord v8.2 supports quality 1 in this integration")
+		return nil, errors.New("discord v8.2 supports quality 1 in this integration")
 	}
 	if r.Style != "" && r.Style != "raw" {
 		return nil, errors.New("style must be raw")
@@ -477,7 +478,7 @@ func (s *DurableImageService) executeMidjourney(ctx context.Context, snapshot *M
 		case "failed", "interrupted":
 			capture.TaskError = NewUsageTaskError(502, []byte(`{"error":{"code":"midjourney_discord_failed","message":"Discord task failed; check MJ account status"}}`), "Discord task failed")
 			_ = s.openAI.accountRepo.SetTempUnschedulable(context.WithoutCancel(ctx), a.ID, time.Now().Add(5*time.Minute), "Discord task failed; check MJ session, subscription and channel")
-			return 502, nil, errors.New("Discord task failed")
+			return 502, nil, errors.New("discord task failed")
 		case "queued", "processing":
 		default:
 			return 502, nil, errors.New("unknown Discord task status")

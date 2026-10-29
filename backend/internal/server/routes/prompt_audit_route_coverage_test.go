@@ -59,13 +59,15 @@ func TestEveryGatewayPOSTRouteIsClassifiedForPromptAuditCoverage(t *testing.T) {
 		"/x_search":                       {"gateway_web_search.go"},
 	}
 	excluded := map[string]string{
-		"/tools/search":                   "retrieves search results directly from DeepSeek; no model request or generation prompt",
-		"/tools/fetch":                    "retrieves a page through DeepSeek using only a URL; no model request or generation prompt",
-		"/messages/count_tokens":          "tokenization only; it does not execute a model request",
-		"/images/batches/:id/cancel":      "control-plane cancellation with no user prompt",
-		"/midjourney/generations/upscale": "selects an image from an already audited parent task; no new prompt or reference image",
-		"/stt":                            "speech transcription is not a text-generation prompt",
-		"/custom-voices":                  "voice profile management has no model prompt",
+		"/tools/search":                      "retrieves search results directly from DeepSeek; no model request or generation prompt",
+		"/tools/fetch":                       "retrieves a page through DeepSeek using only a URL; no model request or generation prompt",
+		"/messages/count_tokens":             "tokenization only; it does not execute a model request",
+		"/images/batches/:id/cancel":         "control-plane cancellation with no user prompt",
+		"/midjourney/generations/select":     "selects an image from an already audited parent task; no new prompt or reference image",
+		"/midjourney/generations/upscale":    "upscales an already audited parent image with no new prompt or reference image",
+		"/midjourney/generations/variations": "uses the audited parent's original prompt and image; custom Remix prompts are rejected",
+		"/stt":                               "speech transcription is not a text-generation prompt",
+		"/custom-voices":                     "voice profile management has no model prompt",
 	}
 
 	unclassified := make([]string, 0)

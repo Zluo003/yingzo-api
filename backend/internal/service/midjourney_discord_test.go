@@ -97,8 +97,10 @@ func TestMidjourneyDiscordUnknownPostOutcomeNeverResubmits(t *testing.T) {
 	calls := 0
 	testMJBridge(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
-		h := w.(http.Hijacker)
-		conn, _, _ := h.Hijack()
+		h, ok := w.(http.Hijacker)
+		require.True(t, ok)
+		conn, _, err := h.Hijack()
+		require.NoError(t, err)
 		_ = conn.Close()
 	})
 	s := &DurableImageService{openAI: &OpenAIGatewayService{accountRepo: &midjourneyAccountRepo{accounts: []Account{midjourneyTestAccount(7)}}}}

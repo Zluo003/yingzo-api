@@ -16,7 +16,11 @@ import (
 )
 
 var midjourneyBridgeClient = func() *http.Client {
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	base, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		base = &http.Transport{}
+	}
+	transport := base.Clone()
 	transport.Proxy = nil // Discord credentials stay off deployment-wide outbound proxies.
 	return &http.Client{Transport: transport, Timeout: 45 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 }()
@@ -24,6 +28,17 @@ var midjourneyBridgeClient = func() *http.Client {
 // The bridge URL and its secret are deployment configuration, never supplied by
 // downstream callers. Discord account credentials are sent only over this link.
 func midjourneyBridgeHTTP(ctx context.Context, method, path string, body []byte) ([]byte, error) {
+	validPath := method == http.MethodPost && (path == "/tasks" || path == "/accounts/check")
+	if method == http.MethodGet && strings.HasPrefix(path, "/tasks/imgtask_") {
+		id := strings.TrimPrefix(path, "/tasks/")
+		validPath = len(id) <= 108 && strings.IndexFunc(id, func(r rune) bool {
+			allowed := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-'
+			return !allowed
+		}) == -1
+	}
+	if !validPath {
+		return nil, errors.New("invalid Discord bridge route")
+	}
 	base := strings.TrimRight(strings.TrimSpace(os.Getenv("MIDJOURNEY_BRIDGE_URL")), "/")
 	secret := strings.TrimSpace(os.Getenv("MIDJOURNEY_BRIDGE_SECRET"))
 	if base == "" {
@@ -33,6 +48,7 @@ func midjourneyBridgeHTTP(ctx context.Context, method, path string, body []byte)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" || len(secret) < 32 {
 		return nil, errors.New("configure MIDJOURNEY_BRIDGE_URL and a MIDJOURNEY_BRIDGE_SECRET of at least 32 characters")
 	}
+	// #nosec G704 -- Base is deployment configuration, and path is restricted to bridge routes above.
 	req, err := http.NewRequestWithContext(ctx, method, base+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -40,11 +56,12 @@ func midjourneyBridgeHTTP(ctx context.Context, method, path string, body []byte)
 	req.Header.Set("Authorization", "Bearer "+secret)
 	req.Header.Set("Content-Type", "application/json")
 	// Never forward a Discord token through redirects or the account's outbound proxy.
+	// #nosec G704 -- This dedicated client calls the deployment-configured internal bridge; redirects are disabled.
 	resp, err := midjourneyBridgeClient.Do(req)
 	if err != nil {
-		return nil, errors.New("Midjourney Discord bridge is unreachable")
+		return nil, errors.New("midjourney Discord bridge is unreachable")
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, &midjourneyHTTPError{resp.StatusCode}
 	}
