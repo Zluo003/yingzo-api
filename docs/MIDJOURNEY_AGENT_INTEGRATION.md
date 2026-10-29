@@ -45,7 +45,7 @@ sudo journalctl -u yingzo-midjourney-discord -n 50
 
 ```dotenv
 MIDJOURNEY_BRIDGE_SECRET=替换为至少32字符的随机密钥
-MIDJOURNEY_BRIDGE_VERSION=0.3.69
+MIDJOURNEY_BRIDGE_VERSION=0.3.70
 ```
 
 从仓库根目录启动标准 Compose 和 Discord 服务叠加配置：
@@ -56,7 +56,7 @@ docker compose --env-file deploy/.env \
   -f deploy/docker-compose.midjourney.yml up -d --build
 ```
 
-Release 同时提供 `ghcr.io/zluo003/yingzo-midjourney-discord:0.3.69` 镜像（Linux amd64 / arm64）。使用已发布镜像时，将上面的 `up -d --build` 改为 `up -d --no-build`，可先运行相同 Compose 配置的 `pull`；只编译源码时保留 `--build`。安装包包含 Discord 服务源码、锁文件和本指南。
+Release 同时提供 `ghcr.io/zluo003/yingzo-midjourney-discord:0.3.70` 镜像（Linux amd64 / arm64）。使用已发布镜像时，将上面的 `up -d --build` 改为 `up -d --no-build`，可先运行相同 Compose 配置的 `pull`；只编译源码时保留 `--build`。安装包包含 Discord 服务源码、锁文件和本指南。
 
 桥接端口不对公网发布。其 SQLite 卷需要持久化；当前桥接服务部署一个实例，维护多个 Discord 用户会话。不要启动多个实例共享同一 SQLite 文件。网关可多实例部署，账号并发由现有 Redis 分布式并发锁约束。
 
