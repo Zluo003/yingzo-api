@@ -12,7 +12,7 @@ MJ_GATEWAY_SERVICE="${MJ_GATEWAY_SERVICE:-yingzo-api}"
 MJ_BRIDGE_SERVICE=yingzo-midjourney-discord
 MJ_GITHUB_REPO="${GITHUB_REPO:-Zluo003/yingzo-api}"
 MJ_NODE_VERSION="${MJ_NODE_VERSION:-v24.22.2}"
-MJ_BRIDGE_PORT="${MJ_BRIDGE_PORT:-8081}"
+MJ_BRIDGE_PORT="${MJ_BRIDGE_PORT:-}"
 MJ_WORK_DIR=""
 MJ_STAGE=""
 MJ_ROLLBACK_PENDING=false
@@ -42,7 +42,9 @@ an already-running gateway only after the bridge health check succeeds.
 
 Data: /opt/yingzo-api/data/midjourney-discord
 Shared configuration: /etc/yingzo-api/midjourney.env (root only)
-Service: yingzo-midjourney-discord.service, listening on 127.0.0.1:8081
+Service: yingzo-midjourney-discord.service, listening on loopback only
+Port: preserves the configured port, otherwise tries 8081 then 18081-18100.
+Set MJ_BRIDGE_PORT explicitly to use a specific port (must be available).
 HELP
 }
 
@@ -131,9 +133,60 @@ mj_prepare_source() {
     install -m 0644 "$source_dir/scripts/patch-sdk.js" "$stage/scripts/patch-sdk.js"
 }
 
+mj_valid_port() {
+    [[ "$1" =~ ^[1-9][0-9]{3,4}$ ]] && (( $1 >= 1024 && $1 <= 65535 ))
+}
+
+mj_port_available() {
+    mj_as_service_user "$MJ_NODE_BIN" -e '
+const server = require("node:net").createServer();
+server.once("error", error => {
+    if (error.code !== "EADDRINUSE") console.error("Cannot check local port:", error.code);
+    process.exit(error.code === "EADDRINUSE" ? 1 : 2);
+});
+server.listen(Number(process.argv[1]), "127.0.0.1", () => server.close());
+' "$1"
+}
+
+mj_choose_port() {
+    local configured_url="" configured_port="" candidate status
+    local candidates=()
+    if [[ -f "$MJ_CONFIG_DIR/midjourney.env" ]]; then
+        configured_url=$(sed -n 's/^MIDJOURNEY_BRIDGE_URL=//p' "$MJ_CONFIG_DIR/midjourney.env")
+        if [[ "$configured_url" =~ ^http://127\.0\.0\.1:([0-9]+)$ ]]; then
+            configured_port="${BASH_REMATCH[1]}"
+        fi
+    fi
+    if [[ -n "$MJ_BRIDGE_PORT" ]]; then
+        if ! mj_valid_port "$MJ_BRIDGE_PORT"; then echo 'Invalid bridge port.' >&2; return 1; fi
+        candidates=("$MJ_BRIDGE_PORT")
+    else
+        if mj_valid_port "$configured_port"; then candidates+=("$configured_port"); fi
+        candidates+=(8081 {18081..18100})
+    fi
+    for candidate in "${candidates[@]}"; do
+        # A running installation already owns its port. Keep it during upgrades
+        # instead of treating the existing MJ listener as a port conflict.
+        if [[ "$MJ_BRIDGE_WAS_ACTIVE" == true && "$candidate" == "$configured_port" ]]; then
+            MJ_BRIDGE_PORT="$candidate"
+            return 0
+        fi
+        if mj_port_available "$candidate"; then
+            MJ_BRIDGE_PORT="$candidate"
+            echo "Using Discord service port 127.0.0.1:$candidate."
+            return 0
+        else
+            status=$?
+            if (( status != 1 )); then return "$status"; fi
+        fi
+    done
+    echo 'No available Discord service port. Set MJ_BRIDGE_PORT to a free port and retry.' >&2
+    return 1
+}
+
 mj_write_configuration() {
     local env_file="$MJ_CONFIG_DIR/midjourney.env" shared_secret env_tmp
-    if [[ ! "$MJ_BRIDGE_PORT" =~ ^[1-9][0-9]{3,4}$ ]] || (( MJ_BRIDGE_PORT < 1024 || MJ_BRIDGE_PORT > 65535 )); then
+    if ! mj_valid_port "$MJ_BRIDGE_PORT"; then
         echo 'Invalid bridge port.' >&2
         return 1
     fi
@@ -204,8 +257,8 @@ mj_save_configuration() {
         if [[ -f "$file" ]]; then cp -p "$file" "$MJ_WORK_DIR/config-$index"; fi
         index=$((index + 1))
     done
-    if systemctl is-active --quiet "$MJ_BRIDGE_SERVICE"; then MJ_BRIDGE_WAS_ACTIVE=true; fi
-    if systemctl is-enabled --quiet "$MJ_BRIDGE_SERVICE"; then MJ_BRIDGE_WAS_ENABLED=true; fi
+    if systemctl is-active --quiet "$MJ_BRIDGE_SERVICE" 2>/dev/null; then MJ_BRIDGE_WAS_ACTIVE=true; fi
+    if systemctl is-enabled --quiet "$MJ_BRIDGE_SERVICE" 2>/dev/null; then MJ_BRIDGE_WAS_ENABLED=true; fi
 }
 
 mj_restore_previous() {
@@ -281,6 +334,7 @@ mj_main() {
     rm -rf -- "$MJ_STAGE/.npm-cache"
     if systemctl is-active --quiet "$MJ_GATEWAY_SERVICE"; then gateway_active=true; fi
     mj_save_configuration
+    mj_choose_port
     MJ_ROLLBACK_PENDING=true
     mj_write_configuration
     install -d -m 0700 -o "$MJ_SERVICE_USER" -g "$MJ_SERVICE_USER" "$MJ_INSTALL_DIR/data/midjourney-discord"
@@ -295,7 +349,7 @@ mj_main() {
     systemctl enable "$MJ_BRIDGE_SERVICE"
     systemctl restart "$MJ_BRIDGE_SERVICE"
     for (( attempt=0; attempt<30; attempt++ )); do
-        if systemctl is-active --quiet "$MJ_BRIDGE_SERVICE" && [[ "$(curl -q --fail --silent --max-time 2 "http://127.0.0.1:$MJ_BRIDGE_PORT/health")" == '{"ok":true}' ]]; then
+        if systemctl is-active --quiet "$MJ_BRIDGE_SERVICE" && [[ "$(curl -q --noproxy '*' --fail --silent --max-time 2 "http://127.0.0.1:$MJ_BRIDGE_PORT/health")" == '{"ok":true}' ]]; then
             healthy=true
             break
         fi

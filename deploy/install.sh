@@ -819,13 +819,13 @@ prepare_media_runtime() {
 # helper to fetch their matching companion archive without replacing Go itself.
 install_midjourney() (
     set -e
-    local version="${1:-}" helper helper_dir source_dir="$INSTALL_DIR/midjourney-discord-source"
+    local version="${1:-}" refresh_helper="${2:-false}" helper helper_dir source_dir="$INSTALL_DIR/midjourney-discord-source"
     local helper_args=()
     helper="$INSTALL_DIR/install-midjourney.sh"
     if [ ! -f "$helper" ]; then
         helper="$(dirname "${BASH_SOURCE[0]}")/install-midjourney.sh"
     fi
-    if [ ! -f "$helper" ]; then
+    if [ ! -f "$helper" ] || [ "$refresh_helper" = true ]; then
         helper_dir=$(mktemp -d)
         trap 'rm -rf "$helper_dir"' EXIT
         helper="$helper_dir/install-midjourney.sh"
@@ -852,7 +852,9 @@ prepare_midjourney_runtime() {
         print_warning 'This release has no Discord companion; keeping the existing MJ service.'
         return 0
     fi
-    install_midjourney
+    # Refresh the installer too: an older archive may bundle a helper that
+    # resets a custom port on every upgrade.
+    install_midjourney "" true
 }
 
 # Start service
@@ -1245,7 +1247,7 @@ main() {
             check_root
             detect_platform
             check_dependencies
-            install_midjourney "$target_version"
+            install_midjourney "$target_version" true
             exit 0
             ;;
         uninstall|remove)

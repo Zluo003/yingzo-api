@@ -49,7 +49,13 @@ set -eu
 if [[ "$1" == -p ]]; then echo 24; exit 0; fi
 [[ "${NATIVE_TEST_AS_SERVICE:-}" == 1 ]]
 case "$1" in
-    -e) exit 0 ;;
+    -e)
+        if [[ "$2" == *'createServer()'* ]]; then
+            printf '%s\n' "$3" >> "$NATIVE_TEST_STATE/port-checks"
+            if [[ -f "$NATIVE_TEST_STATE/port-$3-occupied" ]]; then exit 1; fi
+        fi
+        exit 0
+        ;;
     */npm-cli.js)
         [[ "$*" == *'ci --omit=dev --ignore-scripts --no-audit --no-fund'* ]]
         [[ ! -f "$NATIVE_TEST_STATE/npm-fail" ]]
@@ -121,8 +127,9 @@ assert_gateway_untouched() {
 
 # First install: npm and SDK patch use the service user; only a healthy bridge
 # allows restarting the already-running gateway. Paths may contain spaces.
-touch "$NATIVE_TEST_STATE/yingzo-api.active"
+touch "$NATIVE_TEST_STATE/yingzo-api.active" "$NATIVE_TEST_STATE/port-8081-occupied"
 run_install --source "$repo_root"
+grep -Fxq 'MIDJOURNEY_BRIDGE_URL=http://127.0.0.1:18081' "$MJ_CONFIG_DIR/midjourney.env"
 test -f "$MJ_INSTALL_DIR/midjourney-discord/node_modules/patched"
 grep -Fq 'scripts/patch-sdk.js' "$NATIVE_TEST_STATE/user-calls"
 test "$(stat -c '%a' "$MJ_CONFIG_DIR/midjourney.env")" = 600
@@ -143,10 +150,13 @@ fi
 # Reinstall preserves the secret and task data; a stopped gateway stays stopped.
 echo persistent-task > "$MJ_INSTALL_DIR/data/midjourney-discord/tasks.sqlite"
 cp "$MJ_CONFIG_DIR/midjourney.env" "$work/original.env"
+touch "$NATIVE_TEST_STATE/port-18081-occupied"
 rm "$NATIVE_TEST_STATE/yingzo-api.active"
 : > "$NATIVE_TEST_STATE/systemctl-calls"
+: > "$NATIVE_TEST_STATE/port-checks"
 run_install --source "$repo_root/midjourney-discord"
 cmp "$work/original.env" "$MJ_CONFIG_DIR/midjourney.env"
+test ! -s "$NATIVE_TEST_STATE/port-checks"
 grep -Fxq persistent-task "$MJ_INSTALL_DIR/data/midjourney-discord/tasks.sqlite"
 assert_gateway_untouched
 
@@ -167,6 +177,27 @@ for failure in bad-health restart-fail npm-fail patch-fail; do
     assert_gateway_untouched
     rm "$NATIVE_TEST_STATE/$failure"
 done
+
+# Explicit occupied/invalid ports fail before swapping sources or writing config.
+touch "$NATIVE_TEST_STATE/port-8099-occupied"
+for port in 8099 invalid 08081 65536; do
+    : > "$NATIVE_TEST_STATE/systemctl-calls"
+    if MJ_BRIDGE_PORT="$port" run_install --source "$repo_root/midjourney-discord"; then
+        echo "accepted invalid or occupied port $port" >&2; exit 1
+    fi
+    test -f "$MJ_INSTALL_DIR/midjourney-discord/previous-marker"
+    cmp "$work/original.env" "$MJ_CONFIG_DIR/midjourney.env"
+    assert_gateway_untouched
+done
+rm "$NATIVE_TEST_STATE/port-8099-occupied"
+
+# A stopped bridge's port can be claimed by another program. Select another
+# free port, update both services' shared URL, and preserve secret/task data.
+rm -f "$NATIVE_TEST_STATE/yingzo-midjourney-discord.active"
+run_install --source "$repo_root/midjourney-discord"
+grep -Fxq 'MIDJOURNEY_BRIDGE_URL=http://127.0.0.1:18082' "$MJ_CONFIG_DIR/midjourney.env"
+grep -Fxq "MIDJOURNEY_BRIDGE_SECRET=$secret" "$MJ_CONFIG_DIR/midjourney.env"
+grep -Fxq persistent-task "$MJ_INSTALL_DIR/data/midjourney-discord/tasks.sqlite"
 
 # Download matching v0.3.68 source from a checksummed release; fail closed on a
 # corrupted archive before touching either installed service.
@@ -209,6 +240,7 @@ test "$MJ_INSTALL_DIR" = "$INSTALL_DIR_TEST_EXPECTED"
 exit "${NATIVE_TEST_HELPER_EXIT:-0}"
 STUB
 export INSTALL_DIR_TEST_EXPECTED="$INSTALL_DIR"
+cp "$INSTALL_DIR/install-midjourney.sh" "$NATIVE_TEST_DOWNLOADS/install-midjourney.sh"
 prepare_midjourney_runtime
 test ! -f "$NATIVE_TEST_STATE/helper-args"
 touch "$SYSTEMD_DIR/yingzo-midjourney-discord.service" "$NATIVE_TEST_STATE/yingzo-midjourney-discord.enabled"
@@ -216,6 +248,8 @@ prepare_midjourney_runtime
 grep -Fxq -- --source "$NATIVE_TEST_STATE/helper-args"
 grep -Fxq "$INSTALL_DIR/midjourney-discord-source" "$NATIVE_TEST_STATE/helper-args"
 install_midjourney v0.3.68
+grep -Fxq -- --version "$NATIVE_TEST_STATE/helper-args"
+install_midjourney v0.3.68 true
 grep -Fxq -- --version "$NATIVE_TEST_STATE/helper-args"
 
 # Extracting a release replaces only staged sources; live code is retained until
