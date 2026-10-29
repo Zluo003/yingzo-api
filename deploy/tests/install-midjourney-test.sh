@@ -127,9 +127,10 @@ assert_gateway_untouched() {
 
 # First install: npm and SDK patch use the service user; only a healthy bridge
 # allows restarting the already-running gateway. Paths may contain spaces.
-touch "$NATIVE_TEST_STATE/yingzo-api.active" "$NATIVE_TEST_STATE/port-8081-occupied"
+touch "$NATIVE_TEST_STATE/yingzo-api.active"
 run_install --source "$repo_root"
 grep -Fxq 'MIDJOURNEY_BRIDGE_URL=http://127.0.0.1:18081' "$MJ_CONFIG_DIR/midjourney.env"
+if grep -Fxq 8081 "$NATIVE_TEST_STATE/port-checks"; then echo 'probed reserved desktop update port' >&2; exit 1; fi
 test -f "$MJ_INSTALL_DIR/midjourney-discord/node_modules/patched"
 grep -Fq 'scripts/patch-sdk.js' "$NATIVE_TEST_STATE/user-calls"
 test "$(stat -c '%a' "$MJ_CONFIG_DIR/midjourney.env")" = 600
@@ -180,7 +181,7 @@ done
 
 # Explicit occupied/invalid ports fail before swapping sources or writing config.
 touch "$NATIVE_TEST_STATE/port-8099-occupied"
-for port in 8099 invalid 08081 65536; do
+for port in 8081 8099 invalid 08081 65536; do
     : > "$NATIVE_TEST_STATE/systemctl-calls"
     if MJ_BRIDGE_PORT="$port" run_install --source "$repo_root/midjourney-discord"; then
         echo "accepted invalid or occupied port $port" >&2; exit 1
@@ -190,6 +191,18 @@ for port in 8099 invalid 08081 65536; do
     assert_gateway_untouched
 done
 rm "$NATIVE_TEST_STATE/port-8099-occupied"
+
+# A legacy 8081 configuration must migrate without probing the client's port,
+# even if the old MJ service is active. Its secret is retained.
+sed -i 's/:18081$/:8081/' "$MJ_CONFIG_DIR/midjourney.env"
+touch "$NATIVE_TEST_STATE/yingzo-midjourney-discord.active"
+rm "$NATIVE_TEST_STATE/port-18081-occupied"
+: > "$NATIVE_TEST_STATE/port-checks"
+run_install --source "$repo_root/midjourney-discord"
+grep -Fxq 'MIDJOURNEY_BRIDGE_URL=http://127.0.0.1:18081' "$MJ_CONFIG_DIR/midjourney.env"
+grep -Fxq "MIDJOURNEY_BRIDGE_SECRET=$secret" "$MJ_CONFIG_DIR/midjourney.env"
+if grep -Fxq 8081 "$NATIVE_TEST_STATE/port-checks"; then echo 'probed reserved desktop update port during migration' >&2; exit 1; fi
+touch "$NATIVE_TEST_STATE/port-18081-occupied"
 
 # A stopped bridge's port can be claimed by another program. Select another
 # free port, update both services' shared URL, and preserve secret/task data.

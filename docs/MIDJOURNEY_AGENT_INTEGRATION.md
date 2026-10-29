@@ -24,7 +24,7 @@ sudo bash deploy/install-midjourney.sh --version v0.3.68
 
 以上路径是源码仓库中的路径；从 Release 解压安装包后也有 `deploy/` 目录。只复制了配套脚本时，运行 `sudo bash ./install-midjourney.sh --version v0.3.68` 即可。脚本未指定 `--version` 时会读取当前网关版本，下载并校验同一 Release 中的 MJ 源码。
 
-脚本自动安装所需 Node.js 24 运行时，以 `yingzo-api` 服务用户安装锁定依赖，创建并启用 `yingzo-midjourney-discord.service`，仅监听本机回环地址。首次优先使用 `8081`，被占用时自动从 `18081–18100` 中选择可用端口；重复安装和升级保留已配置的端口。共享密钥自动生成到 root 专用文件 `/etc/yingzo-api/midjourney.env`，网关的 systemd drop-in 与 MJ 服务引用同一个文件；重复安装保留密钥与 `/opt/yingzo-api/data/midjourney-discord/` 中的任务数据。健康检查通过后，才重启原本正在运行的网关。
+脚本自动安装所需 Node.js 24 运行时，以 `yingzo-api` 服务用户安装锁定依赖，创建并启用 `yingzo-midjourney-discord.service`，仅监听本机回环地址。首次默认使用 `18081`，被占用时从 `18082–18100` 中选择可用端口；重复安装和升级保留已配置的端口。`8081` 专用于客户端升级服务，MJ 不探测、不使用该端口；旧 MJ 配置若使用 `8081`，重跑新版脚本会迁移到新端口并同步网关地址。共享密钥自动生成到 root 专用文件 `/etc/yingzo-api/midjourney.env`，网关的 systemd drop-in 与 MJ 服务引用同一个文件；重复安装保留密钥与 `/opt/yingzo-api/data/midjourney-discord/` 中的任务数据。健康检查通过后，才重启原本正在运行的网关。
 
 也可显式指定空闲端口，地址会自动同步到网关，无需手动编辑 systemd 或密钥文件：
 
@@ -67,13 +67,13 @@ cd midjourney-discord
 npm ci
 MIDJOURNEY_BRIDGE_SECRET='至少32字符的随机密钥' \
 MIDJOURNEY_DATA_FILE='/var/lib/yingzo-mj/tasks.sqlite' \
-HOST=127.0.0.1 PORT=8081 npm start
+HOST=127.0.0.1 PORT=18081 npm start
 ```
 
 Go 网关进程配置相同密钥，并指定服务地址：
 
 ```dotenv
-MIDJOURNEY_BRIDGE_URL=http://127.0.0.1:8081
+MIDJOURNEY_BRIDGE_URL=http://127.0.0.1:18081
 MIDJOURNEY_BRIDGE_SECRET=与桥接服务一致的密钥
 ```
 

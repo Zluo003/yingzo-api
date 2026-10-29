@@ -3,7 +3,7 @@
 services:
   sub2api:
     environment:
-      MIDJOURNEY_BRIDGE_URL: http://midjourney-discord:8081
+      MIDJOURNEY_BRIDGE_URL: http://midjourney-discord:18081
       MIDJOURNEY_BRIDGE_SECRET: ${MIDJOURNEY_BRIDGE_SECRET:?Set a shared random secret of at least 32 characters}
     depends_on:
       midjourney-discord:
@@ -14,7 +14,10 @@ services:
       context: ../midjourney-discord
     restart: unless-stopped
     environment:
+      PORT: '18081'
       MIDJOURNEY_BRIDGE_SECRET: ${MIDJOURNEY_BRIDGE_SECRET:?Set a shared random secret of at least 32 characters}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:18081/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
     volumes:
       - midjourney-discord-data:/data
     networks:

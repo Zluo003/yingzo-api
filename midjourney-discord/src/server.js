@@ -8,7 +8,7 @@ const bridge = new Bridge({
 const server = bridge.server();
 server.requestTimeout = 30000;
 server.headersTimeout = 10000;
-server.listen(Number(process.env.PORT || 8081), process.env.HOST || "0.0.0.0");
+server.listen(Number(process.env.PORT || 18081), process.env.HOST || "0.0.0.0");
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, () => {
     server.close(async () => {

@@ -43,7 +43,8 @@ an already-running gateway only after the bridge health check succeeds.
 Data: /opt/yingzo-api/data/midjourney-discord
 Shared configuration: /etc/yingzo-api/midjourney.env (root only)
 Service: yingzo-midjourney-discord.service, listening on loopback only
-Port: preserves the configured port, otherwise tries 8081 then 18081-18100.
+Port: preserves the configured port, otherwise tries 18081-18100.
+Port 8081 is reserved for the desktop update service and is never probed.
 Set MJ_BRIDGE_PORT explicitly to use a specific port (must be available).
 HELP
 }
@@ -134,7 +135,7 @@ mj_prepare_source() {
 }
 
 mj_valid_port() {
-    [[ "$1" =~ ^[1-9][0-9]{3,4}$ ]] && (( $1 >= 1024 && $1 <= 65535 ))
+    [[ "$1" =~ ^[1-9][0-9]{3,4}$ ]] && (( $1 >= 1024 && $1 <= 65535 && $1 != 8081 ))
 }
 
 mj_port_available() {
@@ -158,11 +159,11 @@ mj_choose_port() {
         fi
     fi
     if [[ -n "$MJ_BRIDGE_PORT" ]]; then
-        if ! mj_valid_port "$MJ_BRIDGE_PORT"; then echo 'Invalid bridge port.' >&2; return 1; fi
+        if ! mj_valid_port "$MJ_BRIDGE_PORT"; then echo 'Invalid bridge port (8081 is reserved for the desktop update service).' >&2; return 1; fi
         candidates=("$MJ_BRIDGE_PORT")
     else
         if mj_valid_port "$configured_port"; then candidates+=("$configured_port"); fi
-        candidates+=(8081 {18081..18100})
+        candidates+=({18081..18100})
     fi
     for candidate in "${candidates[@]}"; do
         # A running installation already owns its port. Keep it during upgrades
