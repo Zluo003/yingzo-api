@@ -1517,9 +1517,18 @@ export interface WebSearchProviderConfig {
   expires_at: number | null;
 }
 
+export interface DeepSeekWebConfig {
+  enabled: boolean;
+  account_id: number;
+  search_price_per_1k: number | null;
+  fetch_price_per_1k: number | null;
+  timeout_seconds: number;
+}
+
 export interface WebSearchEmulationConfig {
   enabled: boolean;
   providers: WebSearchProviderConfig[];
+  deepseek?: DeepSeekWebConfig;
 }
 
 export interface WebSearchTestResult {

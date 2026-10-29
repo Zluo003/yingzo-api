@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
@@ -30,6 +31,10 @@ func (r *keyBillingRouteAPIKeyRepo) GetByKeyForAuth(_ context.Context, key strin
 	return &clone, nil
 }
 
+func (r *keyBillingRouteAPIKeyRepo) UpdateLastUsed(context.Context, int64, time.Time) error {
+	return nil
+}
+
 type keyBillingRouteRateRepo struct {
 	service.UserGroupRateRepository
 	lookupCalls int
@@ -44,7 +49,7 @@ func (r *keyBillingRouteRateRepo) GetRPMOverrideByUserAndGroup(context.Context, 
 	return nil, nil
 }
 
-func newKeyBillingRouteTestRouter(runMode string) (*gin.Engine, *keyBillingRouteRateRepo, string) {
+func newKeyBillingRouteTestRouter(runMode string, platforms ...string) (*gin.Engine, *keyBillingRouteRateRepo, string) {
 	gin.SetMode(gin.TestMode)
 	group := &service.Group{
 		ID:               42,
@@ -53,6 +58,9 @@ func newKeyBillingRouteTestRouter(runMode string) (*gin.Engine, *keyBillingRoute
 		Platform:         service.PlatformOpenAI,
 		SubscriptionType: service.SubscriptionTypeStandard,
 		RateMultiplier:   0.75,
+	}
+	if len(platforms) > 0 {
+		group.Platform = platforms[0]
 	}
 	user := &service.User{ID: 7, Role: service.RoleUser, Status: service.StatusActive, Balance: 10}
 	var groupID *int64
@@ -71,6 +79,8 @@ func newKeyBillingRouteTestRouter(runMode string) (*gin.Engine, *keyBillingRoute
 		Group:   apiKeyGroup,
 	}
 	cfg := &config.Config{RunMode: runMode}
+	cfg.Gateway.MaxBodySize = 1 << 20
+	cfg.Gateway.TextMaxBodySize = 64 << 10
 	rateRepo := &keyBillingRouteRateRepo{}
 	apiKeyService := service.NewAPIKeyService(
 		&keyBillingRouteAPIKeyRepo{apiKey: apiKey}, nil, nil, nil, rateRepo, nil, cfg,
@@ -170,4 +180,25 @@ func TestGatewayRoutesKeyBillingInfoEndToEnd(t *testing.T) {
 		}`, w.Body.String())
 		require.Zero(t, rateRepo.lookupCalls)
 	})
+}
+
+func TestGatewaySharedWebToolsAuthenticateBeforeModelRouting(t *testing.T) {
+	for _, platform := range []string{service.PlatformOpenAI, service.PlatformAnthropic, service.PlatformGemini, service.PlatformDeepseek, service.PlatformComposite} {
+		for _, operation := range []string{"search", "fetch"} {
+			t.Run(platform+operation, func(t *testing.T) {
+				router, _, key := newKeyBillingRouteTestRouter(config.RunModeStandard, platform)
+				path := "/v1/tools/" + operation
+				unauth := httptest.NewRecorder()
+				router.ServeHTTP(unauth, httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`)))
+				require.Equal(t, http.StatusUnauthorized, unauth.Code)
+				req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{}`))
+				req.Header.Set("Authorization", "Bearer "+key)
+				req.Header.Set("Content-Type", "application/json")
+				result := httptest.NewRecorder()
+				router.ServeHTTP(result, req)
+				require.Equal(t, http.StatusBadRequest, result.Code, result.Body.String())
+				require.Contains(t, result.Body.String(), "invalid_request_error")
+			})
+		}
+	}
 }

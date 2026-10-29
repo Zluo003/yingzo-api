@@ -59,6 +59,8 @@ func TestEveryGatewayPOSTRouteIsClassifiedForPromptAuditCoverage(t *testing.T) {
 		"/x_search":                       {"gateway_web_search.go"},
 	}
 	excluded := map[string]string{
+		"/tools/search":                   "retrieves search results directly from DeepSeek; no model request or generation prompt",
+		"/tools/fetch":                    "retrieves a page through DeepSeek using only a URL; no model request or generation prompt",
 		"/messages/count_tokens":          "tokenization only; it does not execute a model request",
 		"/images/batches/:id/cancel":      "control-plane cancellation with no user prompt",
 		"/midjourney/generations/upscale": "selects an image from an already audited parent task; no new prompt or reference image",

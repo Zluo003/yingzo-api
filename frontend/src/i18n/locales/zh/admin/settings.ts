@@ -559,6 +559,15 @@ export default {
         codexRemoveRow: '删除',
       },
       webSearchEmulation: {
+        deepseekTitle: "DeepSeek 统一搜索与网页读取",
+        deepseekHint: "所有模型共用 /v1/tools/search 和 /v1/tools/fetch，使用用户的 Yingzo 密钥；独立于下方模拟开关。",
+        deepseekAccount: "DeepSeek 上游账号",
+        deepseekSelectAccount: "选择已有 DeepSeek API Key 账号",
+        deepseekTimeout: "请求超时（秒）",
+        deepseekSearchPrice: "搜索价格（USD / 1000 次）",
+        deepseekFetchPrice: "网页读取价格（USD / 1000 次）",
+        deepseekBillingHint: "须明确填写价格，0 表示免费。仅非空成功结果按次计费，不叠加模型、分组或高峰倍率。",
+
         title: 'Web Search 模拟',
         description: '为不原生支持搜索的 Anthropic API Key 账号注入 web search 能力',
         enabled: '启用 Web Search 模拟',

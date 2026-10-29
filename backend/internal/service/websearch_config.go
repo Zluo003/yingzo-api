@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -18,6 +19,17 @@ import (
 type WebSearchEmulationConfig struct {
 	Enabled   bool                      `json:"enabled"`
 	Providers []WebSearchProviderConfig `json:"providers"`
+	DeepSeek  *DeepSeekWebConfig        `json:"deepseek,omitempty"`
+}
+
+// DeepSeekWebConfig configures model-independent Search / Fetch using an existing account.
+// Prices are USD per 1,000 nonempty successful calls; zero explicitly makes an operation free.
+type DeepSeekWebConfig struct {
+	Enabled          bool     `json:"enabled"`
+	AccountID        int64    `json:"account_id"`
+	SearchPricePer1K *float64 `json:"search_price_per_1k"`
+	FetchPricePer1K  *float64 `json:"fetch_price_per_1k"`
+	TimeoutSeconds   int      `json:"timeout_seconds"`
 }
 
 // WebSearchProviderConfig describes a single search provider (Brave or Tavily).
@@ -44,6 +56,19 @@ var validProviderTypes = map[string]bool{
 func validateWebSearchConfig(cfg *WebSearchEmulationConfig) error {
 	if cfg == nil {
 		return nil
+	}
+	if d := cfg.DeepSeek; d != nil && d.Enabled {
+		if d.AccountID <= 0 {
+			return fmt.Errorf("deepseek: select an existing DeepSeek API-key account")
+		}
+		for _, price := range []*float64{d.SearchPricePer1K, d.FetchPricePer1K} {
+			if price == nil || math.IsNaN(*price) || math.IsInf(*price, 0) || *price < 0 {
+				return fmt.Errorf("deepseek: explicit nonnegative USD search/fetch prices are required")
+			}
+		}
+		if d.TimeoutSeconds < 1 || d.TimeoutSeconds > 300 {
+			return fmt.Errorf("deepseek: timeout_seconds must be between 1 and 300")
+		}
 	}
 	if len(cfg.Providers) > maxWebSearchProviders {
 		return fmt.Errorf("too many providers (max %d)", maxWebSearchProviders)
@@ -184,6 +209,10 @@ func (s *SettingService) mergeExistingAPIKeys(ctx context.Context, cfg *WebSearc
 	existing, _ := s.getWebSearchEmulationConfigRaw(ctx)
 	if existing == nil || cfg == nil {
 		return
+	}
+	// Older admin clients omit the additive service configuration.
+	if cfg.DeepSeek == nil {
+		cfg.DeepSeek = existing.DeepSeek
 	}
 	existingByType := make(map[string]string, len(existing.Providers))
 	for _, p := range existing.Providers {

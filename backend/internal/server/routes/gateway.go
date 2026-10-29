@@ -270,6 +270,8 @@ func RegisterGatewayRoutes(
 	gateway.Use(gin.HandlerFunc(apiKeyAuth))
 	gateway.GET("/account", h.Gateway.AccountProfile)
 	gateway.GET("/sub2api/billing", h.Gateway.KeyBillingInfo)
+	gateway.POST("/tools/search", textBodyLimit, h.Gateway.DeepSeekSearch)
+	gateway.POST("/tools/fetch", textBodyLimit, h.Gateway.DeepSeekFetch)
 	gateway.Use(groupModelAllowlist)
 	gateway.Use(compositeTarget)
 	gateway.Use(agentModelPlatform)

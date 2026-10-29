@@ -566,6 +566,15 @@ export default {
         codexRemoveRow: "Remove",
       },
       webSearchEmulation: {
+        deepseekTitle: "Shared DeepSeek Search / Fetch",
+        deepseekHint: "All models use /v1/tools/search and /v1/tools/fetch with the user’s Yingzo key, independently of the emulation switch below.",
+        deepseekAccount: "DeepSeek upstream account",
+        deepseekSelectAccount: "Select an existing DeepSeek API-key account",
+        deepseekTimeout: "Request timeout (seconds)",
+        deepseekSearchPrice: "Search price (USD / 1,000 calls)",
+        deepseekFetchPrice: "Fetch price (USD / 1,000 calls)",
+        deepseekBillingHint: "Explicit prices are required; 0 means free. Only nonempty successful results are charged per call, without model, group or peak multipliers.",
+
         title: 'Web Search Emulation',
         description: 'Inject web search capability for Anthropic API Key accounts that don\'t natively support it',
         enabled: 'Enable Web Search Emulation',

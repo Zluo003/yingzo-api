@@ -5792,6 +5792,37 @@
               </p>
             </div>
             <div class="space-y-5 p-6">
+              <div v-if="webSearchConfig.deepseek" class="space-y-4 rounded-lg border border-gray-200 p-4 dark:border-dark-600">
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 class="text-sm font-medium">{{ t("admin.settings.webSearchEmulation.deepseekTitle") }}</h3>
+                    <p class="mt-1 text-xs text-gray-500">{{ t("admin.settings.webSearchEmulation.deepseekHint") }}</p>
+                  </div>
+                  <Toggle v-model="webSearchConfig.deepseek.enabled" />
+                </div>
+                <div v-if="webSearchConfig.deepseek.enabled" class="grid gap-4 md:grid-cols-2">
+                  <label class="space-y-1 text-sm">
+                    <span>{{ t("admin.settings.webSearchEmulation.deepseekAccount") }}</span>
+                    <select v-model="webSearchConfig.deepseek.account_id" class="input w-full">
+                      <option :value="0">{{ t("admin.settings.webSearchEmulation.deepseekSelectAccount") }}</option>
+                      <option v-for="account in deepSeekWebAccounts" :key="account.id" :value="account.id">{{ account.name }} (#{{ account.id }})</option>
+                    </select>
+                  </label>
+                  <label class="space-y-1 text-sm">
+                    <span>{{ t("admin.settings.webSearchEmulation.deepseekTimeout") }}</span>
+                    <input v-model.number="webSearchConfig.deepseek.timeout_seconds" type="number" min="1" max="300" class="input w-full" />
+                  </label>
+                  <label class="space-y-1 text-sm">
+                    <span>{{ t("admin.settings.webSearchEmulation.deepseekSearchPrice") }}</span>
+                    <input v-model.number="webSearchConfig.deepseek.search_price_per_1k" type="number" min="0" step="any" class="input w-full" />
+                  </label>
+                  <label class="space-y-1 text-sm">
+                    <span>{{ t("admin.settings.webSearchEmulation.deepseekFetchPrice") }}</span>
+                    <input v-model.number="webSearchConfig.deepseek.fetch_price_per_1k" type="number" min="0" step="any" class="input w-full" />
+                  </label>
+                  <p class="text-xs text-gray-500 md:col-span-2">{{ t("admin.settings.webSearchEmulation.deepseekBillingHint") }}</p>
+                </div>
+              </div>
               <!-- Global Toggle -->
               <div class="flex items-center justify-between">
                 <div>
@@ -10063,11 +10094,25 @@ const authSourceDefaultsMeta = computed(() => [
 
 // Proxies for web search emulation ProxySelector
 const webSearchProxies = ref<Proxy[]>([]);
+const deepSeekWebAccounts = ref<{ id: number; name: string }[]>([]);
+const emptyDeepSeekWebConfig = () => ({ enabled: false, account_id: 0, search_price_per_1k: null, fetch_price_per_1k: null, timeout_seconds: 60 });
+async function loadDeepSeekWebAccounts() {
+  const accounts: { id: number; name: string }[] = [];
+  let page = 1;
+  while (true) {
+    const result = await adminAPI.accounts.list(page, 100, { platform: "deepseek", type: "apikey", status: "active", lite: "true" });
+    accounts.push(...result.items.map(({ id, name }) => ({ id, name })));
+    if (page >= result.pages) break;
+    page += 1;
+  }
+  deepSeekWebAccounts.value = accounts;
+}
 
 // Web Search Emulation config (loaded/saved separately)
 const DEFAULT_WEB_SEARCH_QUOTA_LIMIT = 1000;
 
 const webSearchConfig = reactive<WebSearchEmulationConfig>({
+  deepseek: emptyDeepSeekWebConfig(),
   enabled: false,
   providers: [],
 });
@@ -10199,8 +10244,10 @@ async function loadWebSearchConfig() {
     if (resp) {
       webSearchConfig.enabled = resp.enabled || false;
       webSearchConfig.providers = resp.providers || [];
+      webSearchConfig.deepseek = resp.deepseek ?? emptyDeepSeekWebConfig();
     }
     webSearchProxies.value = proxiesResp.items || [];
+    await loadDeepSeekWebAccounts();
   } catch (err: unknown) {
     // 404 is expected when config hasn't been created yet; show error for other failures
     const status = (err as { status?: number })?.status;
@@ -10230,6 +10277,7 @@ async function saveWebSearchConfig(): Promise<boolean> {
     await adminAPI.settings.updateWebSearchEmulationConfig({
       enabled: webSearchConfig.enabled,
       providers,
+      deepseek: webSearchConfig.deepseek,
     });
     return true;
   } catch (err: unknown) {
