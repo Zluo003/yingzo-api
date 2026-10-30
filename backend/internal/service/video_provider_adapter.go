@@ -2,6 +2,21 @@ package service
 
 import "strings"
 
+// Optional transport hooks for providers whose create and poll endpoints or
+// authentication differ from the default Bearer / collection/{id} protocol.
+type videoProviderTransportAdapter interface {
+	RequestAuthorization(*Account) string
+	CreateRequestEndpoint(string, map[string]any) string
+	PollEndpoint(string, string) string
+}
+
+func videoRequestAuthorization(account *Account) string {
+	if adapter, ok := videoProviderAdapterForAccount(account).(videoProviderTransportAdapter); ok {
+		return adapter.RequestAuthorization(account)
+	}
+	return "Bearer " + strings.TrimSpace(account.GetCredential("api_key"))
+}
+
 type videoProviderAdapter interface {
 	Provider() string
 	DefaultBaseURL() string
@@ -31,6 +46,8 @@ type videoProviderAdapter interface {
 
 func videoProviderAdapterForAccount(account *Account) videoProviderAdapter {
 	switch videoAccountProvider(account) {
+	case videoProviderVidu:
+		return viduVideoProviderAdapter{}
 	case videoProviderVipprompt:
 		return vippromptVideoProviderAdapter{}
 	case videoProviderApimart:
@@ -52,6 +69,8 @@ func videoProviderAdapterForAccount(account *Account) videoProviderAdapter {
 
 func videoProviderAdapterByName(provider string) videoProviderAdapter {
 	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case videoProviderVidu:
+		return viduVideoProviderAdapter{}
 	case videoProviderVipprompt:
 		return vippromptVideoProviderAdapter{}
 	case videoProviderApimart:

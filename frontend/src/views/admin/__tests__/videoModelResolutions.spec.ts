@@ -21,7 +21,8 @@ describe('video model resolutions', () => {
       'minimax-h3',
       'minimax-h3-max',
       'kling-v3-omni',
-      'kling-v4'
+      'kling-v4',
+      'vidu-q4-preview'
     ])
     expect(videoModelResolutions('seedance-2.0')).toEqual([
       '480p',
@@ -61,7 +62,8 @@ describe('video model resolutions', () => {
       'minimax-h3': ['768p', '2K'],
       'minimax-h3-max': ['480p', '768p', '1080p'],
       'kling-v3-omni': ['720p', '1080p', '4K'],
-      'kling-v4': ['720p', '1080p']
+      'kling-v4': ['720p', '1080p'],
+      'vidu-q4-preview': ['540p', '720p', '1080p', '2K', '4K']
     })
   })
 
@@ -142,7 +144,8 @@ describe('video model resolutions', () => {
       'minimax-h3': ['768p', '2K'],
       'minimax-h3-max': ['480p', '768p', '1080p'],
       'kling-v3-omni': ['720p', '1080p', '4K'],
-      'kling-v4': ['720p', '1080p']
+      'kling-v4': ['720p', '1080p'],
+      'vidu-q4-preview': ['540p', '720p', '1080p', '2K', '4K']
     })
   })
 

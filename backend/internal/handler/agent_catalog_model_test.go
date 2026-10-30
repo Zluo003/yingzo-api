@@ -38,6 +38,24 @@ func TestAgentCatalogModelPublishesRoutingCapabilities(t *testing.T) {
 
 func boolPointer(value bool) *bool { return &value }
 
+func TestAgentCatalogViduPublishesSupportedInputsAndPricedResolutions(t *testing.T) {
+	model := agentCatalogModel(service.AgentModelCatalogEntry{
+		ID:         service.VideoModelViduQ4Preview,
+		MediaTypes: []string{service.AgentMediaTypeVideo},
+		Platforms:  []string{service.PlatformVideo},
+		Interfaces: []string{service.AgentInterfaceSeedanceVideos},
+	}, &service.AgentModelCatalogConfig{Models: []service.AgentGroupModel{{
+		ModelCode: service.VideoModelViduQ4Preview, MediaType: service.AgentMediaTypeVideo,
+		Enabled: true, Available: true,
+		Prices: []service.AgentModelPrice{{Resolution: "540p"}, {Resolution: "4K"}, {Resolution: "720p", Enabled: boolPointer(false)}},
+	}}})
+	caps := capabilitiesOf(t, model)
+	require.Equal(t, []string{"text", "image", "audio"}, caps["input_modalities"])
+	require.Equal(t, []string{"540p", "4K"}, caps["supported_video_resolutions"])
+	require.Equal(t, []string{"1:1", "9:16", "16:9", "3:4", "4:3"}, caps["supported_aspect_ratios"])
+	require.Equal(t, false, caps["supports_audio_only_reference"])
+}
+
 func TestAgentCatalogModelPublishesPerModelVideoDurations(t *testing.T) {
 	cases := []struct {
 		model      string
@@ -47,6 +65,7 @@ func TestAgentCatalogModelPublishesPerModelVideoDurations(t *testing.T) {
 		{service.VideoModelSeedance20, 4, 15},
 		{service.VideoModelSeedance20Fast, 4, 15},
 		{service.VideoModelSeedance25, 4, 30},
+		{service.VideoModelViduQ4Preview, 3, 16},
 		// 账号 model_mapping 里的自定义视频模型走 legacy 兜底窗口（4-15），
 		// 但无论如何都不再是固定的 4/8/15 三档。
 		{"seedance-custom", 4, 15},

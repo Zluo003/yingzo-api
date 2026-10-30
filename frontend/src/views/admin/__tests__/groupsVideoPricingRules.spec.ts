@@ -24,7 +24,8 @@ describe('video group pricing rules', () => {
       'minimax-h3',
       'minimax-h3-max',
       'kling-v3-omni',
-      'kling-v4'
+      'kling-v4',
+      'vidu-q4-preview'
     ])
   })
 

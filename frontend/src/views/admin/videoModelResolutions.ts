@@ -31,7 +31,8 @@ export const VIDEO_MODEL_RESOLUTIONS: VideoModelResolutionSpec[] = [
   { model: 'minimax-h3', resolutions: ['768p', '2K'] },
   { model: 'minimax-h3-max', resolutions: ['480p', '768p', '1080p'] },
   { model: 'kling-v3-omni', resolutions: ['720p', '1080p', '4K'] },
-  { model: 'kling-v4', resolutions: ['720p', '1080p'] }
+  { model: 'kling-v4', resolutions: ['720p', '1080p'] },
+  { model: 'vidu-q4-preview', resolutions: ['540p', '720p', '1080p', '2K', '4K'] }
 ]
 
 /** 对外提供的视频模型清单，与后端 SupportedVideoModels() 一致。 */
@@ -48,7 +49,7 @@ export const NEWTOKEN_OFFICIAL_MODEL_IDS: Record<string, string> = {
 }
 
 /** 视频上游平台名，与后端 supportedVideoProviders 对齐。 */
-export type VideoProviderName = 'aigod' | 'newtoken' | 'newtoken_official' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart' | 'vipprompt'
+export type VideoProviderName = 'aigod' | 'newtoken' | 'newtoken_official' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart' | 'vipprompt' | 'vidu'
 
 /**
  * 各上游适配器当前能路由的模型——仅用于「上游平台」下拉的分组提示，
@@ -64,8 +65,9 @@ export const VIDEO_PROVIDER_SUPPORTED_MODELS: Record<
   newtoken: ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5'],
   newtoken_official: ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.0-mini', 'seedance-2.5'],
   apimart: ['minimax-h3', 'minimax-h3-max'],
+  vidu: ['vidu-q4-preview'],
   vipprompt: ['seedance-2.0', 'seedance-2.5', 'kling-v4'],
-  mikuapi: VIDEO_MODEL_CODES.filter(model => !model.startsWith('minimax-h3') && model !== 'seedance-2.0-mini'),
+  mikuapi: VIDEO_MODEL_CODES.filter(model => !model.startsWith('minimax-h3') && model !== 'seedance-2.0-mini' && model !== 'vidu-q4-preview'),
   jingyu: ['seedance-2.0', 'seedance-2.5'],
   // xingguang 上游没有 fast 对应模型；档位与时长/画幅的渠道硬约束由适配器闸门兜底。
   xingguang: ['seedance-2.0', 'seedance-2.5']

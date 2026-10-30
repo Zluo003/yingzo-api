@@ -20,7 +20,8 @@ export const VIDEO_PRICING_MODEL_RESOLUTIONS: {
   { model: 'minimax-h3', resolutions: ['768p', '2K'] },
   { model: 'minimax-h3-max', resolutions: ['480p', '768p', '1080p'] },
   { model: 'kling-v3-omni', resolutions: ['720p', '1080p', '4K'] },
-  { model: 'kling-v4', resolutions: ['720p', '1080p'] }
+  { model: 'kling-v4', resolutions: ['720p', '1080p'] },
+  { model: 'vidu-q4-preview', resolutions: ['540p', '720p', '1080p', '2K', '4K'] }
 ]
 
 export const VIDEO_PRICING_MODELS = VIDEO_PRICING_MODEL_RESOLUTIONS.map(

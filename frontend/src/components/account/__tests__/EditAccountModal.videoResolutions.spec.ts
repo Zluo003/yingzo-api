@@ -227,13 +227,31 @@ describe('EditAccountModal video resolutions', () => {
 
   it('loads legacy accounts with no model restriction as an explicit selection of all models', async () => {
     const account = buildVideoAccount()
-    const allModels = ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.0-mini', 'seedance-2.5', 'grok-imagine-video-1.5', 'minimax-h3', 'minimax-h3-max', 'kling-v3-omni', 'kling-v4']
+    const allModels = ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.0-mini', 'seedance-2.5', 'grok-imagine-video-1.5', 'minimax-h3', 'minimax-h3-max', 'kling-v3-omni', 'kling-v4', 'vidu-q4-preview']
     delete account.credentials.model_mapping
     const wrapper = mountModal(account)
     await flushPromises()
 
     expect(wrapper.getComponent(ModelWhitelistSelector).props('modelValue')).toEqual(allModels)
     expect(Object.keys((await submitEdit(wrapper)).credentials.model_mapping)).toEqual(allModels)
+  })
+
+  it('restores Vidu and preserves Q4 Preview routing restrictions', async () => {
+    const account = buildVideoAccount({
+      video_provider: 'vidu', base_url: 'https://api.vidu.cn', api_path: '/ent/v2/tasks',
+      video_model_resolutions: { 'vidu-q4-preview': ['540p', '4K'] },
+      video_model_durations: { 'vidu-q4-preview': [3, 16] }
+    })
+    account.credentials.model_mapping = { 'vidu-q4-preview': 'viduq4-preview' }
+    const wrapper = mountModal(account)
+    await flushPromises()
+    expect(wrapper.get('option[value="vidu"]').text()).toBe('admin.accounts.video.providers.vidu')
+    const payload = await submitEdit(wrapper)
+    expect(payload.extra.video_provider).toBe('vidu')
+    expect(payload.extra.api_path).toBe('/ent/v2/tasks')
+    expect(payload.extra.video_model_resolutions['vidu-q4-preview']).toEqual(['540p', '4K'])
+    expect(payload.extra.video_model_durations['vidu-q4-preview']).toEqual([3, 16])
+    expect(payload.credentials.model_mapping).toEqual({ 'vidu-q4-preview': 'viduq4-preview' })
   })
 
   it('restores the official adapter and preserves custom account settings', async () => {

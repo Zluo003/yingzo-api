@@ -23,8 +23,10 @@ const (
 	VideoModelGrokImagineVideo15 = "grok-imagine-video-1.5"
 	VideoModelKlingV3Omni        = "kling-v3-omni"
 	VideoModelKlingV4            = "kling-v4"
+	VideoModelViduQ4Preview      = "vidu-q4-preview"
 
 	VideoResolution480P  = "480p"
+	VideoResolution540P  = "540p"
 	VideoResolution720P  = "720p"
 	VideoResolution768P  = "768p"
 	VideoResolution1080P = "1080p"
@@ -77,6 +79,11 @@ type videoModelSpec struct {
 // the catalog comes from each account's model_mapping; those fall back to
 // videoDefaultModelSpec.
 var videoModelSpecs = map[string]videoModelSpec{
+	VideoModelViduQ4Preview: {
+		Resolutions:       []string{VideoResolution540P, VideoResolution720P, VideoResolution1080P, VideoResolution2K, VideoResolution4K},
+		DefaultResolution: VideoResolution720P,
+		MinSeconds:        3, MaxSeconds: 16, MaxRefImages: 15, MaxRefAudios: 3, AudioNeedsVisual: true,
+	},
 	VideoModelMinimaxH3Max: {Resolutions: []string{VideoResolution480P, VideoResolution768P, VideoResolution1080P}, DefaultResolution: VideoResolution768P, MinSeconds: 5, MaxSeconds: 15, MaxRefImages: 9, MaxRefVideos: 3, MaxRefAudios: 3, MaxRefVideoSeconds: 15, MaxRefVideoTotalSeconds: 15, AudioNeedsVisual: true},
 	VideoModelMinimaxH3:    {Resolutions: []string{VideoResolution768P, VideoResolution2K}, DefaultResolution: VideoResolution2K, MinSeconds: 4, MaxSeconds: 15, MaxRefImages: 9, MaxRefVideos: 3, MaxRefAudios: 3, MaxRefVideoSeconds: 15, MaxRefVideoTotalSeconds: 15, AudioNeedsVisual: true},
 	VideoModelSeedance20: {
@@ -226,6 +233,7 @@ func SupportedVideoModels() []string {
 		VideoModelKlingV4,
 		VideoModelMinimaxH3,
 		VideoModelMinimaxH3Max,
+		VideoModelViduQ4Preview,
 	}
 }
 

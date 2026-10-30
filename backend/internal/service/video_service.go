@@ -675,6 +675,9 @@ func (s *VideoService) createUpstreamTask(ctx context.Context, account *Account,
 	// 同一渠道的不同模型族可能用不同创建路径（mikuapi 的 grok-imagine 走
 	// /generations），由适配器按上游模型名调整；其余适配器原样返回。
 	endpoint = videoProviderAdapterForAccount(account).CreateEndpoint(endpoint, stringFromMap(body, "model"))
+	if adapter, ok := videoProviderAdapterForAccount(account).(videoProviderTransportAdapter); ok {
+		endpoint = adapter.CreateRequestEndpoint(endpoint, body)
+	}
 	if videoAccountProvider(account) == videoProviderVipprompt {
 		return s.createVippromptTask(ctx, account, endpoint, raw)
 	}
@@ -684,7 +687,7 @@ func (s *VideoService) createUpstreamTask(ctx context.Context, account *Account,
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(account.GetCredential("api_key")))
+	req.Header.Set("Authorization", videoRequestAuthorization(account))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := s.doUpstream(req, account)
@@ -722,6 +725,9 @@ func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, u
 		return nil, err
 	}
 	endpoint := strings.TrimRight(baseEndpoint, "/") + "/" + url.PathEscape(upstreamTaskID)
+	if adapter, ok := videoProviderAdapterForAccount(account).(videoProviderTransportAdapter); ok {
+		endpoint = adapter.PollEndpoint(baseEndpoint, upstreamTaskID)
+	}
 	if videoAccountProvider(account) == videoProviderVipprompt {
 		endpoint = vippromptPollEndpoint(baseEndpoint, upstreamTaskID)
 	}
@@ -731,7 +737,7 @@ func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, u
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(account.GetCredential("api_key")))
+	req.Header.Set("Authorization", videoRequestAuthorization(account))
 	resp, err := s.doUpstream(req, account)
 	if err != nil {
 		return nil, &videoUpstreamError{StatusCode: 0, Err: err}
@@ -753,6 +759,9 @@ func (s *VideoService) pollUpstreamTask(ctx context.Context, account *Account, u
 	}
 	if videoAccountProvider(account) == videoProviderVipprompt {
 		return vippromptPollResult(baseEndpoint, upstreamTaskID, payload, respBody), nil
+	}
+	if videoAccountProvider(account) == videoProviderVidu {
+		payload = viduVideoResponse(payload)
 	}
 	rawStatus := stringFromMap(payload, "status")
 	status := normalizeVideoUpstreamStatus(rawStatus)
@@ -1568,6 +1577,11 @@ func normalizeVideoCreateRequestWithDynamicModel(req *VideoCreateRequest, dynami
 	if err := validateVideoAbilityInput(model, ability, prompt, stats); err != nil {
 		return nil, err
 	}
+	if model == VideoModelViduQ4Preview {
+		if err := validateViduVideoInput(req, ability, prompt, content); err != nil {
+			return nil, err
+		}
+	}
 	referenceSeconds, err := referenceVideoSeconds(model, content)
 	if err != nil {
 		return nil, err
@@ -1932,7 +1946,7 @@ func isVideoAccountCompatibleForRequest(account *Account, normalized *normalized
 // unsupported request is routed to another upstream instead of failing there.
 func videoProviderNeedsRequestCompatibility(provider string) bool {
 	switch provider {
-	case videoProviderAigod, videoProviderNewtoken, videoProviderNewtokenOfficial, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang, videoProviderApimart, videoProviderVipprompt:
+	case videoProviderAigod, videoProviderNewtoken, videoProviderNewtokenOfficial, videoProviderMikuapi, videoProviderJingyu, videoProviderXingguang, videoProviderApimart, videoProviderVipprompt, videoProviderVidu:
 		return true
 	default:
 		return false
@@ -2191,6 +2205,8 @@ func videoAccountAPIPath(account *Account) string {
 func videoAccountProvider(account *Account) string {
 	provider := strings.ToLower(strings.TrimSpace(accountExtraString(account, "video_provider")))
 	switch provider {
+	case videoProviderVidu:
+		return videoProviderVidu
 	case videoProviderVipprompt:
 		return videoProviderVipprompt
 	case videoProviderApimart:
@@ -2243,7 +2259,7 @@ func videoAccountDefaultDuration(account *Account, key string) time.Duration {
 		case "connect_timeout_ms":
 			return videoJingyuConnectTimeout
 		}
-	case videoProviderMikuapi, videoProviderApimart:
+	case videoProviderMikuapi, videoProviderApimart, videoProviderVidu:
 		switch key {
 		case "poll_interval_ms":
 			return videoMikuapiPollInterval

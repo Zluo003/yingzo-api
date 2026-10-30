@@ -38,6 +38,7 @@
             <option value="mikuapi">{{ t('admin.accounts.video.providers.mikuapi') }}</option>
             <option value="jingyu">{{ t('admin.accounts.video.providers.jingyu') }}</option>
             <option value="vipprompt">{{ t('admin.accounts.video.providers.vipprompt') }}</option>
+            <option value="vidu">{{ t('admin.accounts.video.providers.vidu') }}</option>
             <option value="apimart">APIMart</option>
             <option value="xingguang">{{ t('admin.accounts.video.providers.xingguang') }}</option>
           </select>
@@ -3282,7 +3283,7 @@ interface TempUnschedRuleForm {
 const submitting = ref(false)
 const editBaseUrl = ref('https://api.anthropic.com')
 const editApiKey = ref('')
-type VideoProvider = 'aigod' | 'newtoken' | 'newtoken_official' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart' | 'vipprompt'
+type VideoProvider = 'aigod' | 'newtoken' | 'newtoken_official' | 'mikuapi' | 'jingyu' | 'xingguang' | 'apimart' | 'vipprompt' | 'vidu'
 
 /** 对外提供的视频模型：单一来源见 @/views/admin/videoModelResolutions。 */
 const videoDefaultModels = VIDEO_MODEL_CODES
@@ -3337,6 +3338,7 @@ const editVideoDefaultsMap: Record<
   mikuapi: { baseUrl: 'https://mikuapi.org', apiPath: '/v1/videos', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
   jingyu: { baseUrl: 'https://api.jingyuapi.art', apiPath: '/v1/video/generations', pollIntervalMs: 5000, pollTimeoutMs: 1800000, requestTimeoutMs: 1800000, connectTimeoutMs: 60000 },
   vipprompt: { baseUrl: 'https://www.vipprompt.cn', apiPath: '/v1/videos', pollIntervalMs: 10000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
+  vidu: { baseUrl: 'https://api.vidu.cn', apiPath: '/ent/v2/tasks', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
   apimart: { baseUrl: 'https://api.apimart.ai', apiPath: '/v1/tasks', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 },
   xingguang: { baseUrl: 'https://xingapi.top', apiPath: '/v1/videos', pollIntervalMs: 5000, pollTimeoutMs: 900000, requestTimeoutMs: 60000, connectTimeoutMs: 15000 }
 }
@@ -4420,7 +4422,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
     }
     // 只认已接入的上游；未知取值回落 aigod（后端也会在写入时校验并拒绝）。
     const storedVideoProvider: VideoProvider =
-      extra?.video_provider === 'newtoken_official' || extra?.video_provider === 'newtoken' || extra?.video_provider === 'mikuapi' || extra?.video_provider === 'jingyu' || extra?.video_provider === 'xingguang' || extra?.video_provider === 'apimart' || extra?.video_provider === 'vipprompt'
+      extra?.video_provider === 'newtoken_official' || extra?.video_provider === 'newtoken' || extra?.video_provider === 'mikuapi' || extra?.video_provider === 'jingyu' || extra?.video_provider === 'xingguang' || extra?.video_provider === 'apimart' || extra?.video_provider === 'vipprompt' || extra?.video_provider === 'vidu'
         ? extra.video_provider
         : 'aigod'
     const platformDefaultUrl =

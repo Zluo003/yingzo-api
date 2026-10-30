@@ -149,6 +149,25 @@ describe('CreateAccountModal video mode', () => {
     expect(optionValues()).not.toContain('ycyapi')
   })
 
+  it('selects Vidu for Q4 Preview and saves its task path and allowed tiers', async () => {
+    const wrapper = await mountVideoModal()
+    await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
+    for (const model of ['seedance-2.0', 'seedance-2.0-fast', 'seedance-2.5', 'grok-imagine-video-1.5', 'kling-v3-omni', 'kling-v4', 'vidu-q4-preview']) {
+      await wrapper.get(`[data-testid="video-model-${model}"]`).trigger('click')
+    }
+    await flushPromises()
+    const select = wrapper.get('[data-testid="video-provider-select"]')
+    expect(select.findAll('option').map(option => option.element.value)).toEqual(['vidu'])
+    const payload = await submitVideoAccount(wrapper)
+    expect(payload.extra.video_provider).toBe('vidu')
+    expect(payload.extra.base_url).toBe('https://api.vidu.cn')
+    expect(payload.extra.api_path).toBe('/ent/v2/tasks')
+    expect(payload.extra.poll_interval_ms).toBe(5000)
+    expect(payload.extra.video_model_resolutions['vidu-q4-preview']).toEqual(['540p', '720p', '1080p', '2K', '4K'])
+    expect(payload.extra.video_model_durations['vidu-q4-preview']).toEqual(Array.from({ length: 14 }, (_, i) => i + 3))
+    expect(payload.credentials.model_mapping).toEqual({ 'vidu-q4-preview': 'vidu-q4-preview' })
+  })
+
   it('selects the official adapter for Mini and preserves account overrides', async () => {
     const wrapper = await mountVideoModal()
     await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')

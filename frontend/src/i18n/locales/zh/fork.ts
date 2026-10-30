@@ -256,6 +256,7 @@ export default {
         provider: '上游平台',
         providerHint: '选择该视频账号调用的上游平台，仅管理端可见。',
         providers: {
+          vidu: 'Vidu',
           aigod: 'aigod',
           newtoken: 'newtoken',
           newtoken_official: 'NewToken 官方协议',
@@ -271,6 +272,7 @@ export default {
         newtokenAdapter: '按分辨率路由上游模型：2.0 / 1080p、2.0 Fast、2.5',
         mikuapiAdapter: '按请求体里的 resolution 字段路由：Seedance 2.0（含 4K）/ 2.0 Fast（480p/720p，仅 5/10 秒）/ 2.5（无 4K），另支持 grok-imagine-video-1.5 与可灵 kling-v3-omni / kling-v4（720p/1080p，3–30 秒；可灵走 /v1/videos，成片为直链）',
         jingyuAdapter: 'Jingyu /v1/video/generations：2.0（含 4K）/ 2.5（480p/720p）',
+        viduAdapter: 'Vidu Q4 Preview：图生视频 / 参考生视频，3–16 秒，540p/720p/1080p/2K/4K；最多 15 张参考图和 3 段参考音频。',
         apimartAdapter: 'MiniMax H3 / H3 Max; /v1/tasks; H3: 768p/2K, 4–15s; H3 Max: 480p/768p/1080p, 5–15s',
         xingguangAdapter: 'xingapi.top /v1/videos 异步接口：可提交文生与参考生视频（实际能力以上游模型为准），Seedance 2.0 上游模型 seedance2.0-933（可经 model_mapping 改为 seedance2.0-933-2）、2.5 上游模型 seedance2.5；480p/720p；画幅透传 16:9/9:16/21:9/1:1/4:3/3:4，成片从带鉴权的 /content 回捞。参考视频不写死：上游未开放期间请把参考视频上限配为 0，开放后调大即可',
         models: '视频模型',

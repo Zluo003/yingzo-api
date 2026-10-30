@@ -29,7 +29,8 @@ const VIDEO_MODEL_DURATION_RANGES: Record<string, VideoModelDurationRange> = {
   'minimax-h3': { min: 4, max: 15 },
   'minimax-h3-max': { min: 5, max: 15 },
   'kling-v3-omni': { min: 3, max: 15 },
-  'kling-v4': { min: 3, max: 30 }
+  'kling-v4': { min: 3, max: 30 },
+  'vidu-q4-preview': { min: 3, max: 16 }
 }
 
 /** 模型官方时长档位（整数秒，升序）；未接入的模型返回空数组。 */

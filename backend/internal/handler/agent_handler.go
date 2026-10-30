@@ -218,7 +218,12 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 		capabilities["supported_image_sizes"] = configuredAgentModelResolutions(entry, config, service.AgentMediaTypeImage)
 	}
 	if containsAgentMediaType(entry.MediaTypes, service.AgentMediaTypeVideo) {
-		input = appendUniqueStrings(input, "text", "image", "video", "audio")
+		if entry.ID == service.VideoModelViduQ4Preview {
+			input = appendUniqueStrings(input, "text", "image", "audio")
+			capabilities["supported_aspect_ratios"] = []string{"1:1", "9:16", "16:9", "3:4", "4:3"}
+		} else {
+			input = appendUniqueStrings(input, "text", "image", "video", "audio")
+		}
 		output = appendUniqueStrings(output, "video")
 		operations = appendUniqueStrings(operations, "video.generate")
 		streaming = false
