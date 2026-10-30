@@ -88,59 +88,174 @@ deploy/                  Dockerfile、compose、安装脚本、配置模板
 
 ## 部署
 
-### 方式一：Docker Compose（推荐）
+发布产物支持 **Linux amd64 / arm64**，主程序已内嵌用户前端和管理后台，部署时无需编译 Go 或前端。
+
+| 方式 | 适用场景 | 数据库与进程管理 |
+| --- | --- | --- |
+| [一键脚本](#方式一linux-一键脚本与-systemd) | 在服务器上直接安装，由 systemd 管理 | 自行准备 PostgreSQL、Redis；脚本安装网关服务 |
+| [Docker Compose](#方式二docker-compose) | 希望一并启动网关、数据库和缓存 | 标准 Compose 包含 PostgreSQL、Redis，使用持久化卷 |
+| [手动运行二进制](#方式三手动运行二进制) | 已有自己的进程管理或部署工具 | 自行准备依赖、配置和进程管理 |
+
+### 方式一：Linux 一键脚本与 systemd
+
+#### 1. 准备服务器
+
+需要 root / sudo 权限、Bash 4+ 和 systemd。服务器应能访问 GitHub Release；启用 MJ 时还需要访问 Node.js 和 npm 下载源，以及 Discord。
+
+**安装脚本不安装 PostgreSQL 和 Redis。** 请提前准备好这两个服务，为网关创建独立的 PostgreSQL 用户、数据库和密码，并确认服务器可以连接。可使用本机数据库，也可连接已有数据库服务器。
+
+例如，Debian / Ubuntu 可先安装依赖及本机数据库：
 
 ```bash
-cd deploy
-cp .env.example .env          # 至少填写 POSTGRES_PASSWORD、JWT_SECRET
-docker compose up -d          # 默认镜像 ghcr.io/zluo003/yingzo-api
-docker compose logs -f        # 首次启动会打印自动生成的管理员密码
+sudo apt-get update
+sudo apt-get install -y curl ca-certificates tar coreutils openssl xz-utils util-linux postgresql redis-server
+sudo systemctl enable --now postgresql redis-server
+
+# 仅在首次创建时执行，按提示设置数据库密码
+sudo -u postgres createuser --pwprompt yingzo
+sudo -u postgres createdb --owner=yingzo yingzo
 ```
 
-管理员访问 `http://<主机>:8080/admin`，进入原版管理后台，用 `ADMIN_EMAIL` / `ADMIN_PASSWORD` 登录；`.env` 未设密码时以日志里自动生成的为准。根路径 `/` 为新版用户前端。服务默认使用 HTTP，只有配置了 HTTPS 反向代理后才使用 HTTPS 地址。
+#### 2. 安装网关并完成初始化
 
-未启用自动初始化且尚未安装时，访问 `/`、`/admin` 或 `/setup` 会进入原版安装向导（`/admin/setup`），配置数据库、Redis 和管理员账号；安装完成后跳转到原版后台登录页。
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/install.sh | sudo bash -s -- install
+```
 
-其他 compose 文件：
+按提示选择语言、监听地址和端口。默认端口为 `8080`；配置了本机反向代理时可选择仅监听 `127.0.0.1`。脚本将程序安装到 `/opt/yingzo-api`，创建 `yingzo-api` 服务用户，并配置 systemd 服务及开机自启。
 
-| 文件 | 用途 |
+首次访问 `http://服务器地址:8080/admin`，按安装向导填写 PostgreSQL、Redis 和管理员账号。上例数据库名、用户名均为 `yingzo`，密码使用创建时设置的值；本机 Redis 默认地址为 `127.0.0.1:6379`。安装完成后进入管理后台。
+
+如果安装时选择了其他端口，请替换地址中的 `8080`；若仅监听 `127.0.0.1`，通过已配置的反向代理域名或 SSH 隧道打开安装向导。
+
+| 地址 | 用途 |
 | --- | --- |
-| `docker-compose.yml` | 拉取发布镜像运行（生产默认） |
-| `docker-compose.standalone.yml` | 单容器 + 外部数据库 |
-| `docker-compose.local.yml` | 本机快速试跑 |
-| `docker-compose.dev.yml` | 从本地源码构建（开发用） |
+| `/` | 新版用户前端 |
+| `/admin` | 管理后台 |
+| `/admin/setup` | 首次安装向导；尚未初始化时访问 `/`、`/admin` 或 `/setup` 也会进入向导 |
 
-### 方式二：一键脚本（Linux）
+默认服务使用 HTTP。域名的 HTTPS 需要另外配置反向代理，见下方[反向代理与端口](#反向代理与端口)。
+
+#### 3. 需要 Midjourney 时启用配套服务
+
+在已经装好网关的同一台服务器执行：
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/install.sh | sudo bash -s -- install-mj
 ```
 
-安装到 `/opt/yingzo-api`，注册 systemd 服务 `yingzo-api.service`（`systemctl status yingzo-api`）。脚本会拉取 GitHub Release 产物，可用 `UPDATE_GITHUB_TOKEN` 提高 API 限额。
+**执行此命令就会自动配置 systemd 和共享密钥，无需手工编辑服务文件。** 脚本会下载与当前网关版本对应的 MJ 源码、准备 Node.js 24、安装依赖，创建 `yingzo-midjourney-discord.service`，并让网关与 MJ 服务读取同一份密钥。MJ 健康检查通过后，才重启原本正在运行的网关。
 
-需要 Discord Midjourney 时，在已安装网关的服务器上，用新版安装脚本执行 `install-mj` 命令。脚本自动安装 Node.js 配套服务、生成共享密钥并配置 systemd；旧版 `v0.3.68` 网关也可单独使用新版 `deploy/install-midjourney.sh` 补装，详见 [MJ 部署指南](docs/MIDJOURNEY_AGENT_INTEGRATION.md#一键脚本--systemd-部署linux)。
+MJ 默认监听 `127.0.0.1:18081`；被占用时从 `18082–18100` 选择空闲端口。重复执行会保留已配置的端口、密钥和任务数据。**`8081` 留给客户端升级服务，MJ 不探测、不使用该端口。**
+
+完成后，在管理后台「账号管理 → 添加 MJ 账号」填写 Discord Token、Server ID、Channel ID、分组及并发，再执行连接测试。生成图片还需配置异步图片存储和 MJ 操作价格，详见 [Midjourney 部署与对接指南](docs/MIDJOURNEY_AGENT_INTEGRATION.md)。
+
+以后在其他服务器全新部署，也按上述步骤安装网关、完成初始化，再按需执行一次 `install-mj`；原安装脚本继续使用。
+
+#### 4. 服务管理与文件位置
+
+```bash
+# 网关状态、日志与重启
+sudo systemctl status yingzo-api
+sudo journalctl -u yingzo-api -n 80 --no-pager
+sudo systemctl restart yingzo-api
+
+# 已启用 MJ 时，检查配套服务
+sudo systemctl status yingzo-midjourney-discord
+sudo journalctl -u yingzo-midjourney-discord -n 80 --no-pager
+```
+
+| 文件 / 目录 | 用途 |
+| --- | --- |
+| `/opt/yingzo-api/yingzo-api` | 网关主程序 |
+| `/opt/yingzo-api/config.yaml` | 默认脚本部署下，安装向导生成的配置；自定义 `DATA_DIR` 时以实际目录为准 |
+| `/etc/systemd/system/yingzo-api.service` | 网关服务 |
+| `/etc/systemd/system/yingzo-midjourney-discord.service` | MJ 配套服务 |
+| `/etc/systemd/system/yingzo-api.service.d/midjourney.conf` | 为网关注入 MJ 地址、共享密钥及服务依赖 |
+| `/etc/yingzo-api/midjourney.env` | 自动生成的 MJ 共享配置，仅 root 可读；无需在后台再次填写 |
+| `/opt/yingzo-api/data/midjourney-discord/` | MJ 任务状态数据库，与可替换的服务代码分开保存 |
 
 发行程序内嵌对应平台的 `ffprobe`，首次启动自动释放并校验，用于参考视频和音频探测；无需额外安装系统包。Docker 镜像也包含 `ffmpeg`。
 
-### 方式三：手动运行二进制
+### 方式二：Docker Compose
 
-从 [Releases](https://github.com/Zluo003/yingzo-api/releases) 下载 `yingzo-api_<版本>_linux_<架构>.tar.gz`（`amd64` 或 `arm64`），解压后：
+需要 Git、Docker Engine 和 Docker Compose 插件。从准备存放项目的目录执行；已经下载仓库时直接进入其中的 `deploy/` 目录：
 
 ```bash
-./yingzo-api --migrate     # 应用数据库迁移后退出
-./yingzo-api --setup       # 命令行初始化管理员
-./yingzo-api               # 启动服务（默认 8080）
+git clone https://github.com/Zluo003/yingzo-api.git
+cd yingzo-api/deploy
+cp .env.example .env
+chmod 600 .env
 ```
 
-### 反向代理注意
+编辑 `.env`，至少设置：
 
-前端是 SPA + SSE 流式响应，Nginx 侧需要关闭 `proxy_buffering`、放宽 `proxy_read_timeout`，并透传 `Upgrade` / `Connection` 头（WebSocket 实时接口）。示例配置见 `deploy/Caddyfile`。
+| 配置项 | 填写方式 |
+| --- | --- |
+| `POSTGRES_PASSWORD` | 独立的强密码，替换模板占位值 |
+| `JWT_SECRET` | 固定随机密钥，可用 `openssl rand -hex 32` 生成并保存 |
+| `ADMIN_EMAIL` | 首次创建的管理员邮箱 |
+| `ADMIN_PASSWORD` | 首次管理员密码；留空则自动生成并打印到首次启动日志 |
+| `BIND_HOST` / `SERVER_PORT` | 宿主机监听地址与端口；默认 `0.0.0.0:8080` |
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose ps
+docker compose logs -f sub2api
+```
+
+标准 Compose 会启动网关、PostgreSQL 和 Redis，首次运行按 `.env` 自动初始化，无需再走安装向导。访问 `http://服务器地址:8080/admin` 登录后台，根路径 `/` 为用户前端。
+
+PostgreSQL、Redis 和网关配置保存在命名卷中，素材保存在配置的宿主机目录。日常更新保留这些数据卷；迁移服务器时需要备份、恢复数据库及对应的配置和文件。Compose 里的服务名仍为 `sub2api`，日志命令使用该名称。
+
+其他 Compose 文件按需选择：
+
+| 文件 | 用途 |
+| --- | --- |
+| [docker-compose.yml](deploy/docker-compose.yml) | 标准部署，包含网关、PostgreSQL、Redis |
+| [docker-compose.standalone.yml](deploy/docker-compose.standalone.yml) | 只运行网关，连接已有 PostgreSQL、Redis；需另外填写 `DATABASE_*`、`REDIS_HOST` 等连接参数 |
+| [docker-compose.local.yml](deploy/docker-compose.local.yml) | 将网关、数据库、缓存数据放到本地目录，便于统一备份和迁移 |
+| [docker-compose.dev.yml](deploy/docker-compose.dev.yml) | 从本地源码构建的开发环境 |
+
+**Compose 启用 MJ：** 在 `deploy/.env` 中额外设置 `MIDJOURNEY_BRIDGE_SECRET`（至少 32 字符的随机密钥）和 `MIDJOURNEY_BRIDGE_VERSION=0.3.70`。然后从 `deploy/` 目录执行：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.midjourney.yml pull
+docker compose -f docker-compose.yml -f docker-compose.midjourney.yml up -d --no-build
+```
+
+该配置同时向网关和 MJ 服务注入相同密钥；MJ 在容器网络内使用 `18081`，不发布到宿主机公网。后续查看状态、升级或重建时继续带上这两个 `-f` 参数。Compose 部署无需执行裸机的 `install-mj` 脚本。
+
+### 方式三：手动运行二进制
+
+准备 PostgreSQL 和 Redis，从 [Releases](https://github.com/Zluo003/yingzo-api/releases) 下载 `yingzo-api_<版本>_linux_<架构>.tar.gz`（`amd64` 或 `arm64`），对照同一 Release 的 `checksums.txt` 校验 SHA-256 后解压。在准备长期保存配置的目录中执行：
+
+```bash
+./yingzo-api --setup       # 首次交互配置数据库、Redis 和管理员
+./yingzo-api               # 启动网关；默认端口 8080
+```
+
+配置保存在数据目录；默认使用当前工作目录，设置 `DATA_DIR` 后使用指定目录。由自己的 systemd、进程管理器或容器负责常驻运行及重启。已有配置时可用 `./yingzo-api --migrate` 单独执行数据库迁移。
+
+### 反向代理与端口
+
+| 默认端口 | 用途 | 访问范围 |
+| --- | --- | --- |
+| `8080` | 网关网站、管理后台与 API | 可直接访问，也可仅供反向代理转发 |
+| `8081` | 独立部署的客户端升级服务 | 按客户端升级服务配置；MJ 不占用 |
+| `18081` | MJ 配套服务 | 裸机仅监听 `127.0.0.1`，Compose 仅供容器网络访问 |
+| `5432` / `6379` | PostgreSQL / Redis | 供网关连接；标准 Compose 不向宿主机发布 |
+
+生产域名配置 HTTPS 后，将网站和 API 转发到网关端口。前端使用 SPA，网关包含 SSE 流式响应；Nginx 需要关闭 `proxy_buffering`、放宽 `proxy_read_timeout`，并正确处理 WebSocket 的 `Upgrade` / `Connection` 头。Caddy 示例见 [deploy/Caddyfile](deploy/Caddyfile)。
+
+使用本地素材存储时，在后台「文件服务」配置可被下游和上游访问的公网地址。来源 IP 用于注册限制和封禁，CDN / 多层代理需要正确配置可信代理与转发头，见 [边缘代理安全说明](deploy/EDGE_SECURITY.md)。
 
 ---
 
 ## 关键配置
 
-配置来源：环境变量（`deploy/.env`）+ 面板内的系统设置。常用项：
+基础连接、监听和密钥配置来自 `config.yaml` 与环境变量；业务配置在管理后台设置。Compose 通过 `deploy/.env` 注入环境变量；systemd 部署使用安装向导生成的配置，需要额外环境变量时通过 systemd 服务配置。裸机程序不会自动读取仓库里的 `deploy/.env`。
 
 | 变量 | 说明 |
 | --- | --- |
@@ -148,12 +263,14 @@ curl -sSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/insta
 | `RUN_MODE` | `standard`（完整）或 `simple`（简易模式，隐藏高级功能） |
 | `DATABASE_HOST` / `PORT` / `USER` / `PASSWORD` / `DBNAME` / `SSLMODE` | PostgreSQL 连接 |
 | `REDIS_HOST` / `PORT` / `PASSWORD` / `DB` | Redis 连接 |
-| `JWT_SECRET` | 签发凭证用密钥，**生产必须设置且不可随意更换** |
+| `JWT_SECRET` | 签发凭证用的固定密钥；脚本安装向导会生成并保存到配置，Compose 建议显式设置，不可随意更换 |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | 初始管理员账号（仅首次初始化使用） |
 | `TOTP_ENCRYPTION_KEY` | 秘密加密密钥（TOTP、S3 备份等落库敏感信息），可选；留空时首次启动自动生成并持久化到数据库 |
 | `AGENT_ASSETS_HOST_DIR` | 素材目录在宿主机上的绝对路径；容器按**同路径**挂载，面板里填容器内路径 |
 | `TZ` | 时区（影响日汇总与高峰时段判定） |
-| `UPDATE_GITHUB_TOKEN` | 面板内检查更新用的 GitHub Token（可选，避免限流） |
+| `UPDATE_GITHUB_TOKEN` | GitHub 更新检查 / 安装脚本查询 Release 时可选，减少 API 限流 |
+| `MIDJOURNEY_BRIDGE_URL` / `MIDJOURNEY_BRIDGE_SECRET` | 网关连接 MJ 服务的地址和共享密钥；裸机由 `install-mj` 自动配置 |
+| `DATA_DIR` | 配置与安装标记所在的数据目录；Compose 默认 `/app/data`，普通裸机默认当前工作目录 |
 | `GATEWAY_*` | 网关超时、连接池、HTTP/2 回退、调度与粘性会话等细项 |
 
 素材存储、S3、容量水位、保留时长、日配额等在面板「文件服务」页配置。
@@ -162,10 +279,53 @@ curl -sSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/insta
 
 ## 升级
 
-- **面板内检查**：系统设置页调用 `GET /api/v1/admin/system/check-updates` 对比 GitHub Release；升级要求产物含 `linux_amd64` 归档与 `checksums.txt`，二进制名为 `yingzo-api`。预发布版本不会提示。
-- **一键脚本**：重跑 `install.sh` 覆盖 `/opt/yingzo-api` 并重启 systemd 服务。
-- **Docker**：`docker compose pull && docker compose up -d`。
-- **迁移**：启动时自动应用内嵌迁移；也可在升级前手动执行 `./yingzo-api --migrate`。迁移是**前向且校验和锁定**的（见下）。
+升级前备份 PostgreSQL、配置和素材；已启用 MJ 时一并备份共享配置及任务数据库。数据库迁移是前向执行的，回退程序版本不会自动还原数据库。
+
+### 脚本部署升级
+
+已有安装使用 **`upgrade` 命令**，无需重新走初始化向导：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/install.sh | sudo bash -s -- upgrade
+```
+
+脚本下载最新 Release、备份并替换主程序，再启动网关。已经启用的 MJ 服务会同步更新，保留其端口、共享密钥和任务数据；未启用 MJ 的服务器不会因此安装 Node.js。
+
+指定版本安装或回退，例如切换到 `v0.3.70`：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/install.sh | sudo bash -s -- upgrade -v v0.3.70
+```
+
+只需补装或更新当前网关对应的 MJ 服务时，执行上文的 `install-mj`；无需重装网关。
+
+### 后台在线升级
+
+在管理后台检查新版本、执行升级，并按提示重启服务。更新器会下载当前 Linux 架构对应的 Release 归档、校验随包的 `checksums.txt`，再替换主程序；预发布版本不会提示。脚本安装的 systemd 服务已配置自动重启，支持后台发起重启。
+
+**在线升级只替换 Go 网关主程序，不安装 Node.js、不创建 MJ 的 systemd 服务，也不更新已有 MJ 配套服务。** 首次启用 MJ 或某次版本需要更新 MJ 服务时，仍需在服务器执行一次 `install-mj`。普通网关升级可以继续使用后台在线升级。
+
+### Docker Compose 升级
+
+在原来的 `deploy/` 目录执行，沿用同一个 `.env` 和 Compose 项目：
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+启用了 MJ 的部署使用：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.midjourney.yml pull
+docker compose -f docker-compose.yml -f docker-compose.midjourney.yml up -d --no-build
+```
+
+若固定了镜像版本，先更新对应的镜像标签及 `.env` 中的 `MIDJOURNEY_BRIDGE_VERSION`。容器部署通过拉取镜像并重建来升级，确保重建后运行的仍是选定版本。
+
+### 迁移与媒体运行时
+
+网关启动时自动应用内嵌数据库迁移；也可在已有配置的目录执行 `./yingzo-api --migrate` 后退出。迁移是**前向且校验和锁定**的，详见 [数据库迁移约定](backend/migrations/CONVENTIONS.md)。
 
 在线升级即使只替换主程序，新程序启动后也会自动补齐内嵌的 `ffprobe`，无需 root 或再次联网下载。运行时保存在程序目录的 `.runtime/ffprobe-<SHA256>/`；程序目录不可写时使用当前服务用户的缓存目录。新版本与旧版本使用各自的内容哈希目录，回滚不覆盖正在使用的探测程序。可执行 `./yingzo-api --prepare-runtime` 单独验证自动安装。
 
