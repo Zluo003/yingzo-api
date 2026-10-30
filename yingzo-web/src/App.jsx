@@ -13,6 +13,7 @@ import Affiliate from './Affiliate.jsx';
 import { request, clearAuthKeys } from './lib.js';
 import { hasAuthTokens, pageFromPath, requiresLogin } from './auth-session.js';
 import { useAuthSession } from './useAuthSession.jsx';
+import { useSiteFavicon } from './useSiteFavicon.jsx';
 import { useTutorialConfig } from './useTutorialConfig.jsx';
 import { Recharge, PaymentResult, StripePayment, AirwallexPayment } from './recharge.jsx';
 import { AnnouncementBell, AnnouncementPopup, fetchAnnouncements, resetAnnouncements } from './announcements.jsx';
@@ -252,6 +253,7 @@ function Profile({
           })} /></label><button className="dark" onClick={change}>{tr("更新密码 →")}</button></div></div></Page>;
 }
 export function App() {
+  useSiteFavicon();
   const {
     i18n: language
   } = useTranslation();
