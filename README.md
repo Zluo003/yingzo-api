@@ -58,7 +58,8 @@
 ### 管理面板
 
 - 仪表盘 / 用户 / 分组 / 账号 / 渠道与渠道定价 / 渠道监控 / 用量与运维 / 风控与提示词审计 / 公告 / 兑换码 / 优惠码 / 邀请 / 订阅 / 支付 / 备份 / 插件 / 文件服务 / **Yingzo Agent**。
-- 中英双语（`zh` / `en`），支持简易模式（`RUN_MODE=simple`）与标准模式。
+- 新版用户前端支持中文、英文、越南文，通过地球图标切换并记住语言偏好；语言包可继续扩展，见 [多语言接入说明](yingzo-web/README.md#多语言)。原管理后台支持中英双语。
+- 支持简易模式（`RUN_MODE=simple`）与标准模式。
 
 ---
 
@@ -218,7 +219,7 @@ PostgreSQL、Redis 和网关配置保存在命名卷中，素材保存在配置�
 | [docker-compose.local.yml](deploy/docker-compose.local.yml) | 将网关、数据库、缓存数据放到本地目录，便于统一备份和迁移 |
 | [docker-compose.dev.yml](deploy/docker-compose.dev.yml) | 从本地源码构建的开发环境 |
 
-**Compose 启用 MJ：** 在 `deploy/.env` 中额外设置 `MIDJOURNEY_BRIDGE_SECRET`（至少 32 字符的随机密钥）和 `MIDJOURNEY_BRIDGE_VERSION=0.3.70`。然后从 `deploy/` 目录执行：
+**Compose 启用 MJ：** 在 `deploy/.env` 中额外设置 `MIDJOURNEY_BRIDGE_SECRET`（至少 32 字符的随机密钥）和 `MIDJOURNEY_BRIDGE_VERSION=0.3.71`。然后从 `deploy/` 目录执行：
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.midjourney.yml pull
@@ -291,10 +292,10 @@ curl -fsSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/inst
 
 脚本下载最新 Release、备份并替换主程序，再启动网关。已经启用的 MJ 服务会同步更新，保留其端口、共享密钥和任务数据；未启用 MJ 的服务器不会因此安装 Node.js。
 
-指定版本安装或回退，例如切换到 `v0.3.70`：
+指定版本安装或回退，例如切换到 `v0.3.71`：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/install.sh | sudo bash -s -- upgrade -v v0.3.70
+curl -fsSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/install.sh | sudo bash -s -- upgrade -v v0.3.71
 ```
 
 只需补装或更新当前网关对应的 MJ 服务时，执行上文的 `install-mj`；无需重装网关。

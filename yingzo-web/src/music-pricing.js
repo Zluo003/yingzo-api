@@ -1,82 +1,234 @@
+import { t as tr } from "./i18n/index.js";
 const musicPriceLabels = {
-  "instrumental": "纯音乐",
-  "song": "歌曲",
-  "addInstrumental": "添加伴奏",
-  "addStem": "添加音轨 (add stem)",
-  "addVocals": "添加人声",
-  "adjustSpeed": "调整速度",
-  "alignedLyrics": "歌词时间轴",
-  "bpm": "BPM 分析",
-  "concat": "完整歌曲合成 / 拼接",
-  "coverSong": "风格翻唱",
-  "create_model": "创建自定义音色模型",
-  "createVoice": "创建语音",
-  "crop": "裁剪音频",
-  "download": "下载音频文件",
-  "extend": "续写延长",
-  "fadeIn": "淡入",
-  "fadeOut": "淡出",
-  "generateMp4": "生成音乐视频 (MV)",
-  "inspo": "灵感生成 (inspo)",
-  "lyrics": "生成歌词",
-  "mashup": "生成混搭 (mashup)",
-  "midi": "生成 MIDI",
-  "persona": "创建歌手",
-  "remaster": "母带优化",
-  "removeSection": "删除片段",
-  "replaceMusic": "段落替换",
-  "sample": "样本转歌曲",
-  "sounds": "音效生成",
-  "stems": "分轨提取",
-  "stemsAll": "全量分轨",
-  "upload_cover": "上传音频翻唱",
-  "uploadExtend": "上传音频并延伸",
-  "upload": "上传音频",
-  "upsampleTags": "标签增强",
-  "vox": "提取 Vox（已弃用）",
-  "instrumental:v6-wild": "纯音乐 · v6-wild",
-  "instrumental:v6-mini": "纯音乐 · v6-mini",
-  "instrumental:custom": "纯音乐 · 自定义模型",
-  "song:v6-wild": "歌曲 · v6-wild",
-  "song:v6-mini": "歌曲 · v6-mini",
-  "song:custom": "歌曲 · 自定义模型",
-  "addInstrumental:v6-wild": "添加伴奏 · v6-wild",
-  "addInstrumental:v6-mini": "添加伴奏 · v6-mini",
-  "addInstrumental:custom": "添加伴奏 · 自定义模型",
-  "addStem:v6-wild": "添加音轨 (add stem) · v6-wild",
-  "addStem:v6-mini": "添加音轨 (add stem) · v6-mini",
-  "addStem:custom": "添加音轨 (add stem) · 自定义模型",
-  "addVocals:v6-wild": "添加人声 · v6-wild",
-  "addVocals:v6-mini": "添加人声 · v6-mini",
-  "addVocals:custom": "添加人声 · 自定义模型",
-  "coverSong:v6-wild": "风格翻唱 · v6-wild",
-  "coverSong:v6-mini": "风格翻唱 · v6-mini",
-  "coverSong:custom": "风格翻唱 · 自定义模型",
-  "extend:v6-wild": "续写延长 · v6-wild",
-  "extend:v6-mini": "续写延长 · v6-mini",
-  "extend:custom": "续写延长 · 自定义模型",
-  "inspo:v6-wild": "灵感生成 (inspo) · v6-wild",
-  "inspo:v6-mini": "灵感生成 (inspo) · v6-mini",
-  "inspo:custom": "灵感生成 (inspo) · 自定义模型",
-  "mashup:v6-wild": "生成混搭 (mashup) · v6-wild",
-  "mashup:v6-mini": "生成混搭 (mashup) · v6-mini",
-  "mashup:custom": "生成混搭 (mashup) · 自定义模型",
-  "replaceMusic:v6-wild": "段落替换 · v6-wild",
-  "replaceMusic:v6-mini": "段落替换 · v6-mini",
-  "replaceMusic:custom": "段落替换 · 自定义模型",
-  "sample:v6-wild": "样本转歌曲 · v6-wild",
-  "sample:v6-mini": "样本转歌曲 · v6-mini",
-  "sample:custom": "样本转歌曲 · 自定义模型",
-  "sounds:v6-wild": "音效生成 · v6-wild",
-  "sounds:v6-mini": "音效生成 · v6-mini",
-  "upload_cover:v6-wild": "上传音频翻唱 · v6-wild",
-  "upload_cover:v6-mini": "上传音频翻唱 · v6-mini",
-  "upload_cover:custom": "上传音频翻唱 · 自定义模型",
-  "uploadExtend:v6-wild": "上传音频并延伸 · v6-wild",
-  "uploadExtend:v6-mini": "上传音频并延伸 · v6-mini",
-  "uploadExtend:custom": "上传音频并延伸 · 自定义模型"
-}
-
+  get "instrumental"() {
+    return tr("纯音乐");
+  },
+  get "song"() {
+    return tr("歌曲");
+  },
+  get "addInstrumental"() {
+    return tr("添加伴奏");
+  },
+  get "addStem"() {
+    return tr("添加音轨 (add stem)");
+  },
+  get "addVocals"() {
+    return tr("添加人声");
+  },
+  get "adjustSpeed"() {
+    return tr("调整速度");
+  },
+  get "alignedLyrics"() {
+    return tr("歌词时间轴");
+  },
+  get "bpm"() {
+    return tr("BPM 分析");
+  },
+  get "concat"() {
+    return tr("完整歌曲合成 / 拼接");
+  },
+  get "coverSong"() {
+    return tr("风格翻唱");
+  },
+  get "create_model"() {
+    return tr("创建自定义音色模型");
+  },
+  get "createVoice"() {
+    return tr("创建语音");
+  },
+  get "crop"() {
+    return tr("裁剪音频");
+  },
+  get "download"() {
+    return tr("下载音频文件");
+  },
+  get "extend"() {
+    return tr("续写延长");
+  },
+  get "fadeIn"() {
+    return tr("淡入");
+  },
+  get "fadeOut"() {
+    return tr("淡出");
+  },
+  get "generateMp4"() {
+    return tr("生成音乐视频 (MV)");
+  },
+  get "inspo"() {
+    return tr("灵感生成 (inspo)");
+  },
+  get "lyrics"() {
+    return tr("生成歌词");
+  },
+  get "mashup"() {
+    return tr("生成混搭 (mashup)");
+  },
+  get "midi"() {
+    return tr("生成 MIDI");
+  },
+  get "persona"() {
+    return tr("创建歌手");
+  },
+  get "remaster"() {
+    return tr("母带优化");
+  },
+  get "removeSection"() {
+    return tr("删除片段");
+  },
+  get "replaceMusic"() {
+    return tr("段落替换");
+  },
+  get "sample"() {
+    return tr("样本转歌曲");
+  },
+  get "sounds"() {
+    return tr("音效生成");
+  },
+  get "stems"() {
+    return tr("分轨提取");
+  },
+  get "stemsAll"() {
+    return tr("全量分轨");
+  },
+  get "upload_cover"() {
+    return tr("上传音频翻唱");
+  },
+  get "uploadExtend"() {
+    return tr("上传音频并延伸");
+  },
+  get "upload"() {
+    return tr("上传音频");
+  },
+  get "upsampleTags"() {
+    return tr("标签增强");
+  },
+  get "vox"() {
+    return tr("提取 Vox（已弃用）");
+  },
+  get "instrumental:v6-wild"() {
+    return tr("纯音乐 · v6-wild");
+  },
+  get "instrumental:v6-mini"() {
+    return tr("纯音乐 · v6-mini");
+  },
+  get "instrumental:custom"() {
+    return tr("纯音乐 · 自定义模型");
+  },
+  get "song:v6-wild"() {
+    return tr("歌曲 · v6-wild");
+  },
+  get "song:v6-mini"() {
+    return tr("歌曲 · v6-mini");
+  },
+  get "song:custom"() {
+    return tr("歌曲 · 自定义模型");
+  },
+  get "addInstrumental:v6-wild"() {
+    return tr("添加伴奏 · v6-wild");
+  },
+  get "addInstrumental:v6-mini"() {
+    return tr("添加伴奏 · v6-mini");
+  },
+  get "addInstrumental:custom"() {
+    return tr("添加伴奏 · 自定义模型");
+  },
+  get "addStem:v6-wild"() {
+    return tr("添加音轨 (add stem) · v6-wild");
+  },
+  get "addStem:v6-mini"() {
+    return tr("添加音轨 (add stem) · v6-mini");
+  },
+  get "addStem:custom"() {
+    return tr("添加音轨 (add stem) · 自定义模型");
+  },
+  get "addVocals:v6-wild"() {
+    return tr("添加人声 · v6-wild");
+  },
+  get "addVocals:v6-mini"() {
+    return tr("添加人声 · v6-mini");
+  },
+  get "addVocals:custom"() {
+    return tr("添加人声 · 自定义模型");
+  },
+  get "coverSong:v6-wild"() {
+    return tr("风格翻唱 · v6-wild");
+  },
+  get "coverSong:v6-mini"() {
+    return tr("风格翻唱 · v6-mini");
+  },
+  get "coverSong:custom"() {
+    return tr("风格翻唱 · 自定义模型");
+  },
+  get "extend:v6-wild"() {
+    return tr("续写延长 · v6-wild");
+  },
+  get "extend:v6-mini"() {
+    return tr("续写延长 · v6-mini");
+  },
+  get "extend:custom"() {
+    return tr("续写延长 · 自定义模型");
+  },
+  get "inspo:v6-wild"() {
+    return tr("灵感生成 (inspo) · v6-wild");
+  },
+  get "inspo:v6-mini"() {
+    return tr("灵感生成 (inspo) · v6-mini");
+  },
+  get "inspo:custom"() {
+    return tr("灵感生成 (inspo) · 自定义模型");
+  },
+  get "mashup:v6-wild"() {
+    return tr("生成混搭 (mashup) · v6-wild");
+  },
+  get "mashup:v6-mini"() {
+    return tr("生成混搭 (mashup) · v6-mini");
+  },
+  get "mashup:custom"() {
+    return tr("生成混搭 (mashup) · 自定义模型");
+  },
+  get "replaceMusic:v6-wild"() {
+    return tr("段落替换 · v6-wild");
+  },
+  get "replaceMusic:v6-mini"() {
+    return tr("段落替换 · v6-mini");
+  },
+  get "replaceMusic:custom"() {
+    return tr("段落替换 · 自定义模型");
+  },
+  get "sample:v6-wild"() {
+    return tr("样本转歌曲 · v6-wild");
+  },
+  get "sample:v6-mini"() {
+    return tr("样本转歌曲 · v6-mini");
+  },
+  get "sample:custom"() {
+    return tr("样本转歌曲 · 自定义模型");
+  },
+  get "sounds:v6-wild"() {
+    return tr("音效生成 · v6-wild");
+  },
+  get "sounds:v6-mini"() {
+    return tr("音效生成 · v6-mini");
+  },
+  get "upload_cover:v6-wild"() {
+    return tr("上传音频翻唱 · v6-wild");
+  },
+  get "upload_cover:v6-mini"() {
+    return tr("上传音频翻唱 · v6-mini");
+  },
+  get "upload_cover:custom"() {
+    return tr("上传音频翻唱 · 自定义模型");
+  },
+  get "uploadExtend:v6-wild"() {
+    return tr("上传音频并延伸 · v6-wild");
+  },
+  get "uploadExtend:v6-mini"() {
+    return tr("上传音频并延伸 · v6-mini");
+  },
+  get "uploadExtend:custom"() {
+    return tr("上传音频并延伸 · 自定义模型");
+  }
+};
 export function musicPriceLabel(tier) {
-  return musicPriceLabels[tier] || tier || '标准'
+  return musicPriceLabels[tier] || tier || tr("标准");
 }

@@ -12,17 +12,20 @@
     "test:pricing": "node --test src/model-pricing.test.mjs",
     "test:usage": "node --test src/usage-records.test.mjs",
     "test:payment": "node --test src/payment-flow.test.mjs",
-    "test:auth": "node --test src/auth-flow.test.mjs src/auth-session.test.mjs"
+    "test:auth": "node --test src/auth-flow.test.mjs src/auth-session.test.mjs",
+    "check:i18n": "node --test src/i18n.test.mjs"
   },
   "dependencies": {
     "@airwallex/components-sdk": "^1.35.2",
     "@stripe/stripe-js": "^9.17.0",
     "@vitejs/plugin-react": "5.0.4",
     "dompurify": "^3.4.17",
+    "i18next": "^26.5.11",
     "marked": "^18.0.14",
     "qrcode": "^1.5.4",
     "react": "19.2.0",
     "react-dom": "19.2.0",
+    "react-i18next": "^17.1.9",
     "vite": "6.4.4"
   }
 }

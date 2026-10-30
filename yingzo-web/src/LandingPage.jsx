@@ -1,461 +1,291 @@
-import { useEffect, useRef, useState } from 'react'
-import './landing.css'
-
+import { LanguageSwitcher } from './i18n/LocaleProvider.jsx';
+import { Trans } from "react-i18next";
+import { getLocale, t as tr } from "./i18n/index.js";
+import { useEffect, useRef, useState } from 'react';
+import './landing.css';
 const art = {
   hero: '/assets/landing/creative-studio.webp',
   cinema: '/assets/landing/rainy-reunion.webp',
   commerce: '/assets/landing/everyday-object.webp',
-  workspace: '/assets/landing/yingzo-writing-workspace.webp',
+  workspace: '/assets/landing/yingzo-writing-workspace.webp'
+};
+function Arrow({
+  down = false,
+  diagonal = false
+}) {
+  return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={`lp-arrow${down ? ' is-down' : ''}${diagonal ? ' is-diagonal' : ''}`}>
+      <path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>;
 }
-
-function Arrow({ down = false, diagonal = false }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-      className={`lp-arrow${down ? ' is-down' : ''}${diagonal ? ' is-diagonal' : ''}`}
-    >
-      <path
-        d="M4 12h15m-6-6 6 6-6 6"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function Mark({ kind }) {
-  return (
-    <svg viewBox="0 0 40 40" fill="none" aria-hidden="true" className="lp-mark">
-      {kind === 'spark' ? (
-        <>
+function Mark({
+  kind
+}) {
+  return <svg viewBox="0 0 40 40" fill="none" aria-hidden="true" className="lp-mark">
+      {kind === 'spark' ? <>
           <path d="M20 4v32M4 20h32M9 9l22 22M9 31 31 9" />
           <circle cx="20" cy="20" r="9" />
-        </>
-      ) : kind === 'layers' ? (
-        <>
+        </> : kind === 'layers' ? <>
           <path d="m20 5 16 9-16 9L4 14 20 5ZM4 21l16 9 16-9M4 28l16 9 16-9" />
-        </>
-      ) : (
-        <>
+        </> : <>
           <path d="M8 6h16l8 8v20H8V6Z" />
           <path d="M24 6v9h8M13 24l5 5 10-11" />
-        </>
-      )}
-    </svg>
-  )
+        </>}
+    </svg>;
 }
-
 function useLandingMotion(root) {
   useEffect(() => {
-    const element = root.current
-    const preference = matchMedia('(prefers-reduced-motion: reduce)')
-    let frame = 0
+    const element = root.current;
+    const preference = matchMedia('(prefers-reduced-motion: reduce)');
+    let frame = 0;
     const update = () => {
-      frame = 0
-      const progress =
-        scrollY /
-        Math.max(1, document.documentElement.scrollHeight - innerHeight)
-      element.style.setProperty('--reading-progress', Math.min(1, progress))
-      element.style.setProperty(
-        '--hero-shift',
-        `${preference.matches ? 0 : Math.min(scrollY, innerHeight) * 0.16}px`
-      )
-    }
+      frame = 0;
+      const progress = scrollY / Math.max(1, document.documentElement.scrollHeight - innerHeight);
+      element.style.setProperty('--reading-progress', Math.min(1, progress));
+      element.style.setProperty('--hero-shift', `${preference.matches ? 0 : Math.min(scrollY, innerHeight) * 0.16}px`);
+    };
     const onScroll = () => {
-      if (!frame) frame = requestAnimationFrame(update)
-    }
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('is-visible')
-            observer.unobserve(entry.target)
-          }
-        })
-      },
-      { threshold: 0.12 }
-    )
-    element
-      .querySelectorAll('[data-reveal]')
-      .forEach((node) => observer.observe(node))
-    update()
-    addEventListener('scroll', onScroll, { passive: true })
-    addEventListener('resize', onScroll)
-    preference.addEventListener('change', onScroll)
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    }, {
+      threshold: 0.12
+    });
+    element.querySelectorAll('[data-reveal]').forEach(node => observer.observe(node));
+    update();
+    addEventListener('scroll', onScroll, {
+      passive: true
+    });
+    addEventListener('resize', onScroll);
+    preference.addEventListener('change', onScroll);
     return () => {
-      observer.disconnect()
-      cancelAnimationFrame(frame)
-      removeEventListener('scroll', onScroll)
-      removeEventListener('resize', onScroll)
-      preference.removeEventListener('change', onScroll)
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+      removeEventListener('scroll', onScroll);
+      removeEventListener('resize', onScroll);
+      preference.removeEventListener('change', onScroll);
+    };
+  }, [root]);
+}
+function getSteps() {
+  return [{
+    get title() {
+      return tr("带着目标和素材开始");
+    },
+    get text() {
+      return tr("一个想法、一段文稿，或一张参考图。把你想做的事，在对话里说清楚。");
+    },
+    get label() {
+      return tr("说出想法");
     }
-  }, [root])
+  }, {
+    get title() {
+      return tr("在项目里推进制作");
+    },
+    get text() {
+      return tr("梳理内容，准备参考，再推进制作。每一步的进度与产物，都看得见。");
+    },
+    get label() {
+      return tr("推进制作");
+    }
+  }, {
+    get title() {
+      return tr("查看结果，由你决定");
+    },
+    get text() {
+      return tr("保留满意的候选，也可以继续提出修改。选好要采用的版本，再导出作品。");
+    },
+    get label() {
+      return tr("选择成果");
+    }
+  }];
 }
-
-const steps = [
-  {
-    title: '带着目标和素材开始',
-    text: '一个想法、一段文稿，或一张参考图。把你想做的事，在对话里说清楚。',
-    label: '说出想法',
-  },
-  {
-    title: '在项目里推进制作',
-    text: '梳理内容，准备参考，再推进制作。每一步的进度与产物，都看得见。',
-    label: '推进制作',
-  },
-  {
-    title: '查看结果，由你决定',
-    text: '保留满意的候选，也可以继续提出修改。选好要采用的版本，再导出作品。',
-    label: '选择成果',
-  },
-]
-
 function moveTab(event, index, length, setIndex) {
-  let next
-  if (event.key === 'ArrowRight' || event.key === 'ArrowDown')
-    next = (index + 1) % length
-  if (event.key === 'ArrowLeft' || event.key === 'ArrowUp')
-    next = (index - 1 + length) % length
-  if (event.key === 'Home') next = 0
-  if (event.key === 'End') next = length - 1
-  if (next === undefined) return
-  event.preventDefault()
-  setIndex(next)
-  event.currentTarget.parentElement
-    .querySelectorAll('[role="tab"]')
-    [next]?.focus()
+  let next;
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % length;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index - 1 + length) % length;
+  if (event.key === 'Home') next = 0;
+  if (event.key === 'End') next = length - 1;
+  if (next === undefined) return;
+  event.preventDefault();
+  setIndex(next);
+  event.currentTarget.parentElement.querySelectorAll('[role="tab"]')[next]?.focus();
 }
-
 function Workflow() {
-  const [step, setStep] = useState(0)
-  return (
-    <section
-      className="lp-workflow"
-      id="workflow"
-      aria-labelledby="workflow-title"
-    >
+  const [step, setStep] = useState(0);
+  return <section className="lp-workflow" id="workflow" aria-labelledby="workflow-title">
       <div className="lp-wrap">
         <div className="lp-section-heading" data-reveal>
           <div>
-            <p className="lp-eyebrow">THE CREATIVE PROCESS / 工作方式</p>
-            <h2 id="workflow-title">
-              开始很简单，
-              <br />
-              <em>过程看得见。</em>
-            </h2>
+            <p className="lp-eyebrow">{tr("THE CREATIVE PROCESS / 工作方式")}</p>
+            <h2 id="workflow-title"><Trans i18nKey="开始很简单，<0/><1>过程看得见。</1>" components={[<br className="title-break" />, <em />]} /></h2>
           </div>
-          <p>
-            把注意力放在想表达什么，
-            <br />
-            以及哪一版，更接近你的想法。
-          </p>
+          <p><Trans i18nKey="把注意力放在想表达什么，<0/>以及哪一版，更接近你的想法。" components={[<br />]} /></p>
         </div>
         <div className="lp-workflow-layout" data-reveal>
-          <div
-            className="lp-steps"
-            role="tablist"
-            aria-label="创作流程"
-            aria-orientation="vertical"
-          >
-            {steps.map((item, index) => (
-              <button
-                key={item.title}
-                id={`workflow-tab-${index}`}
-                role="tab"
-                type="button"
-                aria-selected={step === index}
-                aria-controls="workflow-preview"
-                tabIndex={step === index ? 0 : -1}
-                className={step === index ? 'is-active' : ''}
-                onClick={() => setStep(index)}
-                onKeyDown={(event) =>
-                  moveTab(event, index, steps.length, setStep)
-                }
-              >
+          <div className="lp-steps" role="tablist" aria-label={tr("创作流程")} aria-orientation="vertical">
+            {getSteps().map((item, index) => <button key={item.title} id={`workflow-tab-${index}`} role="tab" type="button" aria-selected={step === index} aria-controls="workflow-preview" tabIndex={step === index ? 0 : -1} className={step === index ? 'is-active' : ''} onClick={() => setStep(index)} onKeyDown={event => moveTab(event, index, getSteps().length, setStep)}>
                 <span className="lp-step-number">0{index + 1}</span>
                 <span>
                   <strong>{item.title}</strong>
                   <span className="lp-step-description">{item.text}</span>
                 </span>
                 <Arrow />
-              </button>
-            ))}
+              </button>)}
           </div>
-          <div
-            className="lp-workflow-preview"
-            role="tabpanel"
-            id="workflow-preview"
-            aria-labelledby={`workflow-tab-${step}`}
-            tabIndex={0}
-          >
-            <a
-              className="lp-desktop-capture"
-              href={art.workspace}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="查看 Yingzo 写作工作区完整截图（新标签页）"
-            >
-              <img
-                src={art.workspace}
-                alt="Yingzo 桌面端写作工作区：左侧按项目管理创作对话，右侧通过对话推进小说写作并查看阶段成果。"
-                width="2760"
-                height="1440"
-                loading="lazy"
-                decoding="async"
-              />
+          <div className="lp-workflow-preview" role="tabpanel" id="workflow-preview" aria-labelledby={`workflow-tab-${step}`} tabIndex={0}>
+            <a className="lp-desktop-capture" href={art.workspace} target="_blank" rel="noreferrer" aria-label={tr("查看 Yingzo 写作工作区完整截图（新标签页）")}>
+              <img src={art.workspace} alt={tr("Yingzo 桌面端写作工作区：左侧按项目管理创作对话，右侧通过对话推进小说写作并查看阶段成果。")} width="2760" height="1440" loading="lazy" decoding="async" />
             </a>
             <div className="lp-workflow-context" key={step}>
               <span>
-                0{step + 1} / {steps[step].label}
+                0{step + 1} / {getSteps()[step].label}
               </span>
-              <p>{steps[step].text}</p>
+              <p>{getSteps()[step].text}</p>
             </div>
           </div>
         </div>
         <p className="lp-workflow-caption">
-          <span>Yingzo 桌面端 · 写作工作区</span>
-          <a href={art.workspace} target="_blank" rel="noreferrer">
-            查看完整界面 <Arrow diagonal />
+          <span>{tr("Yingzo 桌面端 · 写作工作区")}</span>
+          <a href={art.workspace} target="_blank" rel="noreferrer">{tr("查看完整界面 ")}<Arrow diagonal />
           </a>
         </p>
       </div>
-    </section>
-  )
+    </section>;
 }
-
 function CreativeControl() {
-  const [mode, setMode] = useState(0)
-  return (
-    <section
-      className="lp-control lp-wrap"
-      id="creative-control"
-      aria-labelledby="control-title"
-    >
+  const [mode, setMode] = useState(0);
+  return <section className="lp-control lp-wrap" id="creative-control" aria-labelledby="control-title">
       <div className="lp-control-copy" data-reveal>
-        <p className="lp-eyebrow">YOUR WAY, YOUR WORK / 创作掌控</p>
-        <h2 id="control-title">
-          有协作，
-          <br />
-          也有你的坚持。
-        </h2>
-        <p className="lp-body-copy">
-          交给 Yingzo 推进，也可以亲自控制细节。
-          <br />
-          创作的方法、素材和最终决定，都有自己的位置。
-        </p>
-        <a className="lp-text-link" href="#download">
-          找到你的创作方式 <Arrow />
+        <p className="lp-eyebrow">{tr("YOUR WAY, YOUR WORK / 创作掌控")}</p>
+        <h2 id="control-title"><Trans i18nKey="有协作，<0/>也有你的坚持。" components={[<br className="title-break" />]} /></h2>
+        <p className="lp-body-copy"><Trans i18nKey="交给 Yingzo 推进，也可以亲自控制细节。<0/>创作的方法、素材和最终决定，都有自己的位置。" components={[<br />]} /></p>
+        <a className="lp-text-link" href="#download">{tr("找到你的创作方式 ")}<Arrow />
         </a>
       </div>
       <div className="lp-control-details" data-reveal>
-        <div className="lp-mode-tabs" role="tablist" aria-label="创作模式">
-          {['Agent 协作', '直接生成'].map((label, index) => (
-            <button
-              type="button"
-              key={label}
-              id={`mode-tab-${index}`}
-              role="tab"
-              aria-selected={mode === index}
-              aria-controls="mode-description"
-              tabIndex={mode === index ? 0 : -1}
-              onKeyDown={(event) => moveTab(event, index, 2, setMode)}
-              onClick={() => setMode(index)}
-            >
+        <div className="lp-mode-tabs" role="tablist" aria-label={tr("创作模式")}>
+          {[tr("Agent 协作"), tr("直接生成")].map((label, index) => <button type="button" key={label} id={`mode-tab-${index}`} role="tab" aria-selected={mode === index} aria-controls="mode-description" tabIndex={mode === index ? 0 : -1} onKeyDown={event => moveTab(event, index, 2, setMode)} onClick={() => setMode(index)}>
               {label}
               <Arrow diagonal />
-            </button>
-          ))}
+            </button>)}
         </div>
-        <div
-          className="lp-mode-panel"
-          role="tabpanel"
-          id="mode-description"
-          aria-labelledby={`mode-tab-${mode}`}
-          tabIndex={0}
-        >
+        <div className="lp-mode-panel" role="tabpanel" id="mode-description" aria-labelledby={`mode-tab-${mode}`} tabIndex={0}>
           <div key={mode} className="lp-mode-inner">
             <span className="lp-mode-kicker">
-              {mode === 0 ? '从目标出发' : '从明确的提示词出发'}
+              {mode === 0 ? tr("从目标出发") : tr("从明确的提示词出发")}
             </span>
             <h3>
-              {mode === 0 ? '你说想法，它协助推进。' : '每个细节，按你的设置。'}
+              {mode === 0 ? tr("你说想法，它协助推进。") : tr("每个细节，按你的设置。")}
             </h3>
             <p>
-              {mode === 0
-                ? '结合项目资料组织内容、准备提示词，并调用相应能力。你可以随时查看产物，给出下一步意见。'
-                : '在影视工作区，选择图片或视频模型，设置提示词与参数，直接提交你的创作想法。'}
+              {mode === 0 ? tr("结合项目资料组织内容、准备提示词，并调用相应能力。你可以随时查看产物，给出下一步意见。") : tr("在影视工作区，选择图片或视频模型，设置提示词与参数，直接提交你的创作想法。")}
             </p>
             <span className="lp-mode-footnote">
-              {mode === 0
-                ? '影视与商业内容，均可从对话开始。'
-                : '可用模型、参考类型与输出规格以当前连接为准。'}
+              {mode === 0 ? tr("影视与商业内容，均可从对话开始。") : tr("可用模型、参考类型与输出规格以当前连接为准。")}
             </span>
           </div>
         </div>
         <div className="lp-ownership-row">
           <Mark kind="layers" />
           <div>
-            <h3>每次尝试，都有来处。</h3>
-            <p>复用参考素材，保留媒体候选与修改版本，决定哪一版进入作品。</p>
+            <h3>{tr("每次尝试，都有来处。")}</h3>
+            <p>{tr("复用参考素材，保留媒体候选与修改版本，决定哪一版进入作品。")}</p>
           </div>
         </div>
         <div className="lp-ownership-row">
           <Mark kind="file" />
           <div>
-            <h3>项目在本地，作品在手里。</h3>
-            <p>文稿和已下载媒体留在电脑里，按任务导出成果或素材包。</p>
-            <small>调用云端模型时，会发送本次任务所需的内容。</small>
+            <h3>{tr("项目在本地，作品在手里。")}</h3>
+            <p>{tr("文稿和已下载媒体留在电脑里，按任务导出成果或素材包。")}</p>
+            <small>{tr("调用云端模型时，会发送本次任务所需的内容。")}</small>
           </div>
         </div>
         <div className="lp-ownership-row">
           <Mark kind="spark" />
           <div>
-            <h3>把你的方法，留给下一次。</h3>
-            <p>
-              通过对话整理常用的写作方式与制作要求，形成可以查看、修改和采用的创作技能。
-            </p>
+            <h3>{tr("把你的方法，留给下一次。")}</h3>
+            <p>{tr("通过对话整理常用的写作方式与制作要求，形成可以查看、修改和采用的创作技能。")}</p>
           </div>
         </div>
       </div>
-    </section>
-  )
+    </section>;
 }
-
-const faqs = [
-  [
-    '不会写提示词，也能使用吗？',
-    '可以从目标、素材和修改意见开始。Agent 模式会协助组织内容与提示词。需要精细控制时，也可以在影视工作区的直接生成入口选择模型、填写提示词和参数。',
-  ],
-  [
-    '可以只写故事，或只生成一张图吗？',
-    '可以。小说、短篇和故事创作可以独立进行，不必继续制作视频。你也可以直接生成一张图片、一段视频，或在对话中提出单张商品图、海报的需求，从当前最需要的任务开始。',
-  ],
-  [
-    '能用自己的素材吗？角色和商品能保持一致吗？',
-    '可以添加自己的图片、视频和文稿，也可以引用已有项目素材。Yingzo 支持复用角色、场景、商品资料和参考图片，帮助后续制作沿用已有设定。实际生成结果仍需检查；参考类型与输出规格取决于所选模型。',
-  ],
-  [
-    '我的文件存在哪里？',
-    '项目文稿和已下载媒体保存在本地，可以继续整理与导出。调用云端模型时，本次任务所需的提示词和参考素材会发送至所连接的服务；是否公开分享作品由你决定。',
-  ],
-  [
-    '如何收费？支持哪些模型？',
-    '模型调用费用按当前服务的计费规则计算，具体价格与活动以网站公布的信息为准。可用模型和输出规格以当前连接的模型目录为准。你可以在网站账户中查看使用记录和充值信息。',
-    'usage',
-  ],
-  [
-    '支持哪些电脑？如何开始？',
-    '支持 Windows 和 macOS。下载对应系统的安装包，安装桌面端并配置模型连接后，即可开始创作。',
-    'download',
-  ],
-]
-
-export default function LandingPage({ user, setPage, tutorialsEnabled = false }) {
-  const root = useRef(null)
-  const menuButton = useRef(null)
-  const [menuOpen, setMenuOpen] = useState(false)
-  useLandingMotion(root)
+function getFaqs() {
+  return [[tr("不会写提示词，也能使用吗？"), tr("可以从目标、素材和修改意见开始。Agent 模式会协助组织内容与提示词。需要精细控制时，也可以在影视工作区的直接生成入口选择模型、填写提示词和参数。")], [tr("可以只写故事，或只生成一张图吗？"), tr("可以。小说、短篇和故事创作可以独立进行，不必继续制作视频。你也可以直接生成一张图片、一段视频，或在对话中提出单张商品图、海报的需求，从当前最需要的任务开始。")], [tr("能用自己的素材吗？角色和商品能保持一致吗？"), tr("可以添加自己的图片、视频和文稿，也可以引用已有项目素材。Yingzo 支持复用角色、场景、商品资料和参考图片，帮助后续制作沿用已有设定。实际生成结果仍需检查；参考类型与输出规格取决于所选模型。")], [tr("我的文件存在哪里？"), tr("项目文稿和已下载媒体保存在本地，可以继续整理与导出。调用云端模型时，本次任务所需的提示词和参考素材会发送至所连接的服务；是否公开分享作品由你决定。")], [tr("如何收费？支持哪些模型？"), tr("模型调用费用按当前服务的计费规则计算，具体价格与活动以网站公布的信息为准。可用模型和输出规格以当前连接的模型目录为准。你可以在网站账户中查看使用记录和充值信息。"), 'usage'], [tr("支持哪些电脑？如何开始？"), tr("支持 Windows 和 macOS。下载对应系统的安装包，安装桌面端并配置模型连接后，即可开始创作。"), 'download']];
+}
+export default function LandingPage({
+  user,
+  setPage,
+  tutorialsEnabled = false
+}) {
+  const root = useRef(null);
+  const menuButton = useRef(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  useLandingMotion(root);
   useEffect(() => {
-    const title = document.title
-    const language = document.documentElement.lang
-    const description = document.createElement('meta')
-    description.name = 'description'
-    description.content =
-      'Yingzo 是面向影视创作者与商家的 AI 创作桌面应用。通过对话推进小说、剧本、分镜、图片和视频制作，复用参考素材，管理本地项目与修改版本。'
-    document.title = 'Yingzo 影作｜用对话创作故事、图片与视频'
-    document.documentElement.lang = 'zh-CN'
-    document.head.append(description)
+    const title = document.title;
+    const description = document.createElement('meta');
+    description.name = 'description';
+    description.content = tr("Yingzo 是面向影视创作者与商家的 AI 创作桌面应用。通过对话推进小说、剧本、分镜、图片和视频制作，复用参考素材，管理本地项目与修改版本。");
+    document.title = tr("Yingzo 影作｜用对话创作故事、图片与视频");
+    document.head.append(description);
     return () => {
-      document.title = title
-      document.documentElement.lang = language
-      description.remove()
-    }
-  }, [])
+      document.title = title;
+      description.remove();
+    };
+  }, [getLocale()]);
   useEffect(() => {
-    if (!menuOpen) return
-    const escape = (event) => {
+    if (!menuOpen) return;
+    const escape = event => {
       if (event.key === 'Escape') {
-        setMenuOpen(false)
-        menuButton.current?.focus()
+        setMenuOpen(false);
+        menuButton.current?.focus();
       }
-    }
-    addEventListener('keydown', escape)
-    return () => removeEventListener('keydown', escape)
-  }, [menuOpen])
+    };
+    addEventListener('keydown', escape);
+    return () => removeEventListener('keydown', escape);
+  }, [menuOpen]);
   function go(event, page) {
-    if (
-      event.metaKey ||
-      event.ctrlKey ||
-      event.shiftKey ||
-      event.altKey ||
-      event.button !== 0
-    )
-      return
-    event.preventDefault()
-    history.pushState({}, '', `/${page}`)
-    setPage(page)
-    scrollTo({ top: 0, behavior: 'instant' })
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    history.pushState({}, '', `/${page}`);
+    setPage(page);
+    scrollTo({
+      top: 0,
+      behavior: 'instant'
+    });
   }
-  const routeLink = (page) => ({
+  const routeLink = page => ({
     href: `/${page}`,
-    onClick: (event) => go(event, page),
-  })
-  const navigation = [
-    ['use-cases', '创作场景'],
-    ['workflow', '工作方式'],
-    ['creative-control', '创作掌控'],
-    ['faq', '常见问题'],
-  ]
-  return (
-    <div className="lp" ref={root}>
-      <a href="#main-content" className="lp-skip">
-        跳到主要内容
-      </a>
+    onClick: event => go(event, page)
+  });
+  const navigation = [['use-cases', tr("创作场景")], ['workflow', tr("工作方式")], ['creative-control', tr("创作掌控")], ['faq', tr("常见问题")]];
+  return <div className="lp" ref={root}>
+      <a href="#main-content" className="lp-skip">{tr("跳到主要内容")}</a>
       <header className="lp-header">
-        <a href="#" className="lp-brand" aria-label="Yingzo 影作首页">
-          <img
-            src="/assets/yingzo-logo.png"
-            alt="影作"
-            width="64"
-            height="48"
-          />
+        <a href="#" className="lp-brand" aria-label={tr("Yingzo 影作首页")}>
+          <img src="/assets/yingzo-logo.png" alt={tr("影作")} width="64" height="48" />
           <span>Yingzo</span>
         </a>
-        <nav
-          className={`lp-nav${menuOpen ? ' is-open' : ''}`}
-          id="landing-navigation"
-          aria-label="首页导航"
-        >
-          {navigation.map(([id, label]) => (
-            <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)}>
+        <nav className={`lp-nav${menuOpen ? ' is-open' : ''}`} id="landing-navigation" aria-label={tr("首页导航")}>
+          {navigation.map(([id, label]) => <a key={id} href={`#${id}`} onClick={() => setMenuOpen(false)}>
               {label}
-            </a>
-          ))}
-          {tutorialsEnabled && <a {...routeLink('tutorials')}>使用教程</a>}
+            </a>)}
+          {tutorialsEnabled && <a {...routeLink('tutorials')}>{tr("使用教程")}</a>}
         </nav>
-        <div className="lp-header-actions">
-          <a
-            className="lp-account-link"
-            {...routeLink(user ? 'keys' : 'login')}
-          >
-            {user ? '账户控制台' : '登录'}
+        <div className="lp-header-actions"><LanguageSwitcher />
+          <a className="lp-account-link" {...routeLink(user ? 'keys' : 'login')}>
+            {user ? tr("账户控制台") : tr("登录")}
           </a>
-          <a className="lp-button lp-button-small" {...routeLink('download')}>
-            下载 Yingzo <Arrow down />
+          <a className="lp-button lp-button-small" {...routeLink('download')}>{tr("下载 Yingzo ")}<Arrow down />
           </a>
-          <button
-            ref={menuButton}
-            type="button"
-            className="lp-menu-toggle"
-            aria-label={menuOpen ? '关闭导航' : '打开导航'}
-            aria-expanded={menuOpen}
-            aria-controls="landing-navigation"
-            onClick={() => setMenuOpen((value) => !value)}
-          >
+          <button ref={menuButton} type="button" className="lp-menu-toggle" aria-label={menuOpen ? tr("关闭导航") : tr("打开导航")} aria-expanded={menuOpen} aria-controls="landing-navigation" onClick={() => setMenuOpen(value => !value)}>
             <span />
             <span />
           </button>
@@ -465,254 +295,153 @@ export default function LandingPage({ user, setPage, tutorialsEnabled = false })
       <main id="main-content">
         <section className="lp-hero" aria-labelledby="hero-title">
           <div className="lp-hero-art" aria-hidden="true">
-            <img
-              src={art.hero}
-              alt=""
-              width="1536"
-              height="1024"
-              fetchPriority="high"
-            />
+            <img src={art.hero} alt="" width="1536" height="1024" fetchPriority="high" />
             <div className="lp-hero-wash" />
           </div>
           <div className="lp-hero-copy">
-            <p className="lp-eyebrow lp-enter" style={{ '--delay': '0ms' }}>
-              给创作，一个新的开始 / YOUR CREATIVE COMPANION
-            </p>
-            <div
-              className="lp-wordmark lp-enter"
-              style={{ '--delay': '100ms' }}
-            >
-              Yingzo<span>影作</span>
+            <p className="lp-eyebrow lp-enter" style={{
+            '--delay': '0ms'
+          }}>{tr("给创作，一个新的开始 / YOUR CREATIVE COMPANION")}</p>
+            <div className="lp-wordmark lp-enter" style={{
+            '--delay': '100ms'
+          }}>
+              Yingzo<span>{tr("影作")}</span>
             </div>
-            <h1
-              className="lp-enter"
-              id="hero-title"
-              style={{ '--delay': '200ms' }}
-            >
-              用对话，
-              <br />
-              把想法<em>做成作品。</em>
-            </h1>
-            <p
-              className="lp-hero-description lp-enter"
-              style={{ '--delay': '300ms' }}
-            >
-              你的 AI 创作桌面应用。
-              <br />
-              从故事到镜头，从商品到内容，
-              <br className="lp-mobile-break" />
-              让每个想法都有下一步。
-            </p>
-            <div
-              className="lp-hero-actions lp-enter"
-              style={{ '--delay': '400ms' }}
-            >
-              <a className="lp-button" {...routeLink('download')}>
-                下载 Yingzo <Arrow down />
+            <h1 className="lp-enter" id="hero-title" style={{
+            '--delay': '200ms'
+          }}><Trans i18nKey="用对话，<0/>把想法<1>做成作品。</1>" components={[<br />, <em />]} /></h1>
+            <p className="lp-hero-description lp-enter" style={{
+            '--delay': '300ms'
+          }}><Trans i18nKey="你的 AI 创作桌面应用。<0/>从故事到镜头，从商品到内容，<1/>让每个想法都有下一步。" components={[<br />, <br className="lp-mobile-break" />]} /></p>
+            <div className="lp-hero-actions lp-enter" style={{
+            '--delay': '400ms'
+          }}>
+              <a className="lp-button" {...routeLink('download')}>{tr("下载 Yingzo ")}<Arrow down />
               </a>
-              <a className="lp-text-link" href="#use-cases">
-                看看能做什么 <Arrow />
+              <a className="lp-text-link" href="#use-cases">{tr("看看能做什么 ")}<Arrow />
               </a>
             </div>
-            <div
-              className="lp-hero-meta lp-enter"
-              style={{ '--delay': '500ms' }}
-            >
-              <span>影视创作</span>
+            <div className="lp-hero-meta lp-enter" style={{
+            '--delay': '500ms'
+          }}>
+              <span>{tr("影视创作")}</span>
               <i />
-              <span>商业内容</span>
+              <span>{tr("商业内容")}</span>
               <i />
-              <span>本地项目</span>
+              <span>{tr("本地项目")}</span>
             </div>
           </div>
           <div className="lp-hero-bottom">
-            <a href="#use-cases">
-              <span className="lp-scroll-mark">
-                <Arrow down />
-              </span>
-              向下探索
-            </a>
+            <a href="#use-cases"><Trans i18nKey="<0><1/></0>向下探索" components={[<span className="lp-scroll-mark" />, <Arrow down />]} /></a>
             <span>SMALL IDEAS. BIGGER WORLDS.</span>
             <span>STORIES · IMAGES · VIDEO</span>
           </div>
         </section>
-        <section className="lp-values lp-wrap" aria-label="Yingzo 的创作方式">
-          {[
-            ['spark', '从目标开始', '说出你想完成的事，让创作从对话发生。'],
-            [
-              'layers',
-              '让素材接得上',
-              '沿用角色、场景与商品资料，接着上次继续。',
-            ],
-            [
-              'file',
-              '由你决定版本',
-              '查看候选，提出修改，把满意的那一版留下。',
-            ],
-          ].map(([kind, title, text], index) => (
-            <article
-              key={kind}
-              data-reveal
-              style={{ '--delay': `${index * 90}ms` }}
-            >
+        <section className="lp-values lp-wrap" aria-label={tr("Yingzo 的创作方式")}>
+          {[['spark', tr("从目标开始"), tr("说出你想完成的事，让创作从对话发生。")], ['layers', tr("让素材接得上"), tr("沿用角色、场景与商品资料，接着上次继续。")], ['file', tr("由你决定版本"), tr("查看候选，提出修改，把满意的那一版留下。")]].map(([kind, title, text], index) => <article key={kind} data-reveal style={{
+          '--delay': `${index * 90}ms`
+        }}>
               <Mark kind={kind} />
               <div>
                 <h2>{title}</h2>
                 <p>{text}</p>
               </div>
-            </article>
-          ))}
+            </article>)}
         </section>
-        <section
-          className="lp-scenes lp-wrap"
-          id="use-cases"
-          aria-labelledby="scenes-title"
-        >
+        <section className="lp-scenes lp-wrap" id="use-cases" aria-labelledby="scenes-title">
           <div className="lp-section-heading" data-reveal>
             <div>
-              <p className="lp-eyebrow">MADE FOR YOUR NEXT IDEA / 创作场景</p>
-              <h2 id="scenes-title">
-                故事有镜头，
-                <br />
-                <em>商品有表达。</em>
-              </h2>
+              <p className="lp-eyebrow">{tr("MADE FOR YOUR NEXT IDEA / 创作场景")}</p>
+              <h2 id="scenes-title"><Trans i18nKey="故事有镜头，<0/><1>商品有表达。</1>" components={[<br className="title-break" />, <em />]} /></h2>
             </div>
-            <p>
-              不同的创作，同一个起点。
-              <br />
-              把你脑海中的画面，说给 Yingzo。
-            </p>
+            <p><Trans i18nKey="不同的创作，同一个起点。<0/>把你脑海中的画面，说给 Yingzo。" components={[<br />]} /></p>
           </div>
           <article className="lp-scene lp-film-scene">
             <figure className="lp-scene-visual" data-reveal>
               <div className="lp-image-clip">
-                <img
-                  src={art.cinema}
-                  alt="雨夜车站里，两位人物隔着站台重逢的电影感画面"
-                  width="1536"
-                  height="1024"
-                  loading="lazy"
-                  decoding="async"
-                />
+                <img src={art.cinema} alt={tr("雨夜车站里，两位人物隔着站台重逢的电影感画面")} width="1536" height="1024" loading="lazy" decoding="async" />
                 <span className="lp-image-corner">01 / STORY & CINEMA</span>
               </div>
               <figcaption>
-                <span>《雨夜重逢》 · 创作方向示意</span>
-                <span>AI 生成画面</span>
+                <span>{tr("《雨夜重逢》 · 创作方向示意")}</span>
+                <span>{tr("AI 生成画面")}</span>
               </figcaption>
               <div className="lp-film-note" aria-hidden="true">
                 <span>SCENE 01</span>
-                <p>
-                  雨声里，
-                  <br />
-                  故事又开始。
-                </p>
+                <p><Trans i18nKey="雨声里，<0/>故事又开始。" components={[<br />]} /></p>
                 <span>EXT. TRAIN STATION — NIGHT</span>
               </div>
             </figure>
             <div className="lp-scene-copy" data-reveal>
-              <p className="lp-eyebrow">
-                <span>01</span> 影视与故事创作
-              </p>
-              <h3>
-                从故事，
-                <br />
-                走到具体的镜头。
-              </h3>
-              <p>
-                带着一个想法、一段原稿或一份剧本开始。梳理人物，建立视觉参考，再把情绪写进分镜与画面。
-              </p>
+              <p className="lp-eyebrow"><Trans i18nKey="<0>01</0> 影视与故事创作" components={[<span />]} /></p>
+              <h3><Trans i18nKey="从故事，<0/>走到具体的镜头。" components={[<br className="title-break" />]} /></h3>
+              <p>{tr("带着一个想法、一段原稿或一份剧本开始。梳理人物，建立视觉参考，再把情绪写进分镜与画面。")}</p>
               <ol className="lp-capabilities">
                 <li>
                   <span>01</span>
                   <div>
-                    <strong>写作与改编</strong>
-                    <p>构思、续写、修订，让故事继续往前走。</p>
+                    <strong>{tr("写作与改编")}</strong>
+                    <p>{tr("构思、续写、修订，让故事继续往前走。")}</p>
                   </div>
                 </li>
                 <li>
                   <span>02</span>
                   <div>
-                    <strong>角色与视觉资产</strong>
-                    <p>整理角色、场景与道具，让后续创作有据可循。</p>
+                    <strong>{tr("角色与视觉资产")}</strong>
+                    <p>{tr("整理角色、场景与道具，让后续创作有据可循。")}</p>
                   </div>
                 </li>
                 <li>
                   <span>03</span>
                   <div>
-                    <strong>分镜与视频</strong>
-                    <p>从景别、机位到动作，把镜头想清楚，再做出来。</p>
+                    <strong>{tr("分镜与视频")}</strong>
+                    <p>{tr("从景别、机位到动作，把镜头想清楚，再做出来。")}</p>
                   </div>
                 </li>
               </ol>
               <details className="lp-prompt">
-                <summary>
-                  试着这样开始 <span>+</span>
-                </summary>
-                <blockquote>
-                  “把这段小说改成两个人在雨夜车站重逢的短剧。先给我剧本和分镜，保留克制的对白。”
-                </blockquote>
+                <summary><Trans i18nKey="试着这样开始 <0>+</0>" components={[<span />]} /></summary>
+                <blockquote>{tr("“把这段小说改成两个人在雨夜车站重逢的短剧。先给我剧本和分镜，保留克制的对白。”")}</blockquote>
               </details>
-              <p className="lp-scene-footnote">
-                也支持独立小说、短篇与故事创作，从你需要的一步开始。
-              </p>
+              <p className="lp-scene-footnote">{tr("也支持独立小说、短篇与故事创作，从你需要的一步开始。")}</p>
             </div>
           </article>
           <article className="lp-scene lp-commerce-scene">
             <div className="lp-scene-copy" data-reveal>
-              <p className="lp-eyebrow">
-                <span>02</span> 商家与品牌内容
-              </p>
-              <h3>
-                一份商品资料，
-                <br />
-                长出更多好内容。
-              </h3>
-              <p>
-                上传商品图片，讲清卖点与受众。从主图、场景图到海报和宣传视频，围绕同一份资料，继续尝试新的表达。
-              </p>
+              <p className="lp-eyebrow"><Trans i18nKey="<0>02</0> 商家与品牌内容" components={[<span />]} /></p>
+              <h3><Trans i18nKey="一份商品资料，<0/>长出更多好内容。" components={[<br className="title-break" />]} /></h3>
+              <p>{tr("上传商品图片，讲清卖点与受众。从主图、场景图到海报和宣传视频，围绕同一份资料，继续尝试新的表达。")}</p>
               <ol className="lp-capabilities">
                 <li>
                   <span>01</span>
                   <div>
-                    <strong>资料复用</strong>
-                    <p>保存商品资料与模特参考，减少反复说明。</p>
+                    <strong>{tr("资料复用")}</strong>
+                    <p>{tr("保存商品资料与模特参考，减少反复说明。")}</p>
                   </div>
                 </li>
                 <li>
                   <span>02</span>
                   <div>
-                    <strong>多种内容</strong>
-                    <p>图片、页面版式、文案与视频，按目标展开。</p>
+                    <strong>{tr("多种内容")}</strong>
+                    <p>{tr("图片、页面版式、文案与视频，按目标展开。")}</p>
                   </div>
                 </li>
                 <li>
                   <span>03</span>
                   <div>
-                    <strong>成套交付</strong>
-                    <p>选择采用版本，导出单个文件或整套素材包。</p>
+                    <strong>{tr("成套交付")}</strong>
+                    <p>{tr("选择采用版本，导出单个文件或整套素材包。")}</p>
                   </div>
                 </li>
               </ol>
               <details className="lp-prompt">
-                <summary>
-                  试着这样开始 <span>+</span>
-                </summary>
-                <blockquote>
-                  “根据这款保温杯的资料，制作三张通勤场景图和一张卖点海报。使用现有商品图，保持杯型和已确认的产品信息。”
-                </blockquote>
+                <summary><Trans i18nKey="试着这样开始 <0>+</0>" components={[<span />]} /></summary>
+                <blockquote>{tr("“根据这款保温杯的资料，制作三张通勤场景图和一张卖点海报。使用现有商品图，保持杯型和已确认的产品信息。”")}</blockquote>
               </details>
             </div>
             <figure className="lp-scene-visual" data-reveal>
               <div className="lp-image-clip">
-                <img
-                  src={art.commerce}
-                  alt="暖色日光中，置于石材展台上的米白色保温杯商品摄影示意"
-                  width="1536"
-                  height="1024"
-                  loading="lazy"
-                  decoding="async"
-                />
+                <img src={art.commerce} alt={tr("暖色日光中，置于石材展台上的米白色保温杯商品摄影示意")} width="1536" height="1024" loading="lazy" decoding="async" />
                 <span className="lp-image-corner">02 / BRANDS & COMMERCE</span>
                 <div className="lp-commerce-type" aria-hidden="true">
                   Everyday,
@@ -721,38 +450,23 @@ export default function LandingPage({ user, setPage, tutorialsEnabled = false })
                 </div>
               </div>
               <figcaption>
-                <span>一只杯子的日常 · 创作方向示意</span>
-                <span>AI 生成画面</span>
+                <span>{tr("一只杯子的日常 · 创作方向示意")}</span>
+                <span>{tr("AI 生成画面")}</span>
               </figcaption>
             </figure>
           </article>
-          <p className="lp-art-disclosure">
-            画面为 AI 生成的创意示意，用于展示创作方向。
-          </p>
+          <p className="lp-art-disclosure">{tr("画面为 AI 生成的创意示意，用于展示创作方向。")}</p>
         </section>
         <Workflow />
         <CreativeControl />
-        <section
-          className="lp-faq lp-wrap"
-          id="faq"
-          aria-labelledby="faq-title"
-        >
+        <section className="lp-faq lp-wrap" id="faq" aria-labelledby="faq-title">
           <div data-reveal>
-            <p className="lp-eyebrow">A LITTLE MORE TO KNOW / 常见问题</p>
-            <h2 id="faq-title">
-              开始之前，
-              <br />
-              你可能想知道。
-            </h2>
-            <p className="lp-body-copy">
-              关于创作、素材，
-              <br />
-              以及你的第一步。
-            </p>
+            <p className="lp-eyebrow">{tr("A LITTLE MORE TO KNOW / 常见问题")}</p>
+            <h2 id="faq-title"><Trans i18nKey="开始之前，<0/>你可能想知道。" components={[<br className="title-break" />]} /></h2>
+            <p className="lp-body-copy"><Trans i18nKey="关于创作、素材，<0/>以及你的第一步。" components={[<br />]} /></p>
           </div>
           <div className="lp-faq-list" data-reveal>
-            {faqs.map(([question, answer, action], index) => (
-              <details key={question} name="yingzo-faq">
+            {getFaqs().map(([question, answer, action], index) => <details key={question} name="yingzo-faq">
                 <summary>
                   <span className="lp-faq-index">0{index + 1}</span>
                   <span>{question}</span>
@@ -760,52 +474,25 @@ export default function LandingPage({ user, setPage, tutorialsEnabled = false })
                 </summary>
                 <div className="lp-faq-answer">
                   <p>{answer}</p>
-                  {action === 'usage' && (
-                    <a
-                      className="lp-text-link"
-                      {...routeLink(user ? 'usage' : 'login')}
-                    >
-                      {user ? '查看使用记录' : '登录账户查看'} <Arrow />
-                    </a>
-                  )}
-                  {action === 'download' && (
-                    <a className="lp-text-link" {...routeLink('download')}>
-                      查看安装包 <Arrow />
-                    </a>
-                  )}
+                  {action === 'usage' && <a className="lp-text-link" {...routeLink(user ? 'usage' : 'login')}>
+                      {user ? tr("查看使用记录") : tr("登录账户查看")} <Arrow />
+                    </a>}
+                  {action === 'download' && <a className="lp-text-link" {...routeLink('download')}>{tr("查看安装包 ")}<Arrow />
+                    </a>}
                 </div>
-              </details>
-            ))}
+              </details>)}
           </div>
         </section>
-        <section
-          className="lp-final"
-          id="download"
-          aria-labelledby="download-title"
-        >
+        <section className="lp-final" id="download" aria-labelledby="download-title">
           <div className="lp-final-inner" data-reveal>
             <p className="lp-eyebrow">EVERY CREATION STARTS WITH AN IDEA</p>
-            <h2 id="download-title">
-              带上一个想法，
-              <br />
-              开始你的<em>下一件作品。</em>
-            </h2>
-            <p>
-              一段故事、一张商品图，或一份还没完成的稿子。
-              <br />
-              都可以成为起点。
-            </p>
-            <a className="lp-button" {...routeLink('download')}>
-              下载 Yingzo <Arrow down />
+            <h2 id="download-title"><Trans i18nKey="带上一个想法，<0/>开始你的<1>下一件作品。</1>" components={[<br className="title-break" />, <em />]} /></h2>
+            <p><Trans i18nKey="一段故事、一张商品图，或一份还没完成的稿子。<0/>都可以成为起点。" components={[<br />]} /></p>
+            <a className="lp-button" {...routeLink('download')}>{tr("下载 Yingzo ")}<Arrow down />
             </a>
-            <span className="lp-final-note">
-              安装桌面端并配置模型连接后，即可开始创作。
-            </span>
-            <a
-              className="lp-text-link lp-service-link"
-              {...routeLink(user ? 'keys' : 'register')}
-            >
-              {user ? '管理 API Key' : '获取模型服务 API Key'} <Arrow />
+            <span className="lp-final-note">{tr("安装桌面端并配置模型连接后，即可开始创作。")}</span>
+            <a className="lp-text-link lp-service-link" {...routeLink(user ? 'keys' : 'register')}>
+              {user ? tr("管理 API Key") : tr("获取模型服务 API Key")} <Arrow />
             </a>
           </div>
           <div className="lp-final-wordmark" aria-hidden="true">
@@ -816,20 +503,19 @@ export default function LandingPage({ user, setPage, tutorialsEnabled = false })
       <footer className="lp-footer">
         <div>
           <span className="lp-footer-brand">
-            Yingzo<span>影作</span>
+            Yingzo<span>{tr("影作")}</span>
           </span>
-          <p>让想法自然生长。</p>
+          <p>{tr("让想法自然生长。")}</p>
         </div>
         <div className="lp-footer-links">
-          <a {...routeLink('download')}>客户端下载</a>
-          <a {...routeLink(user ? 'keys' : 'login')}>账户控制台</a>
-          <a href="#faq">常见问题</a>
-          <a href="#">回到顶部 ↑</a>
+          <a {...routeLink('download')}>{tr("客户端下载")}</a>
+          <a {...routeLink(user ? 'keys' : 'login')}>{tr("账户控制台")}</a>
+          <a href="#faq">{tr("常见问题")}</a>
+          <a href="#">{tr("回到顶部 ↑")}</a>
         </div>
         <span className="lp-copyright">
           © {new Date().getFullYear()} Yingzo
         </span>
       </footer>
-    </div>
-  )
+    </div>;
 }
