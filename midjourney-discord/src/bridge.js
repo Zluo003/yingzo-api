@@ -1,3 +1,4 @@
+import { discordFailure } from "./failure.js";
 import { createHash, timingSafeEqual } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
@@ -238,14 +239,14 @@ export class Bridge {
         }, this.timeoutMs);
       });
       this.save(j.id, await Promise.race([work, timeout]));
-    } catch {
+    } catch (error) {
       if (timedOut) {
         const key = accountKey(j.account);
         const session = this.sessions.get(key);
         this.sessions.delete(key);
         session?.then((connected) => connected.close()).catch(() => {});
       }
-      this.save(j.id, { status: "failed", error: "discord_task_failed" });
+      this.save(j.id, { status: "failed", error: discordFailure(error, timedOut) });
     } finally {
       clearTimeout(timer);
     }

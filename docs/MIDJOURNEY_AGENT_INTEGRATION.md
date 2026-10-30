@@ -45,7 +45,7 @@ sudo journalctl -u yingzo-midjourney-discord -n 50
 
 ```dotenv
 MIDJOURNEY_BRIDGE_SECRET=替换为至少32字符的随机密钥
-MIDJOURNEY_BRIDGE_VERSION=0.3.73
+MIDJOURNEY_BRIDGE_VERSION=0.3.74
 ```
 
 从仓库根目录启动标准 Compose 和 Discord 服务叠加配置：
@@ -56,7 +56,7 @@ docker compose --env-file deploy/.env \
   -f deploy/docker-compose.midjourney.yml up -d --build
 ```
 
-Release 同时提供 `ghcr.io/zluo003/yingzo-midjourney-discord:0.3.73` 镜像（Linux amd64 / arm64）。使用已发布镜像时，将上面的 `up -d --build` 改为 `up -d --no-build`，可先运行相同 Compose 配置的 `pull`；只编译源码时保留 `--build`。安装包包含 Discord 服务源码、锁文件和本指南。
+Release 同时提供 `ghcr.io/zluo003/yingzo-midjourney-discord:0.3.74` 镜像（Linux amd64 / arm64）。使用已发布镜像时，将上面的 `up -d --build` 改为 `up -d --no-build`，可先运行相同 Compose 配置的 `pull`；只编译源码时保留 `--build`。安装包包含 Discord 服务源码、锁文件和本指南。
 
 桥接端口不对公网发布。其 SQLite 卷需要持久化；当前桥接服务部署一个实例，维护多个 Discord 用户会话。不要启动多个实例共享同一 SQLite 文件。网关可多实例部署，账号并发由现有 Redis 分布式并发锁约束。
 
@@ -285,8 +285,17 @@ POST /v1/midjourney/generations/variations
 - 401 / 403：Key、模型权限、账户或分组不可用。
 - 404：任务不存在、无权限读取，或未找到父任务。
 - 409：幂等键冲突。
-- 503：异步存储、操作价格、账号池或 Discord 桥接服务不可用。
+- 451：Discord 明确返回提示词审核拒绝；修改内容以符合社区规范，不原样重试或更换模型绕过审核。
+- 503：异步存储、操作价格、账号池、Discord 桥接服务不可用，或需人工在 Discord 完成验证／处理待确认通知。
 - 已接收任务失败时由任务系统退款；客户端以 billing_status / refund_status 和终态为准。
+
+已接收任务的轮询 HTTP 仍可为 200；失败分类读取 `task_error.code` 与简化后的 `task_error.message`。Discord 的 `Banned Prompt Detected` 等明确拒绝映射为 451，参数拒绝为 400，人工验证为 503，超时为 504；无法确认原因的失败仍为 502，不推断账号失效。下游不会收到 Discord 原始消息、完整提示词或账号凭据。仅能分类部署此版本后接收的新错误，历史通用 502 无法反推具体原因。
+
+错误分类需要网关和 Discord 配套服务同时升级到 `v0.3.74` 或更新版本。裸机使用后台在线升级网关后，再执行下列命令更新对应版本的 MJ 服务（会保留现有端口、共享密钥和任务数据）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zluo003/yingzo-api/main/deploy/install.sh | sudo bash -s -- install-mj -v v0.3.74
+```
 
 桥接任务 ID、摘要、结果和消息引用持久化到 SQLite，不存 Discord Token。任务遇到未知提交结果、桥接重启或超时时不自动重复提交付费指令；未知结果可能已消耗上游 GPU 时间，但未交付任务仍按网关失败退款策略处理。Go 网关工作进程中断时亦沿用现有异步任务补偿流程，当前不承诺恢复尚未保存的 Discord 运行中任务。
 

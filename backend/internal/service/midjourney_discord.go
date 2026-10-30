@@ -107,6 +107,7 @@ type midjourneyBridgeSubmission struct {
 	Mode    string                  `json:"mode,omitempty"`
 }
 type midjourneyBridgeResult struct {
+	Error     string             `json:"error"`
 	Content   string             `json:"content"`
 	Status    string             `json:"status"`
 	URI       string             `json:"uri"`
@@ -233,4 +234,20 @@ func midjourneyAvailableActions(options []midjourneyOption) []map[string]any {
 		}
 	}
 	return actions
+}
+
+// midjourneyTaskFailure exposes only recognized bridge reasons, never raw Discord text.
+func midjourneyTaskFailure(result midjourneyBridgeResult) *UsageTaskError {
+	switch result.Error {
+	case "content_policy_violation":
+		return &UsageTaskError{Code: 451, Message: "Midjourney rejected this prompt during content safety review. Revise the content to comply with its community guidelines."}
+	case "manual_action_required":
+		return &UsageTaskError{Code: 503, Message: "Midjourney requires manual attention in Discord. Complete the verification or review the pending notice before submitting again."}
+	case "invalid_parameters":
+		return &UsageTaskError{Code: 400, Message: "Midjourney rejected the generation parameters. Check the selected model's supported options."}
+	case "discord_task_timeout":
+		return &UsageTaskError{Code: 504, Message: "Midjourney did not return a result before the deadline. Check the saved task before starting another generation."}
+	default:
+		return &UsageTaskError{Code: 502, Message: "Midjourney task failed or was interrupted; the upstream did not provide a specific reason."}
+	}
 }

@@ -476,10 +476,10 @@ func (s *DurableImageService) executeMidjourney(ctx context.Context, snapshot *M
 			_ = s.openAI.accountRepo.UpdateLastUsed(ctx, a.ID)
 			return 200, output, nil
 		case "failed", "interrupted":
-			capture.TaskError = NewUsageTaskError(502, []byte(`{"error":{"code":"midjourney_discord_failed","message":"Discord task failed; check MJ account status"}}`), "Discord task failed")
+			capture.TaskError = midjourneyTaskFailure(result)
 			// A failed task is refunded independently. Keep the account eligible
 			// for the next request rather than imposing an account-wide cooldown.
-			return 502, nil, errors.New("discord task failed")
+			return capture.TaskError.Code, nil, errors.New("discord task failed")
 		case "queued", "processing":
 		default:
 			return 502, nil, errors.New("unknown Discord task status")

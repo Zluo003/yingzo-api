@@ -252,3 +252,47 @@ func TestMidjourneyDiscordRejectsPermutationAndOverlongCompiledPrompt(t *testing
 	_, err = ParseMidjourneyRequest(raw, "imagine")
 	require.ErrorContains(t, err, "compiled Discord prompt")
 }
+
+func TestMidjourneyDiscordClassifiedFailures(t *testing.T) {
+	for _, tc := range []struct {
+		reason  string
+		code    int
+		message string
+	}{
+		{"content_policy_violation", 451, "content safety review"},
+		{"manual_action_required", 503, "manual attention"},
+		{"invalid_parameters", 400, "generation parameters"},
+		{"discord_task_timeout", 504, "deadline"},
+		{"discord_task_failed", 502, "specific reason"},
+		{"untrusted prompt or token", 502, "specific reason"},
+	} {
+		t.Run(tc.reason, func(t *testing.T) {
+			posts := 0
+			testMJBridge(t, func(w http.ResponseWriter, req *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if req.Method == http.MethodPost {
+					posts++
+					_, _ = io.WriteString(w, `{"id":"imgtask_bridge"}`)
+					return
+				}
+				_ = json.NewEncoder(w).Encode(map[string]string{"status": "failed", "error": tc.reason, "content": "private upstream prompt"})
+			})
+			repo := &midjourneyFailureRepo{midjourneyAccountRepo: midjourneyAccountRepo{accounts: []Account{midjourneyTestAccount(7)}}}
+			slots := &midjourneySlots{}
+			svc := &DurableImageService{openAI: &OpenAIGatewayService{accountRepo: repo, concurrencyService: NewConcurrencyService(slots)}}
+			capture := mjCapture()
+			status, body, err := svc.executeMidjourney(context.Background(), &MidjourneySnapshot{GroupID: 9, Request: MidjourneyRequest{Prompt: "cat"}}, midjourneyTestKey(), capture)
+			require.Error(t, err)
+			require.Equal(t, tc.code, status)
+			require.Equal(t, tc.code, capture.TaskError.Code)
+			require.Contains(t, capture.TaskError.Message, tc.message)
+			require.NotContains(t, capture.TaskError.Message, "private upstream")
+			require.NotContains(t, capture.TaskError.Message, "check MJ account")
+			require.Empty(t, body)
+			require.Nil(t, capture.Usage)
+			require.Equal(t, 1, posts)
+			require.Equal(t, []int64{7}, slots.released)
+			require.Zero(t, repo.cooldowns)
+		})
+	}
+}
