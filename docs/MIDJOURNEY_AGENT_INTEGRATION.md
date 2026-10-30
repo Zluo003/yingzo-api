@@ -45,7 +45,7 @@ sudo journalctl -u yingzo-midjourney-discord -n 50
 
 ```dotenv
 MIDJOURNEY_BRIDGE_SECRET=替换为至少32字符的随机密钥
-MIDJOURNEY_BRIDGE_VERSION=0.3.72
+MIDJOURNEY_BRIDGE_VERSION=0.3.73
 ```
 
 从仓库根目录启动标准 Compose 和 Discord 服务叠加配置：
@@ -56,7 +56,7 @@ docker compose --env-file deploy/.env \
   -f deploy/docker-compose.midjourney.yml up -d --build
 ```
 
-Release 同时提供 `ghcr.io/zluo003/yingzo-midjourney-discord:0.3.72` 镜像（Linux amd64 / arm64）。使用已发布镜像时，将上面的 `up -d --build` 改为 `up -d --no-build`，可先运行相同 Compose 配置的 `pull`；只编译源码时保留 `--build`。安装包包含 Discord 服务源码、锁文件和本指南。
+Release 同时提供 `ghcr.io/zluo003/yingzo-midjourney-discord:0.3.73` 镜像（Linux amd64 / arm64）。使用已发布镜像时，将上面的 `up -d --build` 改为 `up -d --no-build`，可先运行相同 Compose 配置的 `pull`；只编译源码时保留 `--build`。安装包包含 Discord 服务源码、锁文件和本指南。
 
 桥接端口不对公网发布。其 SQLite 卷需要持久化；当前桥接服务部署一个实例，维护多个 Discord 用户会话。不要启动多个实例共享同一 SQLite 文件。网关可多实例部署，账号并发由现有 Redis 分布式并发锁约束。
 
@@ -290,7 +290,7 @@ POST /v1/midjourney/generations/variations
 
 桥接任务 ID、摘要、结果和消息引用持久化到 SQLite，不存 Discord Token。任务遇到未知提交结果、桥接重启或超时时不自动重复提交付费指令；未知结果可能已消耗上游 GPU 时间，但未交付任务仍按网关失败退款策略处理。Go 网关工作进程中断时亦沿用现有异步任务补偿流程，当前不承诺恢复尚未保存的 Discord 运行中任务。
 
-账号执行失败后暂时停止调度 5 分钟，检查会话、订阅、频道和人工验证状态。SDK 的自动人机挑战处理和自动确认审核消息已禁用，需要人工在 Discord 处理。
+任务调用失败或中断不会触发账号限流、冷却或自动停用，失败仅影响当前任务，并按任务退款策略处理；账号仍可接收后续请求。管理员手动停用、调度开关和账号并发配置继续生效。升级会清理旧版因 Discord 任务失败写入的 5 分钟冷却状态，不修改手动停用设置。SDK 的自动人机挑战处理和自动确认审核消息已禁用，需要人工在 Discord 处理。
 
 订阅允许并发、消息格式、模型按钮和用户会话可能变化。本接入没有官方可用性保证。Discord 与 Midjourney 对用户账号自动化均有使用限制，部署者需确认自己的授权范围。
 

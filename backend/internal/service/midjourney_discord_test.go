@@ -3,13 +3,15 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"github.com/stretchr/testify/require"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func testMJBridge(t *testing.T, handler http.HandlerFunc) {
@@ -107,6 +109,95 @@ func TestMidjourneyDiscordUnknownPostOutcomeNeverResubmits(t *testing.T) {
 	_, _, err := s.executeMidjourney(context.Background(), &MidjourneySnapshot{GroupID: 9, Request: MidjourneyRequest{Prompt: "cat"}}, midjourneyTestKey(), mjCapture())
 	require.Error(t, err)
 	require.Equal(t, 1, calls)
+}
+
+type midjourneyFailureRepo struct {
+	midjourneyAccountRepo
+	cooldowns int
+}
+
+func (r *midjourneyFailureRepo) ListSchedulableByGroupIDAndPlatform(context.Context, int64, string) ([]Account, error) {
+	var available []Account
+	for _, account := range r.accounts {
+		if account.IsSchedulable() {
+			available = append(available, account)
+		}
+	}
+	return available, nil
+}
+
+func (r *midjourneyFailureRepo) SetTempUnschedulable(_ context.Context, id int64, until time.Time, reason string) error {
+	r.cooldowns++
+	for i := range r.accounts {
+		if r.accounts[i].ID == id {
+			r.accounts[i].TempUnschedulableUntil = &until
+			r.accounts[i].TempUnschedulableReason = reason
+		}
+	}
+	return nil
+}
+
+func TestMidjourneyDiscordRepeatedFailuresKeepAccountAvailable(t *testing.T) {
+	for _, action := range []string{"imagine", "edits", "select", "upscale", "variations"} {
+		for _, failedStatus := range []string{"failed", "interrupted"} {
+			t.Run(action+"/"+failedStatus, func(t *testing.T) {
+				posts, polls := 0, 0
+				recoverUpstream := false
+				testMJBridge(t, func(w http.ResponseWriter, req *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					if req.Method == http.MethodPost {
+						posts++
+						var submission midjourneyBridgeSubmission
+						require.NoError(t, json.NewDecoder(req.Body).Decode(&submission))
+						require.Equal(t, int64(7), submission.Account.ID)
+						_ = json.NewEncoder(w).Encode(map[string]string{"id": submission.ID})
+						return
+					}
+					polls++
+					if !recoverUpstream {
+						_ = json.NewEncoder(w).Encode(map[string]string{"status": failedStatus})
+						return
+					}
+					_, _ = io.WriteString(w, `{"status":"completed","uri":"https://cdn.discordapp.com/result.png","message_id":"123456789012345680","hash":"hash","options":[]}`)
+				})
+				repo := &midjourneyFailureRepo{midjourneyAccountRepo: midjourneyAccountRepo{accounts: []Account{midjourneyTestAccount(7)}}}
+				slots := &midjourneySlots{}
+				svc := &DurableImageService{openAI: &OpenAIGatewayService{accountRepo: repo, concurrencyService: NewConcurrencyService(slots)}}
+				snapshot := &MidjourneySnapshot{GroupID: 9, Action: action, Request: MidjourneyRequest{Prompt: "cat", Speed: "fast"}}
+				if action == "edits" {
+					snapshot.Request.ImageURLs = []string{"https://example.com/cat.png"}
+				}
+				if action == "select" || action == "upscale" || action == "variations" {
+					snapshot.AccountID = 7
+					snapshot.Request = MidjourneyRequest{TaskID: "imgtask_parent", Index: 1, Mode: "subtle"}
+					snapshot.Parent = &midjourneyReference{AccountID: 7, Provider: MidjourneyProvider, ChannelID: "123456789012345679", ServerID: "123456789012345678", MessageID: "parent-message"}
+				}
+				for attempt := 0; attempt < 5; attempt++ {
+					capture := mjCapture()
+					capture.TaskID = fmt.Sprintf("imgtask_failure_%d", attempt)
+					status, body, err := svc.executeMidjourney(context.Background(), snapshot, midjourneyTestKey(), capture)
+					require.ErrorContains(t, err, "discord task failed")
+					require.Equal(t, http.StatusBadGateway, status)
+					require.Empty(t, body)
+					require.NotNil(t, capture.TaskError, "failure remains available for task error/refund handling")
+					require.Nil(t, capture.Usage, "failed output must not settle a successful generation charge")
+					require.True(t, repo.accounts[0].IsSchedulable())
+					require.Zero(t, repo.cooldowns)
+				}
+				recoverUpstream = true
+				status, _, err := svc.executeMidjourney(context.Background(), snapshot, midjourneyTestKey(), mjCapture())
+				require.NoError(t, err, "the same account can immediately generate after repeated failures")
+				require.Equal(t, http.StatusOK, status)
+				require.Equal(t, 6, posts, "one upstream submission per user task")
+				require.Equal(t, 6, polls)
+				require.Equal(t, []int64{7, 7, 7, 7, 7, 7}, slots.released, "all account slots are released on failure and success")
+				repo.accounts[0].Schedulable = false
+				accounts, err := svc.midjourneyAccounts(context.Background(), snapshot)
+				require.NoError(t, err)
+				require.Empty(t, accounts, "manual scheduling switches still apply")
+			})
+		}
+	}
 }
 func TestMidjourneyDiscordParentButtons(t *testing.T) {
 	opts := []midjourneyOption{{Label: "U2", Custom: "MJ::JOB::upsample::2::hash"}, {Label: "Upscale (Creative)", Custom: "MJ::JOB::new_hd_button"}}
