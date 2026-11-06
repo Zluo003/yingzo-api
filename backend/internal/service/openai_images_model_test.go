@@ -3,9 +3,11 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -85,7 +87,7 @@ func TestOpenAIImagesRejectedDriverDoesNotCoolImageModel(t *testing.T) {
 }
 
 func TestGPTImage25PricingDoesNotUseLegacyImageRates(t *testing.T) {
-	for _, model := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08"} {
+	for _, model := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.5-flare-2026-09-08", "gpt-image-2.5-sunburst-2026-09-08", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
 		svc := &PricingService{pricingData: map[string]*LiteLLMModelPricing{"gpt-image-2": {InputCostPerToken: 2.5e-6, OutputCostPerImageToken: 15e-6}}}
 		p := svc.GetModelPricing(model)
 		require.NotNil(t, p)
@@ -121,4 +123,77 @@ func TestGPTImage25UsagePreservesImageInputTokens(t *testing.T) {
 	require.Equal(t, 1550, usage.InputTokens)
 	require.Equal(t, 1521, usage.ImageInputTokens)
 	require.Equal(t, 515, usage.ImageOutputTokens)
+}
+
+func TestGPTImage26GIFAdmissionAndForwarding(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, model := range []string{"gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
+		for _, endpoint := range []string{openAIImagesGenerationsEndpoint, openAIImagesEditsEndpoint} {
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodPost, endpoint, nil)
+			c.Request.Header.Set("Content-Type", "application/json")
+			body := []byte(fmt.Sprintf(`{"model":%q,"prompt":"a looping cat","output_format":"gif","size":"auto","frame_count":9,"frame_duration_ms":200,"images":[{"image_url":"https://example.com/ref.png"}]}`, model))
+			parsed, err := (&OpenAIGatewayService{}).ParseOpenAIImagesRequest(c, body)
+			require.NoError(t, err)
+			require.Equal(t, "high", parsed.Complexity)
+			forwarded, _, err := rewriteOpenAIImagesModel(body, "application/json", model, IsGPTImage26Model(parsed.Model))
+			require.NoError(t, err)
+			require.Equal(t, "high", gjson.GetBytes(forwarded, "complexity").String())
+			mapped, _, err := rewriteOpenAIImagesModel(body, "application/json", "gpt-image-upstream-alias", IsGPTImage26Model(parsed.Model))
+			require.NoError(t, err)
+			require.Equal(t, "high", gjson.GetBytes(mapped, "complexity").String())
+			require.Equal(t, int64(9), gjson.GetBytes(forwarded, "frame_count").Int())
+			response, err := buildOpenAIImagesResponsesRequest(parsed, model)
+			require.NoError(t, err)
+			require.Equal(t, "high", gjson.GetBytes(response, "tools.0.complexity").String())
+			require.Equal(t, int64(9), gjson.GetBytes(response, "tools.0.frame_count").Int())
+			require.Equal(t, int64(200), gjson.GetBytes(response, "tools.0.frame_duration_ms").Int())
+		}
+	}
+	require.Equal(t, "image/gif", openAIImageOutputMIMEType("gif"))
+	for _, fields := range []string{
+		`"output_format":"svg"`, `"output_format":"gif","frame_count":1`,
+		`"output_format":"gif","frame_count":17`, `"output_format":"gif","frame_count":2.5`,
+		`"output_format":"gif","frame_duration_ms":19`, `"output_format":"gif","frame_duration_ms":2001`,
+		`"output_format":"gif","stream":true`, `"output_format":"gif","output_compression":50`,
+		`"output_format":"gif","mask":{}`, `"output_format":"gif","size":"511x512"`,
+		`"output_format":"png","frame_count":9`, `"complexity":"low"`,
+	} {
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, openAIImagesGenerationsEndpoint, nil)
+		c.Request.Header.Set("Content-Type", "application/json")
+		_, err := (&OpenAIGatewayService{}).ParseOpenAIImagesRequest(c, []byte(`{"model":"gpt-image-2.6-flare","prompt":"cat",`+fields+`}`))
+		require.Error(t, err, fields)
+	}
+}
+
+func TestGPTImage26MultipartAnimation(t *testing.T) {
+	for _, complexity := range []string{"", "high", "low"} {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		for key, value := range map[string]string{"model": "gpt-image-2.6-flare", "prompt": "a waving cat", "output_format": "gif", "size": "auto", "frame_count": "9", "frame_duration_ms": "200"} {
+			require.NoError(t, writer.WriteField(key, value))
+		}
+		if complexity != "" {
+			require.NoError(t, writer.WriteField("complexity", complexity))
+		}
+		require.NoError(t, writer.Close())
+		c, _ := gin.CreateTestContext(httptest.NewRecorder())
+		c.Request = httptest.NewRequest(http.MethodPost, openAIImagesGenerationsEndpoint, nil)
+		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+		parsed, err := (&OpenAIGatewayService{}).ParseOpenAIImagesRequest(c, body.Bytes())
+		if complexity == "low" {
+			require.Error(t, err)
+			continue
+		}
+		require.NoError(t, err)
+		require.Equal(t, 9, *parsed.FrameCount)
+		rewritten, contentType, err := rewriteOpenAIImagesModel(body.Bytes(), writer.FormDataContentType(), "gpt-image-upstream-alias", IsGPTImage26Model(parsed.Model))
+		require.NoError(t, err)
+		reparsed := &OpenAIImagesRequest{}
+		require.NoError(t, parseOpenAIImagesMultipartRequest(rewritten, contentType, reparsed))
+		require.Equal(t, "high", reparsed.Complexity)
+		require.Equal(t, 9, *reparsed.FrameCount)
+		require.Equal(t, 200, *reparsed.FrameDurationMS)
+	}
 }

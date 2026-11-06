@@ -17,6 +17,8 @@ describe('useModelWhitelist', () => {
     expect(models).toContain('gpt-5.6')
     expect(models).toContain('gpt-6')
     expect(models).toContain('gpt-6-astra')
+    expect(models).toContain('gpt-image-2.6-flare')
+    expect(models).toContain('gpt-image-2.6-sunburst')
   })
 
   it('openai 预设映射包含 GPT-6 别名和 Astra', () => {

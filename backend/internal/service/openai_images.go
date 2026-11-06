@@ -86,6 +86,9 @@ type OpenAIImagesRequest struct {
 	Quality            string
 	Background         string
 	OutputFormat       string
+	Complexity         string
+	FrameCount         *int
+	FrameDurationMS    *int
 	Moderation         string
 	InputFidelity      string
 	Style              string
@@ -230,6 +233,9 @@ func (s *OpenAIGatewayService) ParseOpenAIImagesRequest(c *gin.Context, body []b
 	if err := validateOpenAIImagesModel(req.Model); err != nil {
 		return nil, err
 	}
+	if err := validateOpenAIImagesAnimation(req); err != nil {
+		return nil, err
+	}
 	req.SizeTier = normalizeOpenAIImageSizeTier(req.Size)
 	req.RequiredCapability = classifyOpenAIImagesCapability(req)
 	return req, nil
@@ -267,6 +273,17 @@ func parseOpenAIImagesJSONRequest(body []byte, req *OpenAIImagesRequest) error {
 	req.Quality = strings.TrimSpace(gjson.GetBytes(body, "quality").String())
 	req.Background = strings.TrimSpace(gjson.GetBytes(body, "background").String())
 	req.OutputFormat = strings.TrimSpace(gjson.GetBytes(body, "output_format").String())
+	req.Complexity = strings.TrimSpace(gjson.GetBytes(body, "complexity").String())
+	for key, target := range map[string]**int{"frame_count": &req.FrameCount, "frame_duration_ms": &req.FrameDurationMS} {
+		value := gjson.GetBytes(body, key)
+		if value.Exists() {
+			if value.Type != gjson.Number || value.Float() != float64(value.Int()) {
+				return fmt.Errorf("%s must be an integer", key)
+			}
+			n := int(value.Int())
+			*target = &n
+		}
+	}
 	req.Moderation = strings.TrimSpace(gjson.GetBytes(body, "moderation").String())
 	req.InputFidelity = strings.TrimSpace(gjson.GetBytes(body, "input_fidelity").String())
 	req.Style = strings.TrimSpace(gjson.GetBytes(body, "style").String())
@@ -412,6 +429,20 @@ func parseOpenAIImagesMultipartRequest(body []byte, contentType string, req *Ope
 		case "output_format":
 			req.OutputFormat = value
 			req.HasNativeOptions = true
+		case "complexity":
+			req.Complexity = value
+			req.HasNativeOptions = true
+		case "frame_count", "frame_duration_ms":
+			n, err := strconv.Atoi(value)
+			if err != nil {
+				return fmt.Errorf("%s must be an integer", name)
+			}
+			if name == "frame_count" {
+				req.FrameCount = &n
+			} else {
+				req.FrameDurationMS = &n
+			}
+			req.HasNativeOptions = true
 		case "moderation":
 			req.Moderation = value
 			req.HasNativeOptions = true
@@ -468,6 +499,56 @@ func applyOpenAIImagesDefaults(req *OpenAIImagesRequest) {
 
 func isOpenAIImageGenerationModel(model string) bool {
 	return IsGPTImageGenerationModel(model) || isGrokImageGenerationModel(model)
+}
+
+// IsGPTImage26Model identifies the two verified animation-capable image models.
+func IsGPTImage26Model(model string) bool {
+	return model == "gpt-image-2.6-flare" || model == "gpt-image-2.6-sunburst"
+}
+
+func validateOpenAIImagesAnimation(req *OpenAIImagesRequest) error {
+	if strings.EqualFold(req.OutputFormat, "svg") {
+		return fmt.Errorf("SVG generation is not supported")
+	}
+	if IsGPTImage26Model(req.Model) {
+		if req.Complexity != "" && req.Complexity != "high" {
+			return fmt.Errorf("GPT Image 2.6 complexity is fixed at high")
+		}
+		req.Complexity = "high"
+	} else if req.FrameCount != nil || req.FrameDurationMS != nil || req.OutputFormat == "gif" {
+		return fmt.Errorf("animation settings require GPT Image 2.6")
+	}
+	if req.OutputFormat != "gif" {
+		if req.FrameCount != nil || req.FrameDurationMS != nil {
+			return fmt.Errorf("frame settings require GIF output")
+		}
+		return nil
+	}
+	if req.Stream || req.HasMask || req.PartialImages != nil || req.OutputCompression != nil {
+		return fmt.Errorf("GIF output does not support streaming, masks, partial images or output compression")
+	}
+	if req.Background == "transparent" {
+		return fmt.Errorf("transparent backgrounds require PNG or WebP")
+	}
+	if req.FrameCount != nil && (*req.FrameCount < 2 || *req.FrameCount > 16) {
+		return fmt.Errorf("frame_count must be between 2 and 16")
+	}
+	if req.FrameDurationMS != nil && (*req.FrameDurationMS < 20 || *req.FrameDurationMS > 2000) {
+		return fmt.Errorf("frame_duration_ms must be between 20 and 2000")
+	}
+	if req.Size != "" && req.Size != "auto" {
+		parts := strings.Split(req.Size, "x")
+		if len(parts) != 2 {
+			return fmt.Errorf("GIF size must be auto or WIDTHxHEIGHT")
+		}
+		for _, part := range parts {
+			dimension, err := strconv.Atoi(part)
+			if err != nil || dimension <= 0 || dimension%16 != 0 {
+				return fmt.Errorf("GIF frame dimensions must be positive multiples of 16")
+			}
+		}
+	}
+	return nil
 }
 
 // IsGPTImageGenerationModel identifies the GPT native image-generation model family.
@@ -538,7 +619,7 @@ func hasOpenAINativeImageOptions(exists func(path string) bool) bool {
 		"output_compression",
 		"moderation",
 		"input_fidelity",
-		"partial_images",
+		"partial_images", "complexity", "frame_count", "frame_duration_ms",
 	} {
 		if exists(path) {
 			return true
@@ -549,7 +630,7 @@ func hasOpenAINativeImageOptions(exists func(path string) bool) bool {
 
 func isOpenAINativeImageOption(name string) bool {
 	switch strings.TrimSpace(strings.ToLower(name)) {
-	case "background", "quality", "style", "output_format", "output_compression", "moderation", "input_fidelity", "partial_images":
+	case "background", "quality", "style", "output_format", "output_compression", "moderation", "input_fidelity", "partial_images", "complexity", "frame_count", "frame_duration_ms":
 		return true
 	default:
 		return false
@@ -610,7 +691,7 @@ func (s *OpenAIGatewayService) forwardOpenAIImagesAPIKey(
 		parsed.Endpoint,
 		account.Type,
 	)
-	forwardBody, forwardContentType, err := rewriteOpenAIImagesModel(body, parsed.ContentType, upstreamModel)
+	forwardBody, forwardContentType, err := rewriteOpenAIImagesModel(body, parsed.ContentType, upstreamModel, IsGPTImage26Model(parsed.Model))
 	if err != nil {
 		return nil, err
 	}
@@ -819,24 +900,27 @@ func buildOpenAIImagesURL(base string, endpoint string) string {
 	return buildOpenAIEndpointURL(base, endpoint)
 }
 
-func rewriteOpenAIImagesModel(body []byte, contentType string, model string) ([]byte, string, error) {
+func rewriteOpenAIImagesModel(body []byte, contentType string, model string, forceHighComplexity bool) ([]byte, string, error) {
 	model = strings.TrimSpace(model)
 	if model == "" {
 		return body, contentType, nil
 	}
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err == nil && strings.EqualFold(mediaType, "multipart/form-data") {
-		rewrittenBody, rewrittenType, rewriteErr := rewriteOpenAIImagesMultipartModel(body, contentType, model)
+		rewrittenBody, rewrittenType, rewriteErr := rewriteOpenAIImagesMultipartModel(body, contentType, model, forceHighComplexity || IsGPTImage26Model(model))
 		return rewrittenBody, rewrittenType, rewriteErr
 	}
 	rewritten, err := sjson.SetBytes(body, "model", model)
+	if err == nil && (forceHighComplexity || IsGPTImage26Model(model)) {
+		rewritten, err = sjson.SetBytes(rewritten, "complexity", "high")
+	}
 	if err != nil {
 		return nil, "", fmt.Errorf("rewrite image request model: %w", err)
 	}
 	return rewritten, contentType, nil
 }
 
-func rewriteOpenAIImagesMultipartModel(body []byte, contentType string, model string) ([]byte, string, error) {
+func rewriteOpenAIImagesMultipartModel(body []byte, contentType string, model string, forceHighComplexity bool) ([]byte, string, error) {
 	_, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
 		return nil, "", fmt.Errorf("parse multipart content-type: %w", err)
@@ -850,6 +934,7 @@ func rewriteOpenAIImagesMultipartModel(body []byte, contentType string, model st
 	var buffer bytes.Buffer
 	writer := multipart.NewWriter(&buffer)
 	modelWritten := false
+	complexityWritten := false
 
 	for {
 		part, err := reader.NextPart()
@@ -877,6 +962,15 @@ func rewriteOpenAIImagesMultipartModel(body []byte, contentType string, model st
 			_ = part.Close()
 			continue
 		}
+		if formName == "complexity" && part.FileName() == "" && forceHighComplexity {
+			if _, err := target.Write([]byte("high")); err != nil {
+				_ = part.Close()
+				return nil, "", err
+			}
+			complexityWritten = true
+			_ = part.Close()
+			continue
+		}
 		if _, err := io.Copy(target, part); err != nil {
 			_ = part.Close()
 			return nil, "", fmt.Errorf("copy multipart part: %w", err)
@@ -887,6 +981,11 @@ func rewriteOpenAIImagesMultipartModel(body []byte, contentType string, model st
 	if !modelWritten {
 		if err := writer.WriteField("model", model); err != nil {
 			return nil, "", fmt.Errorf("append multipart model field: %w", err)
+		}
+	}
+	if forceHighComplexity && !complexityWritten {
+		if err := writer.WriteField("complexity", "high"); err != nil {
+			return nil, "", err
 		}
 	}
 	if err := writer.Close(); err != nil {

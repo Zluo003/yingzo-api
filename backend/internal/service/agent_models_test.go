@@ -415,7 +415,7 @@ func TestAgentModelCatalogExpandsLanguageAndImageWildcardsAgainstProviderDefault
 	enableAllAgentModelsForTest(models)
 	catalog, err := catalogService.ListAvailable(context.Background(), 9)
 	require.NoError(t, err)
-	require.Equal(t, []string{"gpt-image-1", "gpt-image-1.5", "gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst"}, agentCatalogIDsForTest(catalog))
+	require.Equal(t, []string{"gpt-image-1", "gpt-image-1.5", "gpt-image-2", "gpt-image-2.5-flare", "gpt-image-2.5-sunburst", "gpt-image-2.6-flare", "gpt-image-2.6-sunburst"}, agentCatalogIDsForTest(catalog))
 }
 
 // 删除 = 真删除，不是永久排除：行被删掉后，账号仍声明该模型时，下一次同步

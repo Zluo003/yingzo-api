@@ -197,3 +197,20 @@ func TestMiMoSpeechCatalogCapabilities(t *testing.T) {
 		require.Equal(t, []string{"pcm16"}, caps["streaming_output_formats"])
 	}
 }
+
+func TestAgentCatalogGPTImage26AnimationCapabilities(t *testing.T) {
+	for _, id := range []string{"gpt-image-2.6-flare", "gpt-image-2.6-sunburst"} {
+		model := agentCatalogModel(service.AgentModelCatalogEntry{ID: id,
+			MediaTypes: []string{service.AgentMediaTypeImage}, Platforms: []string{service.PlatformOpenAI},
+			Interfaces: []string{service.AgentInterfaceOpenAIImages}}, nil)
+		caps := capabilitiesOf(t, model)
+		require.Equal(t, []string{"image.generate", "image.edit"}, caps["operations"])
+		require.Equal(t, []string{"png", "jpeg", "webp", "gif"}, caps["supported_output_formats"])
+		require.Equal(t, []string{"auto", "low", "medium", "high", "xhigh", "max"}, caps["supported_image_qualities"])
+		require.Equal(t, true, caps["supports_animation"])
+		require.Equal(t, false, caps["supports_svg"])
+		require.Equal(t, "high", caps["default_complexity"])
+		require.NotContains(t, caps, "supported_complexities")
+		require.Equal(t, gin.H{"min": 2, "max": 16, "default": 9}, caps["animation"].(gin.H)["frame_count"])
+	}
+}

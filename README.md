@@ -38,6 +38,12 @@
 - **用户与配额**：余额 / 订阅两种计费模式、日/周/月限额、用户×分组专属倍率与 RPM 覆盖、平台级配额、风控与内容审核、审计日志。
 - **运营**：兑换码、优惠码、公告、邀请返利、支付渠道对接。
 
+### GPT Image 2.6
+
+白名单与默认模型列表包含 `gpt-image-2.6-flare`、`gpt-image-2.6-sunburst`；已有账号的明确白名单不会自动扩展。管理员仍须将型号加入对应图片账号的 `model_mapping`，再在 Agent 分组中配置图片档位价格并启用。同步目录保留这些启用条件，同时登记图片生成、编辑、透明 PNG/WebP 和 GIF 动画能力。
+
+两款模型固定传 `complexity: "high"`，不提供复杂度选项，不允许 SVG。GIF 使用图片生成或编辑接口的 `output_format: "gif"`，支持 `frame_count` 2–16（默认 9）及 `frame_duration_ms` 20–2000（默认 200，上游按 10 ms 取整）；默认使用 `size: "auto"`，帧尺寸和总像素预算由上游检查。GIF 不支持流式、蒙版、部分图片、透明背景或自定义输出压缩，需要上游 GIF 预览权限。参数依据 [OpenAI 官方图片指南](https://developers.openai.com/api/docs/guides/image-generation#generate-animated-gif-output)；实际生成须用有权限的上游账号验收。
+
 ### Yingzo Agent（系统内置聚合分组）
 
 一个凭证调用全部已配置的模型：把账号归属到该系统分组后，模型目录会从这些账号的 `model_mapping` 自动发现，管理员再逐个模型配置启用与价格。

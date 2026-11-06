@@ -265,6 +265,20 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 	capabilities["operations"] = operations
 	capabilities["streaming"] = streaming
 	capabilities["asynchronous"] = asynchronous
+	if service.IsGPTImage26Model(entry.ID) {
+		capabilities["supported_image_qualities"] = []string{"auto", "low", "medium", "high", "xhigh", "max"}
+		capabilities["supported_backgrounds"] = []string{"opaque", "transparent", "auto"}
+		capabilities["supported_output_formats"] = []string{"png", "jpeg", "webp", "gif"}
+		capabilities["supports_animation"] = true
+		capabilities["supports_svg"] = false
+		capabilities["default_complexity"] = "high"
+		capabilities["animation"] = gin.H{
+			"frame_count":       gin.H{"min": 2, "max": 16, "default": 9},
+			"frame_duration_ms": gin.H{"min": 20, "max": 2000, "default": 200, "round_to": 10},
+			"default_size":      "auto", "supports_streaming": false, "supports_masks": false,
+			"supports_output_compression": false,
+		}
+	}
 	if service.IsMiMoSpeechModel(entry.ID) {
 		capabilities["input_modalities"] = []string{"text"}
 		capabilities["output_modalities"] = []string{"audio"}

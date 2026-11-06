@@ -1517,7 +1517,11 @@ func (s *PricingService) matchOpenAIModel(model string) *LiteLLMModelPricing {
 		return openAIGPT54FallbackPricing
 	}
 
-	// Remote price mirrors can lag new releases. Never bill GPT Image 2.5
+	if IsGPTImage26Model(model) {
+		return openAIGPTImage25FallbackPricing
+	}
+
+	// Remote price mirrors can lag new releases. Never bill GPT Image 2.5/2.6
 	// using the older image model's rates when its entry is absent.
 	for _, imageModel := range []string{"gpt-image-2.5-flare", "gpt-image-2.5-sunburst"} {
 		if model == imageModel || model == imageModel+"-2026-09-08" {

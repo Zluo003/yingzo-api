@@ -35,3 +35,7 @@ The file contains JSON data with model pricing information including:
 - Model capabilities
 
 Last updated: 2025-08-10
+
+## GPT Image 2.6
+
+The two GPT Image 2.6 entries use the verified official text/image token rates from [Flare](https://developers.openai.com/api/docs/models/gpt-image-2.6-flare) and [Sunburst](https://developers.openai.com/api/docs/models/gpt-image-2.6-sunburst), checked on 2026-11-07. The service also keeps these rates as a fallback when the remote mirror has not listed these models yet.
