@@ -211,6 +211,8 @@ func TestAgentCatalogGPTImage26AnimationCapabilities(t *testing.T) {
 		require.Equal(t, false, caps["supports_svg"])
 		require.Equal(t, "high", caps["default_complexity"])
 		require.NotContains(t, caps, "supported_complexities")
-		require.Equal(t, gin.H{"min": 2, "max": 16, "default": 9}, caps["animation"].(gin.H)["frame_count"])
+		animation, ok := caps["animation"].(gin.H)
+		require.True(t, ok)
+		require.Equal(t, gin.H{"min": 2, "max": 16, "default": 9}, animation["frame_count"])
 	}
 }
