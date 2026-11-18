@@ -33,7 +33,8 @@ func TestNewtokenOfficialModelsAndAccountConfiguration(t *testing.T) {
 		{VideoModelSeedance20, "doubao-seedance-2-0-260128", []string{"480p", "720p", "1080p", "4K"}},
 		{VideoModelSeedance20Fast, "doubao-seedance-2-0-fast-260128", []string{"480p", "720p"}},
 		{VideoModelSeedance20Mini, "doubao-seedance-2-0-mini-260615", []string{"480p", "720p"}},
-		{VideoModelSeedance25, "doubao-seedance-2-5-260628", []string{"480p", "720p", "1080p"}},
+		{VideoModelSeedance25, "doubao-seedance-2-5-260628", []string{"480p", "720p", "1080p", "4K"}},
+		{VideoModelSeedance25Flash, "doubao-seedance-2-5-flash-261115", []string{"480p", "720p"}},
 	} {
 		for _, resolution := range tc.resolutions {
 			r := &normalizedVideoRequest{Model: tc.model, Resolution: resolution, Prompt: "move", GeneratedSeconds: 4}

@@ -13,6 +13,10 @@
 
 ## 客户端契约
 
+`seedance-2.5-flash` 与标准版 `seedance-2.5` 分别配置账号模型、通道和价格。勾选 Flash 后，`newtoken_official` 默认发送 `doubao-seedance-2-5-flash-261115`，XingAPI（`xingguang`）默认发送 `seedance2.5-flash-M`。可在账号中覆盖这两个 ID。其他兼容标准 2.5 的适配器复用既有协议，例如在账号中设置 `credentials.model_mapping = { "seedance-2.5-flash": "供应商提供的 Flash ID" }`。未配置独立 ID 时不使用标准版 ID 或通配映射。Flash 输出为 480p、720p，时长 4–30 秒；账号和适配器仍可收紧素材与输出限制。
+
+标准版 2.5 的 4K 只路由到 `newtoken_official`，不路由到旧版 `newtoken` 的 `/v1/videos`。确认该密钥分组支持 4K 后，再勾选账号档位并配置对应通道价格；网关发给上游的分辨率值为 `4k`。
+
 Agent 模型目录的 `capabilities.video_channels` 返回已启用、有账号且有可用价格的通道，包括稳定 ID、名称、价格、分辨率及 `durations_by_resolution`。切换通道后应重新验证参数和获取报价。
 
 估价请求的 `request` 和正式 `POST /v1/videos` 请求均传 `video_channel_id`。不传或传空字符串只选择默认通道，不自动寻找其他通道。

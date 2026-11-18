@@ -633,7 +633,7 @@
               <div class="text-xs font-medium text-gray-600 dark:text-gray-400">{{ model }}</div>
               <div class="mt-1.5 flex flex-wrap gap-2">
                 <button
-                  v-for="resolution in videoModelResolutions(model)"
+                  v-for="resolution in videoModelResolutions(model, videoProvider)"
                   :key="resolution"
                   type="button"
                   :data-testid="`video-resolution-${model}-${resolution}`"
@@ -4685,7 +4685,7 @@ const upstreamModelsPreviewed = ref(false)
 const videoDefaultModels = VIDEO_MODEL_CODES
 /** 视频模型选择与上游名称独立保存，留空名称由适配器按模型/分辨率路由。 */
 // Keep the initial selection serviceable by one provider; APIMart models remain selectable.
-const initialVideoModels = videoDefaultModels.filter(model => !model.startsWith('minimax-h3') && model !== 'seedance-2.0-mini' && model !== 'vidu-q4-preview')
+const initialVideoModels = videoDefaultModels.filter(model => !model.startsWith('minimax-h3') && model !== 'seedance-2.0-mini' && model !== 'seedance-2.5-flash' && model !== 'vidu-q4-preview')
 const selectedVideoModels = ref<string[]>([...initialVideoModels])
 const videoUpstreamModels = ref<Record<string, string>>({})
 /**
@@ -4730,7 +4730,7 @@ const onVideoResolutionToggle = (model: string, resolution: string) => {
   selectedVideoResolutions.value = toggleVideoResolution(
     selectedVideoResolutions.value,
     model,
-    resolution
+    resolution, videoProvider.value
   )
 }
 
@@ -4747,7 +4747,7 @@ const onVideoDurationToggle = (model: string, seconds: number) => {
 const videoModelResolutionsPayload = () =>
   serializeVideoModelResolutions(
     selectedVideoResolutions.value,
-    selectedVideoModels.value
+    selectedVideoModels.value, videoProvider.value
   )
 
 const videoModelDurationsPayload = () =>

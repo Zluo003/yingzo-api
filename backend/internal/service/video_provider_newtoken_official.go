@@ -10,10 +10,11 @@ import (
 type newtokenOfficialVideoProviderAdapter struct{ newtokenVideoProviderAdapter }
 
 var newtokenOfficialModels = map[string]string{
-	VideoModelSeedance20:     "doubao-seedance-2-0-260128",
-	VideoModelSeedance20Fast: "doubao-seedance-2-0-fast-260128",
-	VideoModelSeedance20Mini: "doubao-seedance-2-0-mini-260615",
-	VideoModelSeedance25:     "doubao-seedance-2-5-260628",
+	VideoModelSeedance20:      "doubao-seedance-2-0-260128",
+	VideoModelSeedance20Fast:  "doubao-seedance-2-0-fast-260128",
+	VideoModelSeedance20Mini:  "doubao-seedance-2-0-mini-260615",
+	VideoModelSeedance25:      "doubao-seedance-2-5-260628",
+	VideoModelSeedance25Flash: "doubao-seedance-2-5-flash-261115",
 }
 
 func (n newtokenOfficialVideoProviderAdapter) Provider() string { return videoProviderNewtokenOfficial }
@@ -39,7 +40,7 @@ func (n newtokenOfficialVideoProviderAdapter) CompatibleRequest(r *normalizedVid
 	if r.RequestedDuration == -1 && mode != "edit" {
 		return false
 	}
-	adaptiveRatio := r.Model == VideoModelSeedance25 && r.Ratio == "auto" && (mode == "edit" || mode == "extend")
+	adaptiveRatio := isSeedance25Family(r.Model) && r.Ratio == "auto" && (mode == "edit" || mode == "extend")
 	if r.RatioProvided && !isSeedanceAspectRatio(r.Ratio) && !adaptiveRatio {
 		return false
 	}
@@ -226,7 +227,7 @@ func validateNewtokenOfficialOptions(req *VideoCreateRequest) error {
 	}
 	if value, ok := req.Raw["omni_reference_task_type"]; ok {
 		mode, valid := value.(string)
-		if !valid || model != VideoModelSeedance25 || inspectVideoContent(normalizeVideoContent(req.Content)).VideoCount == 0 {
+		if !valid || !isSeedance25Family(model) || inspectVideoContent(normalizeVideoContent(req.Content)).VideoCount == 0 {
 			return bad()
 		}
 		switch mode {

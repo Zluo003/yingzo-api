@@ -17,6 +17,7 @@ describe('video model resolutions', () => {
       'seedance-2.0-fast',
       'seedance-2.0-mini',
       'seedance-2.5',
+      'seedance-2.5-flash',
       'grok-imagine-video-1.5',
       'minimax-h3',
       'minimax-h3-max',
@@ -34,7 +35,8 @@ describe('video model resolutions', () => {
     expect(videoModelResolutions('seedance-2.5')).toEqual([
       '480p',
       '720p',
-      '1080p'
+      '1080p',
+      '4K'
     ])
     expect(videoModelResolutions('grok-imagine-video-1.5')).toEqual([
       '480p',
@@ -57,7 +59,8 @@ describe('video model resolutions', () => {
       'seedance-2.0': ['480p', '720p', '1080p', '4K'],
       'seedance-2.0-fast': ['480p', '720p'],
       'seedance-2.0-mini': ['480p', '720p'],
-      'seedance-2.5': ['480p', '720p', '1080p'],
+      'seedance-2.5': ['480p', '720p', '1080p', '4K'],
+      'seedance-2.5-flash': ['480p', '720p'],
       'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
       'minimax-h3': ['768p', '2K'],
       'minimax-h3-max': ['480p', '768p', '1080p'],
@@ -123,7 +126,7 @@ describe('video model resolutions', () => {
     const selection = defaultVideoModelResolutions()
     expect(
       serializeVideoModelResolutions(selection, ['seedance-2.5'])
-    ).toEqual({ 'seedance-2.5': ['480p', '720p', '1080p'] })
+    ).toEqual({ 'seedance-2.5': ['480p', '720p', '1080p', '4K'] })
     expect(serializeVideoModelResolutions(selection, [])).toBeUndefined()
   })
 
@@ -139,7 +142,8 @@ describe('video model resolutions', () => {
       'seedance-2.0-mini': ['480p', '720p'],
       // 未配置 / 值非法 => 后端语义是"不限制"，界面必须显示全部官方档位，
       // 而不是留空（留空会读成"什么都不支持"，与后端相反）。
-      'seedance-2.5': ['480p', '720p', '1080p'],
+      'seedance-2.5': ['480p', '720p', '1080p', '4K'],
+      'seedance-2.5-flash': ['480p', '720p'],
       'grok-imagine-video-1.5': ['480p', '720p', '1080p'],
       'minimax-h3': ['768p', '2K'],
       'minimax-h3-max': ['480p', '768p', '1080p'],
@@ -169,7 +173,7 @@ describe('video model resolutions', () => {
       'seedance-2.5': ['999p']
     })
     expect(parsed['seedance-2.0']).toEqual(['480p', '720p', '1080p', '4K'])
-    expect(parsed['seedance-2.5']).toEqual(['480p', '720p', '1080p'])
+    expect(parsed['seedance-2.5']).toEqual(['480p', '720p', '1080p', '4K'])
   })
 
   it('round-trips through serialize and parse', () => {

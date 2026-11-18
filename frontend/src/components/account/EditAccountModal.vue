@@ -230,7 +230,7 @@
               <div class="text-xs font-medium text-gray-600 dark:text-gray-400">{{ model }}</div>
               <div class="mt-1.5 flex flex-wrap gap-2">
                 <button
-                  v-for="resolution in videoModelResolutions(model)"
+                  v-for="resolution in videoModelResolutions(model, editVideoProvider)"
                   :key="resolution"
                   type="button"
                   :data-testid="`video-resolution-${model}-${resolution}`"
@@ -3315,7 +3315,7 @@ const onEditVideoResolutionToggle = (model: string, resolution: string) => {
   editVideoResolutions.value = toggleVideoResolution(
     editVideoResolutions.value,
     model,
-    resolution
+    resolution, editVideoProvider.value
   )
 }
 
@@ -5355,7 +5355,7 @@ const handleSubmit = async () => {
         }
         // 新增/更新分辨率与时长白名单；清空勾选等价于「不限制」，必须删除旧键，
         // 否则 currentExtra 里残留的配置会继续生效。
-        const videoResolutions = serializeVideoModelResolutions(editVideoResolutions.value, editSelectedVideoModels.value)
+        const videoResolutions = serializeVideoModelResolutions(editVideoResolutions.value, editSelectedVideoModels.value, editVideoProvider.value)
         if (videoResolutions) {
           nextExtra.video_model_resolutions = videoResolutions
         } else {

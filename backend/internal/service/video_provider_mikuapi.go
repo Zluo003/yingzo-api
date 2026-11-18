@@ -66,7 +66,9 @@ func (m mikuapiVideoProviderAdapter) DefaultAPIPath() string {
 // fast 仅 480p/720p，2.5 无 4K），Grok 与可灵的档位见 videoModelSpecs。
 func (m mikuapiVideoProviderAdapter) Compatible(model, resolution string) bool {
 	switch strings.TrimSpace(model) {
-	case VideoModelSeedance20, VideoModelSeedance20Fast, VideoModelSeedance25,
+	case VideoModelSeedance25:
+		return !strings.EqualFold(strings.TrimSpace(resolution), VideoResolution4K) && IsSupportedVideoResolution(model, resolution)
+	case VideoModelSeedance20, VideoModelSeedance20Fast,
 		VideoModelGrokImagineVideo15, VideoModelKlingV3Omni, VideoModelKlingV4:
 	default:
 		return false

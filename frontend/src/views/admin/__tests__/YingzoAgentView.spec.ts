@@ -398,8 +398,7 @@ describe('admin YingzoAgentView', () => {
 
     await wrapper.get('[data-testid="yingzo-agent-tab-video"]').trigger('click')
     expect((wrapper.get('input[aria-label="videoChannels.default 720p"]').element as HTMLInputElement).value).toBe('0.2')
-    // seedance-2.5 官方档位是 480p/720p/1080p：不提供 4K 输入框。
-    expect(wrapper.find('input[aria-label="videoChannels.default 4K"]').exists()).toBe(false)
+    expect(wrapper.find('input[aria-label="videoChannels.default 4K"]').exists()).toBe(true)
     expect(wrapper.find('input[aria-label="videoChannels.default 480p"]').exists()).toBe(true)
   })
 

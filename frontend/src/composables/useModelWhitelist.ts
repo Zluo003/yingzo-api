@@ -226,6 +226,7 @@ const videoModels = [
   'seedance-2.0-fast',
   'seedance-2.0-mini',
   'seedance-2.5',
+  'seedance-2.5-flash',
   'grok-imagine-video-1.5',
   'minimax-h3',
   'minimax-h3-max',

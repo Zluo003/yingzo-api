@@ -781,6 +781,9 @@ func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
 			if requestedModel == "" {
 				continue
 			}
+			if platform == PlatformVideo && requestedModel == VideoModelSeedance25Flash && videoFlashUpstreamModel(account) == "" {
+				continue
+			}
 			// 图片账号声明的一切模型都是图片模型：不靠关键词猜类型。
 			if account.IsImageAccount() {
 				addAgentDiscovery(discovered, platform, requestedModel, AgentMediaTypeImage)

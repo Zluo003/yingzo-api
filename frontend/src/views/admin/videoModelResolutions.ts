@@ -26,7 +26,8 @@ export const VIDEO_MODEL_RESOLUTIONS: VideoModelResolutionSpec[] = [
   { model: 'seedance-2.0', resolutions: ['480p', '720p', '1080p', '4K'] },
   { model: 'seedance-2.0-fast', resolutions: ['480p', '720p'] },
   { model: 'seedance-2.0-mini', resolutions: ['480p', '720p'] },
-  { model: 'seedance-2.5', resolutions: ['480p', '720p', '1080p'] },
+  { model: 'seedance-2.5', resolutions: ['480p', '720p', '1080p', '4K'] },
+  { model: 'seedance-2.5-flash', resolutions: ['480p', '720p'] },
   { model: 'grok-imagine-video-1.5', resolutions: ['480p', '720p', '1080p'] },
   { model: 'minimax-h3', resolutions: ['768p', '2K'] },
   { model: 'minimax-h3-max', resolutions: ['480p', '768p', '1080p'] },
@@ -45,7 +46,8 @@ export const NEWTOKEN_OFFICIAL_MODEL_IDS: Record<string, string> = {
   'seedance-2.0': 'doubao-seedance-2-0-260128',
   'seedance-2.0-fast': 'doubao-seedance-2-0-fast-260128',
   'seedance-2.0-mini': 'doubao-seedance-2-0-mini-260615',
-  'seedance-2.5': 'doubao-seedance-2-5-260628'
+  'seedance-2.5': 'doubao-seedance-2-5-260628',
+  'seedance-2.5-flash': 'doubao-seedance-2-5-flash-261115'
 }
 
 /** 视频上游平台名，与后端 supportedVideoProviders 对齐。 */
@@ -83,17 +85,19 @@ export function videoProvidersServing(
   if (models.length === 0) return providers
   return providers.filter((provider) =>
     models.every((model) =>
-      VIDEO_PROVIDER_SUPPORTED_MODELS[provider].includes(model)
+      VIDEO_PROVIDER_SUPPORTED_MODELS[provider].includes(model === 'seedance-2.5-flash' ? 'seedance-2.5' : model)
     )
   )
 }
 
 /** 模型官方档位；未接入的模型返回空数组。 */
-export function videoModelResolutions(model: string): string[] {
-  return (
+export function videoModelResolutions(model: string, provider?: VideoProviderName): string[] {
+  const resolutions = (
     VIDEO_MODEL_RESOLUTIONS.find((entry) => entry.model === model)?.resolutions ??
     []
   )
+  return model === 'seedance-2.5' && provider && provider !== 'newtoken_official'
+    ? resolutions.filter(value => value !== '4K') : resolutions
 }
 
 /** 默认勾选：模型官方档位全部勾上（运营按账号实际能力收敛）。 */
@@ -113,17 +117,18 @@ export function defaultVideoModelResolutions(): Record<string, string[]> {
 export function toggleVideoResolution(
   selection: Record<string, readonly string[] | undefined>,
   model: string,
-  resolution: string
+  resolution: string,
+  provider?: VideoProviderName
 ): Record<string, string[]> {
   const next: Record<string, string[]> = {}
   for (const [key, value] of Object.entries(selection)) {
     if (value) next[key] = [...value]
   }
-  const official = videoModelResolutions(model)
+  const official = videoModelResolutions(model, provider)
   if (!official.includes(resolution)) {
     return next
   }
-  const current = next[model] ?? []
+  const current = (next[model] ?? []).filter(value => official.includes(value))
   const toggled = current.includes(resolution)
     ? current.filter((item) => item !== resolution)
     : [...current, resolution]
@@ -143,12 +148,13 @@ export function toggleVideoResolution(
  */
 export function serializeVideoModelResolutions(
   selection: Record<string, readonly string[] | undefined>,
-  models: readonly string[] = VIDEO_MODEL_CODES
+  models: readonly string[] = VIDEO_MODEL_CODES,
+  provider?: VideoProviderName
 ): Record<string, string[]> | undefined {
   const payload: Record<string, string[]> = {}
   for (const model of models) {
     const picked: string[] = []
-    for (const resolution of videoModelResolutions(model)) {
+    for (const resolution of videoModelResolutions(model, provider)) {
       const values = selection[model] ?? []
       if (
         values.some(

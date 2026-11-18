@@ -20,6 +20,7 @@ describe('video group pricing rules', () => {
       'seedance-2.0-fast',
       'seedance-2.0-mini',
       'seedance-2.5',
+      'seedance-2.5-flash',
       'grok-imagine-video-1.5',
       'minimax-h3',
       'minimax-h3-max',
@@ -29,7 +30,7 @@ describe('video group pricing rules', () => {
     ])
   })
 
-  it('offers exactly the official resolutions per model, 4K only for seedance-2.0', () => {
+  it('prices standard 2.5 at 4K and Flash only at 480p and 720p', () => {
     // 4K 是 seedance-2.0 的官方档位，且 aigod 目录含 seedance-2.0-4k，
     // 因此分组必须能为它配价，否则 4K 请求会以缺少定价失败。
     expect(videoPricingResolutions('seedance-2.0')).toEqual([
@@ -42,9 +43,11 @@ describe('video group pricing rules', () => {
     expect(videoPricingResolutions('seedance-2.5')).toEqual([
       '480p',
       '720p',
-      '1080p'
+      '1080p',
+      '4K'
     ])
-    for (const model of ['seedance-2.0-fast', 'seedance-2.5'] as const) {
+    expect(videoPricingResolutions('seedance-2.5-flash')).toEqual(['480p', '720p'])
+    for (const model of ['seedance-2.0-fast', 'seedance-2.5-flash'] as const) {
       expect(videoPricingResolutions(model)).not.toContain('4K')
     }
   })

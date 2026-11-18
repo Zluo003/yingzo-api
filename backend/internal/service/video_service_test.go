@@ -282,7 +282,8 @@ func TestNormalizeVideoCreateRequestRejectsUnsupportedResolutionForKnownModels(t
 	for _, tc := range []struct{ model, resolution string }{
 		{VideoModelSeedance20, VideoResolution768P},
 		{VideoModelSeedance20Fast, VideoResolution1080P},
-		{VideoModelSeedance25, VideoResolution4K},
+		{VideoModelSeedance25Flash, VideoResolution4K},
+		{VideoModelSeedance25Flash, VideoResolution1080P},
 	} {
 		_, err := normalizeVideoCreateRequest(&VideoCreateRequest{
 			Model: tc.model, Prompt: "a cinematic shot", Duration: 5, Resolution: tc.resolution,
@@ -552,7 +553,7 @@ func TestNormalizeVideoCreateRequestSupportsSeedance25DurationAndRatioLimits(t *
 		{name: "duration too short", duration: 3, resolution: VideoResolution720P, ratio: "16:9"},
 		{name: "duration too long", duration: 31, resolution: VideoResolution720P, ratio: "16:9"},
 		{name: "fractional duration", duration: 4.5, resolution: VideoResolution720P, ratio: "16:9"},
-		{name: "unsupported 4K", duration: 5, resolution: VideoResolution4K, ratio: "16:9"},
+		{name: "unsupported 8K", duration: 5, resolution: "8K", ratio: "16:9"},
 		{name: "unsupported ratio", duration: 5, resolution: VideoResolution720P, ratio: "2:1"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

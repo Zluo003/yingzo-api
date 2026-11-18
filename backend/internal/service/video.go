@@ -9,12 +9,13 @@ import (
 )
 
 const (
-	VideoModelMinimaxH3      = "minimax-h3"
-	VideoModelMinimaxH3Max   = "minimax-h3-max"
-	VideoModelSeedance20     = "seedance-2.0"
-	VideoModelSeedance20Fast = "seedance-2.0-fast"
-	VideoModelSeedance20Mini = "seedance-2.0-mini"
-	VideoModelSeedance25     = "seedance-2.5"
+	VideoModelMinimaxH3       = "minimax-h3"
+	VideoModelMinimaxH3Max    = "minimax-h3-max"
+	VideoModelSeedance20      = "seedance-2.0"
+	VideoModelSeedance20Fast  = "seedance-2.0-fast"
+	VideoModelSeedance20Mini  = "seedance-2.0-mini"
+	VideoModelSeedance25      = "seedance-2.5"
+	VideoModelSeedance25Flash = "seedance-2.5-flash"
 
 	// 经 mikuapi 渠道提供的 Grok Imagine 与可灵视频。下游暴露的是网关自定义名
 	// （Grok 去掉 -preview 后缀、可灵省略 video- 前缀），与上游模型名的映射由
@@ -125,7 +126,7 @@ var videoModelSpecs = map[string]videoModelSpec{
 		AudioNeedsVisual:        true,
 	},
 	VideoModelSeedance25: {
-		Resolutions:             []string{VideoResolution480P, VideoResolution720P, VideoResolution1080P},
+		Resolutions:             []string{VideoResolution480P, VideoResolution720P, VideoResolution1080P, VideoResolution4K},
 		DefaultResolution:       VideoResolution720P,
 		AutoDurationSeconds:     5,
 		MinSeconds:              videoMinDurationSeconds,
@@ -138,6 +139,12 @@ var videoModelSpecs = map[string]videoModelSpec{
 		MaxRefVideoTotalSeconds: videoSeedance25MaxDuration,
 		// 2.5 与 2.0 系列同规则：参考音频必须搭配至少一张图或一段视频。
 		AudioNeedsVisual: true,
+	},
+	VideoModelSeedance25Flash: {
+		Resolutions: []string{VideoResolution480P, VideoResolution720P}, DefaultResolution: VideoResolution720P,
+		MinSeconds: videoMinDurationSeconds, MaxSeconds: videoSeedance25MaxDuration, AutoDurationSeconds: 5,
+		MaxRefImages: 10, MaxRefVideos: 5, MaxRefAudios: 5, MaxRefTotal: 20,
+		MaxRefVideoSeconds: videoSeedance25MaxDuration, MaxRefVideoTotalSeconds: videoSeedance25MaxDuration,
 	},
 	// grok-imagine-video-1.5（mikuapi，上游名 grok-imagine-video-1.5-preview）：时长 1-15 秒，清晰度 480p/720p/
 	// 1080p；参考素材只有图片（参考图模式实测 7 张），没有尾帧语义。上游差异
@@ -228,6 +235,7 @@ func SupportedVideoModels() []string {
 		VideoModelSeedance20Fast,
 		VideoModelSeedance20Mini,
 		VideoModelSeedance25,
+		VideoModelSeedance25Flash,
 		VideoModelGrokImagineVideo15,
 		VideoModelKlingV3Omni,
 		VideoModelKlingV4,

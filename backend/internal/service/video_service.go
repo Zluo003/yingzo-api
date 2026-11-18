@@ -1588,7 +1588,7 @@ func normalizeVideoCreateRequestWithDynamicModel(req *VideoCreateRequest, dynami
 	}
 	ratio := firstNonEmptyVideoString(req.Ratio, req.AspectRatio, req.AspectRatioCamel)
 	ratioProvided := ratio != ""
-	if model == VideoModelSeedance25 {
+	if isSeedance25Family(model) {
 		ratio = strings.ToLower(strings.TrimSpace(ratio))
 		if ratio == "adaptive" {
 			ratio = "auto"
@@ -1830,7 +1830,7 @@ func videoRequestRatioAllowed(model, ratio string) bool {
 		return true
 	}
 	// auto 是 2.5"由模型决定画幅"的哨兵值，不是画幅本身。
-	return model == VideoModelSeedance25 && strings.EqualFold(strings.TrimSpace(ratio), "auto")
+	return isSeedance25Family(model) && strings.EqualFold(strings.TrimSpace(ratio), "auto")
 }
 
 // videoContentForUpstream 组装 aigod 上游的 content 数组（仅 aigod 的
@@ -1925,18 +1925,55 @@ func SeedanceUpstreamModel(model, resolution string) string {
 }
 
 func videoUpstreamModelForAccount(account *Account, normalized *normalizedVideoRequest) string {
+	if normalized != nil && normalized.Model == VideoModelSeedance25Flash {
+		return videoFlashUpstreamModel(account)
+	}
 	return videoProviderAdapterForAccount(account).UpstreamModel(account, normalized)
 }
 
+func isSeedance25Family(model string) bool {
+	return model == VideoModelSeedance25 || model == VideoModelSeedance25Flash
+}
+
+// Identity entries select the adapter default; wildcard mappings must not opt other accounts into Flash.
+func videoFlashUpstreamModel(account *Account) string {
+	if account != nil {
+		if id := strings.TrimSpace(account.GetModelMapping()[VideoModelSeedance25Flash]); id != "" && id != VideoModelSeedance25Flash {
+			return id
+		}
+	}
+	switch videoAccountProvider(account) {
+	case videoProviderNewtokenOfficial:
+		return newtokenOfficialModels[VideoModelSeedance25Flash]
+	case videoProviderXingguang:
+		return "seedance2.5-flash-M"
+	default:
+		return ""
+	}
+}
+
+// Reuse the channel's 2.5 payload and mode restrictions without changing the billed model or its limits.
+func videoProtocolRequest(account *Account, request *normalizedVideoRequest) *normalizedVideoRequest {
+	if request != nil && request.Model == VideoModelSeedance25Flash && videoAccountProvider(account) != videoProviderNewtokenOfficial {
+		protocol := *request
+		protocol.Model = VideoModelSeedance25
+		return &protocol
+	}
+	return request
+}
+
 func videoUpstreamBodyForAccount(account *Account, normalized *normalizedVideoRequest, upstreamModel string) map[string]any {
-	return videoProviderAdapterForAccount(account).BuildCreateBody(normalized, upstreamModel)
+	return videoProviderAdapterForAccount(account).BuildCreateBody(videoProtocolRequest(account, normalized), upstreamModel)
 }
 
 func isVideoAccountCompatibleForRequest(account *Account, normalized *normalizedVideoRequest) bool {
 	if normalized != nil && hasNewtokenOfficialReferences(normalized.Content, normalized.Raw) && videoAccountProvider(account) != videoProviderNewtokenOfficial {
 		return false
 	}
-	return videoProviderAdapterForAccount(account).CompatibleRequest(normalized)
+	if normalized != nil && normalized.Model == VideoModelSeedance25Flash && (videoFlashUpstreamModel(account) == "" || !IsSupportedVideoResolution(normalized.Model, normalized.Resolution)) {
+		return false
+	}
+	return videoProviderAdapterForAccount(account).CompatibleRequest(videoProtocolRequest(account, normalized))
 }
 
 // videoProviderNeedsRequestCompatibility reports whether a provider constrains

@@ -27,9 +27,9 @@ func (a aigodVideoProviderAdapter) Compatible(model, resolution string) bool {
 	default:
 		return false
 	}
-	// 分辨率上限交给共享规格表：只有 seedance-2.0 的官方档位含 4K，
-	// 2.0-fast / 2.5 自然会被 IsSupportedVideoResolution 挡掉。
-	// （曾在此额外硬拒 4K，但 aigod 目录里确实有 seedance-2.0-4k。）
+	if model == VideoModelSeedance25 && strings.EqualFold(resolution, VideoResolution4K) {
+		return false
+	}
 	return IsSupportedVideoResolution(model, resolution)
 }
 

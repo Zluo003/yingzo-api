@@ -178,6 +178,7 @@ describe('CreateAccountModal video mode', () => {
     const select = wrapper.get('[data-testid="video-provider-select"]')
     expect(select.findAll('option').map(option => option.element.value)).toEqual(['newtoken_official'])
     const mini = wrapper.get('[data-testid="video-upstream-model-seedance-2.0-mini"]')
+    expect(wrapper.find('[data-testid="video-resolution-seedance-2.5-4K"]').exists()).toBe(true)
     expect(mini.attributes('placeholder')).toBe('doubao-seedance-2-0-mini-260615')
     await mini.setValue('my-official-mini')
     await wrapper.get('[data-testid="video-resolution-seedance-2.0-mini-480p"]').trigger('click')
@@ -349,6 +350,18 @@ describe('CreateAccountModal video mode', () => {
       'seedance-2.0': 'seedance-2.0',
       'seedance-2.5': 'seedance-2.5',
     })
+  })
+
+  it('enables Flash on a compatible account with a custom upstream ID', async () => {
+    const wrapper = await mountVideoModal()
+    expect(wrapper.find('[data-testid="video-resolution-seedance-2.5-4K"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="video-model-dropdown"]').trigger('click')
+    await wrapper.get('[data-testid="video-model-seedance-2.5-flash"]').trigger('click')
+    await wrapper.get('[data-testid="video-upstream-model-seedance-2.5-flash"]').setValue('provider-flash')
+    const payload = await submitVideoAccount(wrapper)
+    expect(payload.extra.video_provider).toBe('mikuapi')
+    expect(payload.credentials.model_mapping['seedance-2.5-flash']).toBe('provider-flash')
+    expect(payload.extra.video_model_resolutions['seedance-2.5-flash']).toEqual(['480p', '720p'])
   })
 
   it('creates a vipprompt account with three custom upstream names', async () => {
