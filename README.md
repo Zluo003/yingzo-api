@@ -340,7 +340,7 @@ docker compose -f docker-compose.yml -f docker-compose.midjourney.yml up -d --no
 
 ## 本地开发
 
-环境要求：Go 1.27.3+、Node 24+（含 pnpm）、Docker（跑集成测试与开发栈）。
+环境要求：Go 1.27.4+、Node 24+（含 pnpm）、Docker（跑集成测试与开发栈）。
 
 ```bash
 # 后端（在 backend/ 下）
