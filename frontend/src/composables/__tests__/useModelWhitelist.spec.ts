@@ -7,6 +7,21 @@ vi.mock('@/api/admin/accounts', () => ({
 import { buildModelMappingObject, getModelsByPlatform, getPresetMappingsByPlatform, splitModelMappingObject } from '../useModelWhitelist'
 
 describe('useModelWhitelist', () => {
+  it.each([
+    ['openai', ['gpt-6-sol', 'gpt-6-luna', 'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6.2-sol', 'gpt-6.2-astra']],
+    ['claude', ['claude-fable-5-2', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']],
+    ['gemini', ['gemini-4-argon', 'gemini-4-carbon', 'gemini-4-hydrogen', 'gemini-3.8-flash']]
+  ] as const)('%s 模型候选可保存为精确的同名映射', (platform, ids) => {
+    expect(getModelsByPlatform(platform)).toEqual(expect.arrayContaining([...ids]))
+    expect(buildModelMappingObject('whitelist', [...ids], [])).toEqual(
+      Object.fromEntries(ids.map(id => [id, id]))
+    )
+  })
+
+  it('不会把 Gemini 3.5 Flash-Lite 加入 Gemini 候选', () => {
+    expect(getModelsByPlatform('gemini')).not.toContain('gemini-3.5-flash-lite')
+  })
+
   it('openai 模型列表包含 GPT-5.4 官方快照', () => {
     const models = getModelsByPlatform('openai')
 

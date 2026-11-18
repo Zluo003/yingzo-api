@@ -1,5 +1,5 @@
 // =====================
-// 模型列表（硬编码，与 new-api 一致）
+// 管理端手动配置候选；账号实际支持的模型以其上游和已保存的映射为准。
 // =====================
 
 // OpenAI
@@ -10,7 +10,8 @@ const openaiModels = [
 	// GPT-5.6 系列
   'gpt-5.6', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
   // GPT-6 系列
-  'gpt-6', 'gpt-6-astra',
+  'gpt-6', 'gpt-6-astra', 'gpt-6-sol', 'gpt-6-luna',
+  'gpt-6.1-sol', 'gpt-6.1-terra', 'gpt-6.2-sol', 'gpt-6.2-astra',
   // GPT-5.5 系列
   'gpt-5.5',
   // GPT-5.4 系列
@@ -24,6 +25,7 @@ const openaiModels = [
 
 // Anthropic Claude
 export const claudeModels = [
+  'claude-fable-5-2', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5',
   'claude-3-5-sonnet-20241022', 'claude-3-5-sonnet-20240620',
   'claude-3-5-haiku-20241022',
   'claude-3-7-sonnet-20250219',
@@ -43,9 +45,8 @@ export const claudeModels = [
 
 // Google Gemini
 const geminiModels = [
-  // Keep in sync with backend curated Gemini lists.
-  // This list is intentionally conservative (models commonly available across OAuth/API key).
-  'gemini-4-argon',
+  'gemini-4-argon', 'gemini-4-carbon', 'gemini-4-hydrogen',
+  'gemini-3.8-flash',
   'gemini-3.1-flash-image',
   'gemini-2.5-flash-image',
   'gemini-2.0-flash',

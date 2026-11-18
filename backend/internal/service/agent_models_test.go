@@ -293,6 +293,49 @@ func TestAgentModelCatalogSyncsAssignedAccountMappingsAcrossNativeProviders(t *t
 	}, byID["grok-4"].Interfaces)
 }
 
+func TestAgentModelCatalogPublishesNewTextModelsFromExactMappings(t *testing.T) {
+	cases := []struct {
+		platform   string
+		model      string
+		interfaces []string
+	}{
+		{PlatformOpenAI, "gpt-6.2-astra", []string{AgentInterfaceOpenAIResponses, AgentInterfaceOpenAIChatCompletions}},
+		{PlatformAnthropic, "claude-fable-5-2", []string{AgentInterfaceAnthropicMessages}},
+		{PlatformGemini, "gemini-4-carbon", []string{AgentInterfaceGeminiGenerateContent}},
+		{PlatformGemini, "gemini-4-hydrogen", []string{AgentInterfaceGeminiGenerateContent}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.model, func(t *testing.T) {
+			ctx := context.Background()
+			catalog, _ := newAgentCatalogForTest(&agentCatalogAccountRepoStub{accounts: []Account{{
+				ID: 1, Platform: tc.platform,
+				Credentials: map[string]any{"model_mapping": map[string]any{tc.model: tc.model}},
+			}}})
+			config, err := catalog.Sync(ctx, 9)
+			require.NoError(t, err)
+			require.Len(t, config.Models, 1)
+			model := config.Models[0]
+			require.True(t, model.Available)
+			require.False(t, model.Enabled)
+			visible, err := catalog.ListAvailable(ctx, 9)
+			require.NoError(t, err)
+			require.Empty(t, visible)
+
+			rate := 1.0
+			_, err = catalog.UpdateModel(ctx, 9, model.ID, AgentModelConfigInput{
+				MediaType: AgentMediaTypeText, Enabled: true, RateMultiplier: &rate,
+			})
+			require.NoError(t, err)
+			visible, err = catalog.ListAvailable(ctx, 9)
+			require.NoError(t, err)
+			require.Len(t, visible, 1)
+			require.Equal(t, tc.model, visible[0].ID)
+			require.Equal(t, []string{tc.platform}, visible[0].Platforms)
+			require.ElementsMatch(t, tc.interfaces, visible[0].Interfaces)
+		})
+	}
+}
+
 func TestZhipuGLM53CatalogAdvertisesChatAndAnthropicMessages(t *testing.T) {
 	accounts := &agentCatalogAccountRepoStub{accounts: []Account{{
 		ID: 1, Platform: PlatformZhipu,
