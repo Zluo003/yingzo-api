@@ -28,7 +28,7 @@ func (s *AccountTestService) testSeedreamAccount(c *gin.Context, account *Accoun
 	if _, err := adapter.apimartImageHTTP(c.Request.Context(), account, http.MethodGet, "/v1/models", nil); err != nil {
 		return s.sendErrorAndEnd(c, "APIMart connection check failed: "+err.Error())
 	}
-	s.sendEvent(c, TestEvent{Type: "content", Text: "APIMart credentials accepted. Seedream Pro / Flash use the asynchronous Images API."})
+	s.sendEvent(c, TestEvent{Type: "content", Text: "APIMart credentials accepted. Seedream 5.0 and 5.5 use the asynchronous Images API."})
 	s.sendEvent(c, TestEvent{Type: "test_complete", Success: true})
 	return nil
 }

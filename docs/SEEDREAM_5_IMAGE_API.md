@@ -1,26 +1,27 @@
-# Seedream 5.0 Pro / Flash 下游对接指南
+# Seedream 5.0 Pro / Flash 和 5.5 下游对接指南
 
-核对日期：2026-10-23。上游为 APIMart，下游使用 Yingzo 地址与 Yingzo API Key。
+核对日期：2026-11-19。上游为 APIMart，下游使用 Yingzo 地址与 Yingzo API Key。
 
 | 模型 | 对外模型 ID | 接口 |
 | --- | --- | --- |
 | Seedream 5.0 Pro | `seedream-5-0-pro` | `openai.images` |
 | Seedream 5.0 Flash | `seedream-5-0-flash` | `openai.images` |
+| Seedream 5.5 | `seedream-5-5` | `openai.images` |
 
-两个模型使用相同的参数协议。支持文生图、最多 10 张参考图融合、坐标/手绘标记编辑、透明背景编辑、底图加最多 16 个图层的拆分。每次提交只能 `n=1`；图层拆分是一次请求的多个输出，不是批量生成。
+5.0 Pro 和 Flash 使用相同的参数协议。支持文生图、最多 10 张参考图融合、坐标/手绘标记编辑、透明背景编辑、底图加最多 16 个图层的拆分。每次提交只能 `n=1`；图层拆分是一次请求的多个输出，不是批量生成。
 
 ## 管理端启用
 
 1. 部署后端及管理前端。复用已有异步图片任务和 Agent 输入图片计费字段，不增加数据库迁移。
 2. 系统设置 → 素材存储 → 生成结果，配置本地或对象存储，并开启异步图片任务。关闭时新请求返回 `503 image_tasks_disabled`，已接受任务仍能轮询、结算和退款。
-3. 账户管理 → 添加图片模型 → **Seedream 5.0 Pro / Flash · APIMart**。填写 APIMart API Key，Base URL 默认 `https://api.apimart.ai`，也支持末尾 `/v1`。可配置并发、优先级、代理及绑定分组。
-4. 专用账户同时声明两个模型，不参与文本或普通同步 OpenAI 图片调度。编辑时 API Key 留空保留旧值；测试账户只请求 `/v1/models` 检查连接和鉴权，不创建付费图片。
-5. Yingzo Agent → 图片计费，同步模型后，分别为两个模型配置并启用 **1.5K、2K 两个输出价格**，再启用模型。1K 与 1.5K 共用 1.5K 价格，不填写独立 1K 或 4K 价格。
-6. 同一表格可设置免费参考图数量和超额输入图片单价。默认首张参考图免费；免费数量 `0` 表示全部收费；超额单价留空或 `0` 表示下游免费。请根据实际采购成本设置，系统不会自动套用 APIMart 的标价。
+3. 账户管理 → 添加图片模型 → **Seedream 5.x · APIMart**。填写 APIMart API Key，Base URL 默认 `https://api.apimart.ai`，也支持末尾 `/v1`。可配置并发、优先级、代理及绑定分组。
+4. 专用账户同时声明三个模型，不参与文本或普通同步 OpenAI 图片调度。编辑时 API Key 留空保留旧值；测试账户只请求 `/v1/models` 检查连接和鉴权，不创建付费图片。
+5. Yingzo Agent → 图片计费，同步模型后，为需要启用的模型配置 **1.5K、2K 两个输出价格**，再启用模型。1K 与 1.5K 共用 1.5K 价格，不填写独立 1K 或 4K 价格。
+6. 同一表格可设置免费参考图数量和超额输入图片单价。5.0 默认首张参考图免费，超额单价留空时也不收费。5.5 默认零张免费，超过免费数量时须明确设置单张价格，可填 `0`。请根据实际采购成本设置，系统不会自动套用 APIMart 的标价。
 
-账户保存为 `platform=openai`、`type=apikey`、`extra.image_account=true`、`extra.image_provider=apimart_seedream`，模型映射固定为上述两个 ID。
+账户保存为 `platform=openai`、`type=apikey`、`extra.image_account=true`、`extra.image_provider=apimart_seedream`，已有专用账户可直接同步发现 5.5。
 
-也支持普通 OpenAI 分组：配置分组或渠道的两个输出档位图片价格（或按次价格），遵循现有图片倍率。第二张起的参考图要求显式配置对应模型键 `seedream-5-0-pro:input` / `seedream-5-0-flash:input` 的 `per_request` 单价；每张超额参考图计一次。显式单价 `0` 可表示免费。普通分组默认仅第一张参考图免费。
+也支持普通 OpenAI 分组：配置分组或渠道的两个输出档位图片价格（或按次价格），遵循现有图片倍率。5.0 从第二张参考图计费，5.5 从第一张计费。为对应的 `<model>:input` 规则配置 `per_request` 单价，可填 `0`。
 
 ## 模型发现与价格预估
 
@@ -70,7 +71,7 @@ Agent 可调用 `POST /api/v1/agent/generation/estimates` 获取提交时的预�
 }
 ```
 
-响应的 `actual_price` / `total_price` 表示保守预扣金额；`details.reserved_output_images` 为普通生成 `1`、拆图 `17`，`details.input_image_cost` 为本次参考图费用。最终按真实输出面积结算，可能低于预扣。估价本身不创建图片任务，实际提交时冻结当时价格。
+响应的 `actual_price` / `total_price` 表示保守预扣金额；`details.reserved_output_images` 为普通生成 `1`、5.0 拆图 `17`、5.5 拆图取 `max_images`（默认 `30`），`details.input_image_cost` 为本次参考图费用。最终按真实输出面积结算，可能低于预扣。估价本身不创建图片任务，实际提交时冻结当时价格。
 
 ## 提交接口与参数
 
@@ -90,16 +91,17 @@ Seedream 始终异步，成功提交返回 **HTTP 202**。客户端应发送 `Pr
 
 | 参数 | 约束和默认值 |
 | --- | --- |
-| `model` | 必填，上述两个规范 ID；兼容 `seedream-5.0-pro` / `seedream-5.0-flash` 拼写，白名单建议始终使用规范 ID |
+| `model` | 必填，使用上表的规范 ID。生成接口兼容 `seedream-5.0-pro`、`seedream-5.0-flash` 和 `seedream-5.5`，白名单建议始终使用规范 ID |
 | `prompt` | 文本描述；拆图时可省略，其余必填。建议控制在 600 个英文单词以内 |
 | `n` | 可省略或 `1`，不支持组图参数 |
-| `resolution` | `1K`（默认）、`1.5K`、`2K`，不区分大小写 |
+| `resolution` | `1K`、`1.5K`、`2K`，不区分大小写。普通生成中 5.0 默认 `1K`，5.5 默认 `2K` |
 | `size` | `auto`（默认）、上述比例、`1K` / `1.5K` / `2K`，或精确像素 `2048x1024` |
 | `image_urls` | 最多 10 个 HTTP(S) 图片 URL 或 `data:image/<格式>;base64,...`；Data URI 格式名须小写 |
-| `output_format` | `jpeg`（默认）或 `png` |
+| `output_format` | `jpeg` 或 `png`。5.0 默认 `jpeg`，5.5 默认 `png` |
 | `response_format` | 仅作为 `output_format` 的兼容别名，同样仅接受 `jpeg` / `png`；结果始终为 URL |
-| `background` | `opaque`（默认）或 `transparent`；透明背景要求恰好一张带透明通道的输入图，并指定 `output_format=png` |
+| `background` | 5.0 支持 `opaque`（默认）和 `transparent`。5.0 透明编辑要求一张带 alpha 通道的参考图，并输出 PNG。5.5 支持 `auto`（默认）、`opaque` 和 `transparent`，纯文生图也可生成透明 PNG |
 | `layer_decomposition` | 默认 `false`；`true` 时恰好一张参考图，`size` 仅 `auto`、`1K`、`1.5K`、`2K` |
+| `layer_decomposition_options` | 仅 5.5 拆图可用。`max_images` 为包含底图的总数上限（整数 2–100，默认 30），`text_recognition` 为 OCR 开关（默认关闭） |
 | `optimize_prompt_options` | 可选对象，仅 `{"mode":"standard"}`；兼容扁平字段 `optimize_prompt_options.mode` |
 | `watermark` | 布尔值，默认 `false` |
 | `nsfw_check` | 上游额外审核开关，默认 `false`；服务端已配置的审核策略独立执行 |
@@ -112,7 +114,9 @@ Seedream 始终异步，成功提交返回 **HTTP 202**。客户端应发送 `Pr
 
 ## 场景示例
 
-文生图，两种模型仅需替换 `model`：
+5.5 拆图省略 `background`，档位依次取 `size`、`resolution` 或 `auto`。5.5 普通生图中，显式 `size:auto` 等同于 `2K`。
+
+普通文生图：
 
 ```json
 {"model":"seedream-5-0-pro","prompt":"极简风格橘猫海报，暖色背景","size":"16:9","resolution":"1.5K","output_format":"png"}
@@ -146,6 +150,16 @@ Seedream 始终异步，成功提交返回 **HTTP 202**。客户端应发送 `Pr
 
 ```json
 {"model":"seedream-5-0-flash","image_urls":["https://assets.example/poster.png"],"layer_decomposition":true,"size":"2K"}
+```
+
+5.5 透明文生图和 OCR 拆图：
+
+```json
+{"model":"seedream-5-5","prompt":"柑橘贴纸，保留透明背景","background":"transparent"}
+```
+
+```json
+{"model":"seedream-5-5","image_urls":["https://assets.example/poster.png"],"layer_decomposition":true,"layer_decomposition_options":{"max_images":8,"text_recognition":true}}
 ```
 
 ## 任务查询、结果与退款
@@ -183,18 +197,18 @@ Seedream 始终异步，成功提交返回 **HTTP 202**。客户端应发送 `Pr
 }
 ```
 
-普通生图仅一项，省略 `layer`。拆图完整保留所有底图/图层、名称、描述、坐标和 `z_index`，不会只选最大图。按 `z_index` 升序叠放，绝对坐标为 `[left,top,right,bottom]`；恢复到任意 `W×H` 画布可用 `normalized/1000` 缩放。拆出的图层恒为 PNG，`output_format` 只控制底图。
+普通生图仅一项，省略 `layer`。5.5 拆图在上游返回 OCR 时把 `text_recognition` 一并保留在对应项的 `layer` 中。拆图完整保留所有底图/图层、名称、描述、坐标和 `z_index`，不会只选最大图。按 `z_index` 升序叠放，绝对坐标为 `[left,top,right,bottom]`；恢复到任意 `W×H` 画布可用 `normalized/1000` 缩放。拆出的图层恒为 PNG，`output_format` 只控制底图。
 
 结果经过网关验证并转存，URL 为 Yingzo 素材地址或对象存储 URL。不要调用 APIMart 的 `/v1/tasks`，下游不持有上游任务 ID 或密钥。对象存储签名链接过期可重新查询刷新；素材有保留期限，应及时下载持久化。
 
-计费规则：每张实际输出图片总像素 **≤ 2,601,124 用 1.5K 单价，否则用 2K 单价**；不是按最长边分档，1K 与 1.5K 请求都共用 1.5K 单价。拆图按实际返回的图片数量逐张计费，底图也计为一张；每张图片按自身总像素选择 1.5K 或 2K 单价。参考图加价单独计一次：
+计费规则：每张实际输出图片总像素 在低档上限以内用 1.5K 单价，超过上限用 2K 单价。5.0 的低档上限为 **2,601,124** 像素，5.5 为 **2,610,000** 像素。拆图按实际返回的图片数量逐张计费，底图也计为一张；每张图片按自身总像素选择 1.5K 或 2K 单价。参考图加价单独计一次：
 
 ```text
 最终费用 = 各输出图片按实际面积分档的单价之和
          + max(0, 输入参考图数量 - 配置免费数量) × 超额参考图单价
 ```
 
-提交时普通生图按 **max(1.5K 单价, 2K 单价)** 预扣一张；拆图按该单价预扣 **17 张**，再加参考图费用。成功后退还预扣差额，失败全额退款；`refund_status=refunded` 表示退款事务已提交。价格在接受任务时冻结，排队期间改价不会追溯影响已接受任务。退款明细遵循现有异步图片账本。
+提交时普通生图按 **max(1.5K 单价, 2K 单价)** 预扣一张；拆图按该单价预扣 5.0 的 **17 张**或 5.5 的 **`max_images` 张**，再加参考图费用。成功后退还预扣差额，失败全额退款；`refund_status=refunded` 表示退款事务已提交。价格在接受任务时冻结，排队期间改价不会追溯影响已接受任务。退款明细遵循现有异步图片账本。
 
 提交连接中断时，先用同一 API Key 查询 `GET /v1/images/tasks/by-idempotency/{原幂等键}`，或用原幂等键和相同请求重放。不要生成新幂等键重复购买。不同参数复用同一键返回 `409 idempotency_conflict`。同一用户的另一把 Key 不能读取本任务。
 
@@ -265,3 +279,4 @@ else:
 - [统一异步图片任务协议](ASYNC_IMAGE_TASKS.md)
 - [APIMart Pro 原始参数](https://docs.apimart.ai/cn/api-reference/images/seedream-5-0-pro/generation)
 - [APIMart Flash 原始参数](https://docs.apimart.ai/cn/api-reference/images/seedream-5-0-flash/generation)
+- [APIMart Seedream 5.5 原始参数](https://docs.apimart.ai/cn/api-reference/images/seedream-5-5/generation)

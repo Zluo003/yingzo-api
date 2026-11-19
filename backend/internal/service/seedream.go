@@ -17,10 +17,14 @@ import (
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
+	"github.com/tidwall/gjson"
 )
 
 const SeedreamProModel = "seedream-5-0-pro"
 const SeedreamFlashModel = "seedream-5-0-flash"
+const Seedream55Model = "seedream-5-5"
+const Seedream55MaxLayerOutputs = 100
+const seedream55DefaultLayerOutputs = 30
 const SeedreamProvider = "apimart_seedream"
 const SeedreamLowPixelLimit int64 = 2601124
 
@@ -28,9 +32,29 @@ var SeedreamAspectRatios = []string{"1:1", "4:3", "3:4", "16:9", "9:16", "3:2", 
 var seedreamPixels = regexp.MustCompile(`^([0-9]+)[xX×]([0-9]+)$`)
 
 func IsSeedreamModel(model string) bool {
-	return model == SeedreamProModel || model == SeedreamFlashModel
+	return model == SeedreamProModel || model == SeedreamFlashModel || model == Seedream55Model
 }
-func CanonicalSeedreamModel(model string) string { return strings.ReplaceAll(model, "5.0", "5-0") }
+func CanonicalSeedreamModel(model string) string {
+	if model == "seedream-5.5" {
+		return Seedream55Model
+	}
+	return strings.ReplaceAll(model, "5.0", "5-0")
+}
+
+// SeedreamDefaultFreeInputs returns the default number of unbilled references.
+func SeedreamDefaultFreeInputs(model string) int {
+	if model == Seedream55Model {
+		return 0
+	}
+	return 1
+}
+
+func seedreamLowPixelLimit(model string) int64 {
+	if model == Seedream55Model {
+		return 2610000
+	}
+	return SeedreamLowPixelLimit
+}
 func normalizeSeedreamPriceTier(resolution string) (string, error) {
 	switch strings.ToUpper(strings.TrimSpace(resolution)) {
 	case "1K", "1.5K":
@@ -45,18 +69,24 @@ func (a *Account) IsSeedream() bool {
 	return a != nil && a.Platform == PlatformOpenAI && a.Type == AccountTypeAPIKey && a.Extra["image_provider"] == SeedreamProvider
 }
 
+type SeedreamLayerOptions struct {
+	MaxImages       *int  `json:"max_images,omitempty"`
+	TextRecognition *bool `json:"text_recognition,omitempty"`
+}
+
 type SeedreamRequest struct {
-	Model                 string   `json:"model"`
-	Prompt                string   `json:"prompt,omitempty"`
-	Size                  string   `json:"size"`
-	Resolution            string   `json:"resolution,omitempty"`
-	N                     *int     `json:"n,omitempty"`
-	ImageURLs             []string `json:"image_urls,omitempty"`
-	OutputFormat          string   `json:"output_format"`
-	ResponseFormat        string   `json:"response_format,omitempty"`
-	Background            string   `json:"background"`
-	LayerDecomposition    bool     `json:"layer_decomposition,omitempty"`
-	OptimizePromptOptions *struct {
+	Model                     string                `json:"model"`
+	Prompt                    string                `json:"prompt,omitempty"`
+	Size                      string                `json:"size"`
+	Resolution                string                `json:"resolution,omitempty"`
+	N                         *int                  `json:"n,omitempty"`
+	ImageURLs                 []string              `json:"image_urls,omitempty"`
+	OutputFormat              string                `json:"output_format"`
+	ResponseFormat            string                `json:"response_format,omitempty"`
+	Background                string                `json:"background,omitempty"`
+	LayerDecomposition        bool                  `json:"layer_decomposition,omitempty"`
+	LayerDecompositionOptions *SeedreamLayerOptions `json:"layer_decomposition_options,omitempty"`
+	OptimizePromptOptions     *struct {
 		Mode string `json:"mode"`
 	} `json:"optimize_prompt_options,omitempty"`
 	OptimizePromptMode string `json:"optimize_prompt_options.mode,omitempty"`
@@ -76,7 +106,16 @@ func ParseSeedreamRequest(body []byte) (*SeedreamRequest, error) {
 	}
 	r.Model = CanonicalSeedreamModel(r.Model)
 	if !IsSeedreamModel(r.Model) {
-		return nil, errors.New("model must be seedream-5-0-pro or seedream-5-0-flash")
+		return nil, errors.New("model must be seedream-5-0-pro, seedream-5-0-flash or seedream-5-5")
+	}
+	is55 := r.Model == Seedream55Model
+	if r.LayerDecompositionOptions != nil {
+		if !is55 || !r.LayerDecomposition {
+			return nil, errors.New("layer_decomposition_options requires Seedream 5.5 layer decomposition")
+		}
+		if n := r.LayerDecompositionOptions.MaxImages; n != nil && (*n < 2 || *n > Seedream55MaxLayerOutputs) {
+			return nil, errors.New("max_images must be an integer from 2 to 100")
+		}
 	}
 	r.Prompt = strings.TrimSpace(r.Prompt)
 	if r.Prompt == "" && !r.LayerDecomposition {
@@ -119,18 +158,35 @@ func ParseSeedreamRequest(body []byte) (*SeedreamRequest, error) {
 	r.ResponseFormat = ""
 	if r.OutputFormat == "" {
 		r.OutputFormat = "jpeg"
+		if is55 {
+			r.OutputFormat = "png"
+		}
 	}
 	if r.OutputFormat != "jpeg" && r.OutputFormat != "png" {
 		return nil, errors.New("output_format must be jpeg or png; results are always URLs")
 	}
-	if r.Background == "" {
-		r.Background = "opaque"
-	}
-	if r.Background != "opaque" && r.Background != "transparent" {
-		return nil, errors.New("background must be opaque or transparent")
-	}
-	if r.Background == "transparent" && (len(r.ImageURLs) != 1 || r.OutputFormat != "png") {
-		return nil, errors.New("transparent background requires exactly one transparent input image and output_format=png")
+	if is55 && r.LayerDecomposition {
+		if gjson.GetBytes(body, "background").Exists() {
+			return nil, errors.New("Seedream 5.5 layer decomposition requires background to be omitted")
+		}
+	} else {
+		if r.Background == "" {
+			r.Background = "opaque"
+			if is55 {
+				r.Background = "auto"
+			}
+		}
+		if r.Background != "opaque" && r.Background != "transparent" && !(is55 && r.Background == "auto") {
+			return nil, errors.New("unsupported Seedream background")
+		}
+		if r.Background == "transparent" {
+			if r.OutputFormat != "png" {
+				return nil, errors.New("transparent background requires output_format=png")
+			}
+			if !is55 && len(r.ImageURLs) != 1 {
+				return nil, errors.New("transparent background requires exactly one transparent input image")
+			}
+		}
 	}
 	if r.OptimizePromptMode != "" {
 		if r.OptimizePromptMode != "standard" {
@@ -151,11 +207,34 @@ func ParseSeedreamRequest(body []byte) (*SeedreamRequest, error) {
 	if r.OptimizePromptOptions.Mode != "standard" {
 		return nil, errors.New("only standard prompt optimization is supported")
 	}
+	if is55 && r.LayerDecomposition {
+		if len(r.ImageURLs) != 1 {
+			return nil, errors.New("layer decomposition requires exactly one image")
+		}
+		size := r.Size
+		if size == "" {
+			size = r.Resolution
+		}
+		switch strings.ToUpper(size) {
+		case "", "AUTO":
+			r.Size = "auto"
+		case "1K", "1.5K", "2K":
+			r.Size = strings.ToUpper(size)
+		default:
+			return nil, errors.New("layer decomposition requires size=auto, 1K, 1.5K or 2K")
+		}
+		r.Resolution = ""
+		return &r, nil
+	}
 	if r.Size == "" {
 		r.Size = "auto"
 	}
 	tier := strings.ToUpper(r.Size)
 	if tier == "1K" || tier == "1.5K" || tier == "2K" {
+		if is55 {
+			r.Size, r.Resolution = tier, ""
+			return &r, nil
+		}
 		r.Size, r.Resolution = "auto", tier
 	}
 	if r.LayerDecomposition && (len(r.ImageURLs) != 1 || r.Size != "auto") {
@@ -189,8 +268,15 @@ func ParseSeedreamRequest(body []byte) (*SeedreamRequest, error) {
 			}
 		}
 		r.Resolution = strings.ToUpper(r.Resolution)
+		if is55 && r.Size == "auto" {
+			r.Size, r.Resolution = "2K", ""
+			return &r, nil
+		}
 		if r.Resolution == "" {
 			r.Resolution = "1K"
+			if is55 {
+				r.Resolution = "2K"
+			}
 		}
 		if r.Resolution != "1K" && r.Resolution != "1.5K" && r.Resolution != "2K" {
 			return nil, errors.New("resolution must be 1K, 1.5K or 2K")
@@ -202,15 +288,28 @@ func (r *SeedreamRequest) BillingTier() string {
 	if m := seedreamPixels.FindStringSubmatch(r.Size); m != nil {
 		w, _ := strconv.ParseInt(m[1], 10, 64)
 		h, _ := strconv.ParseInt(m[2], 10, 64)
-		return seedreamAreaTier(w * h)
+		return seedreamAreaTier(w*h, seedreamLowPixelLimit(r.Model))
 	}
-	if r.Resolution == "2K" {
+	if r.Resolution == "2K" || (r.Model == Seedream55Model && (r.Size == "2K" || r.Size == "auto")) {
 		return "2K"
 	}
 	return "1K"
 }
-func seedreamAreaTier(area int64) string {
-	if area > SeedreamLowPixelLimit {
+func (r *SeedreamRequest) outputLimit() int {
+	if !r.LayerDecomposition {
+		return 1
+	}
+	if r.Model != Seedream55Model {
+		return 17
+	}
+	if r.LayerDecompositionOptions != nil && r.LayerDecompositionOptions.MaxImages != nil {
+		return *r.LayerDecompositionOptions.MaxImages
+	}
+	return seedream55DefaultLayerOutputs
+}
+
+func seedreamAreaTier(area, lowPixelLimit int64) string {
+	if area > lowPixelLimit {
 		return "2K"
 	}
 	return "1K"
@@ -232,7 +331,7 @@ func normalizeSeedreamAccount(a *Account) error {
 		return infraerrors.BadRequest("INVALID_SEEDREAM_ACCOUNT", "Seedream base URL must be an HTTPS origin or /v1 URL")
 	}
 	a.Credentials["base_url"] = strings.TrimRight(base, "/")
-	a.Credentials["model_mapping"] = map[string]any{SeedreamProModel: SeedreamProModel, SeedreamFlashModel: SeedreamFlashModel}
+	a.Credentials["model_mapping"] = map[string]any{SeedreamProModel: SeedreamProModel, SeedreamFlashModel: SeedreamFlashModel, Seedream55Model: Seedream55Model}
 	a.Extra["image_account"] = true
 	return nil
 }
@@ -277,7 +376,7 @@ func (s *DurableImageService) seedreamQuote(ctx context.Context, key *APIKey, su
 	q.Seedream = &SeedreamFrozenPrices{Low: low.PerImage, High: high.PerImage, InputCost: &CostBreakdown{}}
 	q.Size = r.BillingTier()
 	q.Usage.ImageSize = &q.Size
-	free, price := 1, 0.0
+	free, price := SeedreamDefaultFreeInputs(r.Model), 0.0
 	if key.Group.IsAgent() {
 		_, model, e := s.resolver.agentModelCatalog.ResolveMediaPrice(ctx, *key.GroupID, PlatformOpenAI, AgentMediaTypeImage, "1K", r.Model)
 		if e != nil {
@@ -288,6 +387,8 @@ func (s *DurableImageService) seedreamQuote(ctx context.Context, key *APIKey, su
 		}
 		if model.InputImageUnitPrice != nil {
 			price = *model.InputImageUnitPrice
+		} else if r.Model == Seedream55Model && len(r.ImageURLs) > free {
+			return q, ErrModelPricingUnavailable
 		}
 		q.Seedream.InputCost, _ = s.billing.CalculateConfiguredAgentImageCost(price*float64(max(0, len(r.ImageURLs)-free)), 1)
 	} else if len(r.ImageURLs) > free {
@@ -302,9 +403,7 @@ func (s *DurableImageService) seedreamQuote(ctx context.Context, key *APIKey, su
 	}
 	q.Seedream.InputCost.ImageInputCost = q.Seedream.InputCost.TotalCost
 	q.Seedream.InputCost.ImageOutputCost = 0
-	if r.LayerDecomposition {
-		q.Count = 17
-	}
+	q.Count = r.outputLimit()
 	charge := QuantizeUsageBillingAmount(q.PerImage.ActualCost*float64(q.Count) + q.Seedream.InputCost.ActualCost)
 	q.Charge.APIKeyQuotaCost = charge
 	q.Charge.APIKeyRateLimitCost = charge
@@ -316,7 +415,7 @@ func (s *DurableImageService) seedreamQuote(ctx context.Context, key *APIKey, su
 	q.Usage.ActualCost = charge
 	return q, nil
 }
-func (p *SeedreamFrozenPrices) cost(areas []int64) (*CostBreakdown, error) {
+func (p *SeedreamFrozenPrices) cost(areas []int64, model string) (*CostBreakdown, error) {
 	if p == nil || p.Low == nil || p.High == nil || p.InputCost == nil {
 		return nil, errors.New("missing Seedream prices")
 	}
@@ -326,7 +425,7 @@ func (p *SeedreamFrozenPrices) cost(areas []int64) (*CostBreakdown, error) {
 			return nil, errors.New("invalid output image area")
 		}
 		price := p.Low
-		if seedreamAreaTier(area) == "2K" {
+		if seedreamAreaTier(area, seedreamLowPixelLimit(model)) == "2K" {
 			price = p.High
 		}
 		c.TotalCost += price.TotalCost
@@ -477,6 +576,11 @@ func (s *DurableImageService) executeSeedream(ctx context.Context, snapshot *See
 			_ = s.openAI.accountRepo.UpdateLastUsed(ctx, a.ID)
 			return 200, output, nil
 		case "failed", "failure", "cancelled", "canceled":
+			diagnostic := gjson.GetBytes(body, "data")
+			if !diagnostic.IsObject() {
+				diagnostic = gjson.ParseBytes(body)
+			}
+			capture.TaskError = NewUsageTaskError(0, []byte(diagnostic.Raw), "Seedream upstream task failed")
 			return 502, nil, errors.New("seedream upstream task failed")
 		case "submitted", "pending", "queued", "processing", "in_progress":
 		default:
@@ -507,10 +611,11 @@ func normalizeSeedreamResult(body []byte, r *SeedreamRequest) (json.RawMessage, 
 		Status string `json:"status"`
 		Result struct {
 			Images []struct {
-				URLs    []string          `json:"url"`
-				Sizes   []string          `json:"sizes"`
-				Formats []string          `json:"output_formats"`
-				Layers  []json.RawMessage `json:"layers"`
+				URLs        []string          `json:"url"`
+				Sizes       []string          `json:"sizes"`
+				Formats     []string          `json:"output_formats"`
+				Backgrounds []string          `json:"backgrounds"`
+				Layers      []json.RawMessage `json:"layers"`
 			} `json:"images"`
 		} `json:"result"`
 	}
@@ -530,10 +635,10 @@ func normalizeSeedreamResult(body []byte, r *SeedreamRequest) (json.RawMessage, 
 	}
 	images := result.Result.Images[0]
 	n := len(images.URLs)
-	if n < 1 || n > 17 || (!r.LayerDecomposition && n != 1) {
+	if n < 1 || n > r.outputLimit() {
 		return nil, "", errors.New("unexpected Seedream image count")
 	}
-	if r.LayerDecomposition && len(images.Layers) != n {
+	if r.LayerDecomposition && r.Model != Seedream55Model && len(images.Layers) != n {
 		return nil, "", errors.New("missing Seedream layer metadata")
 	}
 	data := make([]map[string]any, 0, n)
@@ -548,7 +653,10 @@ func normalizeSeedreamResult(body []byte, r *SeedreamRequest) (json.RawMessage, 
 		if i < len(images.Formats) {
 			item["output_format"] = images.Formats[i]
 		}
-		if r.LayerDecomposition {
+		if r.Model == Seedream55Model && len(images.Backgrounds) == n {
+			item["background"] = images.Backgrounds[i]
+		}
+		if r.LayerDecomposition && len(images.Layers) == n {
 			item["layer"] = images.Layers[i]
 		}
 		data = append(data, item)

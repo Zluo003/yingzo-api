@@ -328,6 +328,11 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 		capabilities["supports_layer_decomposition"] = true
 		capabilities["max_layer_outputs"] = 17
 		capabilities["supported_output_formats"] = []string{"jpeg", "png"}
+		if entry.ID == service.Seedream55Model {
+			capabilities["max_layer_outputs"] = service.Seedream55MaxLayerOutputs
+			capabilities["supported_output_formats"] = []string{"png", "jpeg"}
+			capabilities["supported_backgrounds"] = []string{"auto", "opaque", "transparent"}
+		}
 		capabilities["asynchronous"] = true
 	}
 	if entry.ID == service.MidjourneyModel {

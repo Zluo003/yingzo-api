@@ -142,14 +142,15 @@ func (h *AgentHandler) GetAgentPricingSnapshot(c *gin.Context) {
 			var free *int
 			var inputPrice *float64
 			if service.IsSeedreamModel(model.ModelCode) {
-				f, p := 1, 0.0
+				f := service.SeedreamDefaultFreeInputs(model.ModelCode)
 				if model.FreeInputImages != nil {
 					f = *model.FreeInputImages
 				}
-				if model.InputImageUnitPrice != nil {
-					p = *model.InputImageUnitPrice
+				free, inputPrice = &f, model.InputImageUnitPrice
+				if inputPrice == nil && model.ModelCode != service.Seedream55Model {
+					zero := 0.0
+					inputPrice = &zero
 				}
-				free, inputPrice = &f, &p
 			}
 			if !agentModelPriceEnabled(price) {
 				continue

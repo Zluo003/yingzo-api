@@ -626,7 +626,7 @@ func (s *DurableImageService) publishResult(ctx context.Context, t *DurableImage
 			}
 			areas = append(areas, area)
 		}
-		cost, err := t.Quote.Seedream.cost(areas)
+		cost, err := t.Quote.Seedream.cost(areas, t.Quote.Model)
 		if err != nil || t.CapturedUsage == nil {
 			return nil, 0, errors.New("could not price Seedream output")
 		}

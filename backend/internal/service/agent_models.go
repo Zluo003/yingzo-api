@@ -68,7 +68,7 @@ type AgentGroupModel struct {
 	VideoChannels   []VideoChannel `json:"video_channels,omitempty"`
 	FreeInputImages *int           `json:"free_input_images,omitempty"`
 	// InputImageUnitPrice prices excess reference images. For MiniMax H3, nil
-	// falls back to the output unit price; for Seedream, nil means free.
+	// falls back to the output unit price; Seedream 5.0 treats nil as free; 5.5 requires a price for billable references.
 	InputImageUnitPrice *float64          `json:"input_image_unit_price,omitempty"`
 	ID                  int64             `json:"id"`
 	GroupID             int64             `json:"group_id"`
@@ -762,6 +762,13 @@ func discoverAgentModels(accounts []Account) []AgentModelDiscovery {
 		}
 		if account.IsMidjourney() {
 			addAgentDiscovery(discovered, platform, MidjourneyModel, AgentMediaTypeImage)
+			continue
+		}
+		if account.IsSeedream() {
+			// Existing dedicated APIMart accounts can serve 5.5 without being resaved.
+			for _, model := range []string{SeedreamProModel, SeedreamFlashModel, Seedream55Model} {
+				addAgentDiscovery(discovered, platform, model, AgentMediaTypeImage)
+			}
 			continue
 		}
 		mapping := account.GetModelMapping()

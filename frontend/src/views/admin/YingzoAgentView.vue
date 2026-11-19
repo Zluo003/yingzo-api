@@ -209,7 +209,7 @@
               <td class="py-2 pr-3 font-medium text-gray-900 dark:text-white">
                 {{ model.model_code }}
                 <p v-if="isSeedreamModel(model.model_code)" class="mt-1 max-w-xs text-xs font-normal text-gray-500 dark:text-gray-400" :data-testid="`yingzo-agent-layer-billing-${model.id}`">
-                  {{ t('seedream.layerBillingHint') }}
+                  {{ t(model.model_code === SEEDREAM_55_MODEL ? 'seedream.layerBillingHint55' : 'seedream.layerBillingHint') }}
                 </p>
               </td>
               <td class="py-2 pr-3 text-gray-500 dark:text-gray-400">{{ model.platform }}</td>
@@ -298,7 +298,7 @@
                   <span v-else class="text-gray-400">—</span>
                 </td>
                 <td class="py-2 pr-3">
-                  <input v-if="hasInputImagePricing(model)" v-model="drafts[model.id].inputImageUnitPrice" class="input w-24" type="number" min="0" step="0.001" :placeholder="isSeedreamModel(model.model_code) ? '0' : t('admin.yingzoAgent.inputImagePricePlaceholder')" :aria-label="t('admin.yingzoAgent.inputImageUnitPrice')" :data-testid="'yingzo-agent-input-image-price-' + model.id" />
+                  <input v-if="hasInputImagePricing(model)" v-model="drafts[model.id].inputImageUnitPrice" class="input w-24" type="number" min="0" step="0.001" :placeholder="isSeedreamModel(model.model_code) && model.model_code !== SEEDREAM_55_MODEL ? '0' : t('admin.yingzoAgent.inputImagePricePlaceholder')" :aria-label="t('admin.yingzoAgent.inputImageUnitPrice')" :data-testid="'yingzo-agent-input-image-price-' + model.id" />
                   <span v-else class="text-gray-400">—</span>
                 </td>
               </template>
@@ -335,7 +335,7 @@ import {
   type AgentMediaType,
   type AgentModelPrice,
 } from '@/api/admin/agentModels'
-import { isSeedreamModel } from '@/components/account/seedream'
+import { isSeedreamModel, SEEDREAM_55_MODEL } from '@/components/account/seedream'
 import { MIDJOURNEY_MODEL, MIDJOURNEY_PRICE_TIERS } from '@/components/account/midjourney'
 import { VIDEO_MODEL_RESOLUTIONS } from '@/views/admin/videoModelResolutions'
 import type { AdminGroup } from '@/types'
@@ -430,7 +430,7 @@ function hasInputImagePricing(model: AgentGroupModel): boolean {
   const mediaType = drafts[model.id]?.mediaType ?? model.media_type
   return (mediaType === 'video' && ['minimax-h3', 'minimax-h3-max'].includes(model.model_code)) || (mediaType === 'image' && isSeedreamModel(model.model_code))
 }
-function defaultFreeImages(model: AgentGroupModel): number { return isSeedreamModel(model.model_code) ? 1 : model.model_code === 'minimax-h3' ? 5 : 2 }
+function defaultFreeImages(model: AgentGroupModel): number { return model.model_code === SEEDREAM_55_MODEL ? 0 : isSeedreamModel(model.model_code) ? 1 : model.model_code === 'minimax-h3' ? 5 : 2 }
 
 function displayedPriceResolution(model: AgentGroupModel, resolution: string): string {
   return isSeedreamModel(model.model_code) && resolution === '1K' ? '1.5K' : resolution

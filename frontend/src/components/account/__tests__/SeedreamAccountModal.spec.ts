@@ -16,8 +16,8 @@ describe('Seedream account panel', () => {
     await w.get('[data-testid="seedream-name"]').setValue('MJ account')
     await w.get('[data-testid="seedream-api-key"]').setValue('new-secret')
     await w.get('form').trigger('submit'); await flushPromises()
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ platform: 'openai', type: 'apikey', group_ids: [7], credentials: { api_key: 'new-secret', base_url: 'https://api.apimart.ai', model_mapping: { 'seedream-5-0-pro': 'seedream-5-0-pro', 'seedream-5-0-flash': 'seedream-5-0-flash' } }, extra: { image_account: true, image_provider: 'apimart_seedream' } }))
-    expect(w.emitted('created')?.[0]).toEqual([{ imageModels: ['seedream-5-0-pro', 'seedream-5-0-flash'] }])
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ platform: 'openai', type: 'apikey', group_ids: [7], credentials: { api_key: 'new-secret', base_url: 'https://api.apimart.ai', model_mapping: { 'seedream-5-0-pro': 'seedream-5-0-pro', 'seedream-5-0-flash': 'seedream-5-0-flash', 'seedream-5-5': 'seedream-5-5' } }, extra: { image_account: true, image_provider: 'apimart_seedream' } }))
+    expect(w.emitted('created')?.[0]).toEqual([{ imageModels: ['seedream-5-0-pro', 'seedream-5-0-flash', 'seedream-5-5'] }])
   })
   it('keeps the stored secret when editing without a replacement', async () => {
     const w = panel({ id: 3, name: 'Existing MJ', group_ids: [7], credentials: { api_key: '***', base_url: 'https://api.apimart.ai' }, extra: { image_provider: 'apimart_seedream', custom_flag: true } } as unknown as Account)
