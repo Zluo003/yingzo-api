@@ -38,3 +38,19 @@ func secondsRange(minSeconds, maxSeconds int) []int {
 	}
 	return durations
 }
+
+func TestSupportedVideoAspectRatiosCoverAllBuiltInAndCustomModels(t *testing.T) {
+	require.Equal(t, []string{"16:9", "4:3", "1:1", "3:4", "9:16", "21:9"}, SupportedVideoAspectRatios(VideoModelSeedance25Flash))
+	require.Equal(t, []string{"1:1", "9:16", "16:9", "3:4", "4:3"}, SupportedVideoAspectRatios(VideoModelViduQ4Preview))
+	require.Equal(t, []string{"1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"}, SupportedVideoAspectRatios(VideoModelGrokImagineVideo15))
+	require.Equal(t, []string{"16:9", "9:16", "1:1"}, SupportedVideoAspectRatios(VideoModelKlingV3Omni))
+	require.Equal(t, []string{"16:9", "9:16", "1:1", "21:9"}, SupportedVideoAspectRatios(VideoModelKlingV4))
+	require.Equal(t, []string{"16:9", "4:3", "1:1", "3:4", "9:16", "21:9"}, SupportedVideoAspectRatios("seedance-custom"))
+
+	for _, model := range SupportedVideoModels() {
+		ratios := SupportedVideoAspectRatios(model)
+		require.NotEmpty(t, ratios, "model %s must declare supported aspect ratios", model)
+		ratios[0] = "mutated"
+		require.NotEqual(t, "mutated", SupportedVideoAspectRatios(model)[0], "caller mutation must not affect shared spec")
+	}
+}

@@ -220,7 +220,6 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 	if containsAgentMediaType(entry.MediaTypes, service.AgentMediaTypeVideo) {
 		if entry.ID == service.VideoModelViduQ4Preview {
 			input = appendUniqueStrings(input, "text", "image", "audio")
-			capabilities["supported_aspect_ratios"] = []string{"1:1", "9:16", "16:9", "3:4", "4:3"}
 		} else {
 			input = appendUniqueStrings(input, "text", "image", "video", "audio")
 		}
@@ -228,6 +227,7 @@ func agentCatalogModel(entry service.AgentModelCatalogEntry, config *service.Age
 		operations = appendUniqueStrings(operations, "video.generate")
 		streaming = false
 		asynchronous = true
+		capabilities["supported_aspect_ratios"] = service.SupportedVideoAspectRatios(entry.ID)
 		capabilities["supported_video_resolutions"] = configuredAgentModelResolutions(entry, config, service.AgentMediaTypeVideo)
 		if service.IsSeedanceModel(entry.ID) && config != nil {
 			for _, m := range config.Models {

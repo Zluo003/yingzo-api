@@ -52,6 +52,7 @@ const (
 // here, not left to the provider.
 type videoModelSpec struct {
 	Resolutions       []string
+	AspectRatios      []string
 	DefaultResolution string
 	// AutoDurationSeconds is the duration substituted for the "auto" sentinel
 	// (-1). Zero means the model has no auto duration and rejects the sentinel.
@@ -75,6 +76,14 @@ type videoModelSpec struct {
 	AudioNeedsVisual bool
 }
 
+var (
+	videoSeedanceAspectRatios = []string{"16:9", "4:3", "1:1", "3:4", "9:16", "21:9"}
+	videoViduAspectRatios     = []string{"1:1", "9:16", "16:9", "3:4", "4:3"}
+	videoGrokAspectRatios     = []string{"1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"}
+	videoKlingV3AspectRatios  = []string{"16:9", "9:16", "1:1"}
+	videoKlingV4AspectRatios  = []string{"16:9", "9:16", "1:1", "21:9"}
+)
+
 // videoModelSpecs is the single source of truth for per-model video limits.
 // Models absent from the table are only reachable through agent groups, where
 // the catalog comes from each account's model_mapping; those fall back to
@@ -82,13 +91,15 @@ type videoModelSpec struct {
 var videoModelSpecs = map[string]videoModelSpec{
 	VideoModelViduQ4Preview: {
 		Resolutions:       []string{VideoResolution540P, VideoResolution720P, VideoResolution1080P, VideoResolution2K, VideoResolution4K},
+		AspectRatios:      videoViduAspectRatios,
 		DefaultResolution: VideoResolution720P,
 		MinSeconds:        3, MaxSeconds: 16, MaxRefImages: 15, MaxRefAudios: 3, AudioNeedsVisual: true,
 	},
-	VideoModelMinimaxH3Max: {Resolutions: []string{VideoResolution480P, VideoResolution768P, VideoResolution1080P}, DefaultResolution: VideoResolution768P, MinSeconds: 5, MaxSeconds: 15, MaxRefImages: 9, MaxRefVideos: 3, MaxRefAudios: 3, MaxRefVideoSeconds: 15, MaxRefVideoTotalSeconds: 15, AudioNeedsVisual: true},
-	VideoModelMinimaxH3:    {Resolutions: []string{VideoResolution768P, VideoResolution2K}, DefaultResolution: VideoResolution2K, MinSeconds: 4, MaxSeconds: 15, MaxRefImages: 9, MaxRefVideos: 3, MaxRefAudios: 3, MaxRefVideoSeconds: 15, MaxRefVideoTotalSeconds: 15, AudioNeedsVisual: true},
+	VideoModelMinimaxH3Max: {Resolutions: []string{VideoResolution480P, VideoResolution768P, VideoResolution1080P}, AspectRatios: videoSeedanceAspectRatios, DefaultResolution: VideoResolution768P, MinSeconds: 5, MaxSeconds: 15, MaxRefImages: 9, MaxRefVideos: 3, MaxRefAudios: 3, MaxRefVideoSeconds: 15, MaxRefVideoTotalSeconds: 15, AudioNeedsVisual: true},
+	VideoModelMinimaxH3:    {Resolutions: []string{VideoResolution768P, VideoResolution2K}, AspectRatios: videoSeedanceAspectRatios, DefaultResolution: VideoResolution2K, MinSeconds: 4, MaxSeconds: 15, MaxRefImages: 9, MaxRefVideos: 3, MaxRefAudios: 3, MaxRefVideoSeconds: 15, MaxRefVideoTotalSeconds: 15, AudioNeedsVisual: true},
 	VideoModelSeedance20: {
 		Resolutions:             []string{VideoResolution480P, VideoResolution720P, VideoResolution1080P, VideoResolution4K},
+		AspectRatios:            videoSeedanceAspectRatios,
 		DefaultResolution:       VideoResolution720P,
 		MinSeconds:              videoMinDurationSeconds,
 		MaxSeconds:              videoMaxDurationSeconds,
@@ -101,6 +112,7 @@ var videoModelSpecs = map[string]videoModelSpec{
 	},
 	VideoModelSeedance20Fast: {
 		Resolutions:             []string{VideoResolution480P, VideoResolution720P},
+		AspectRatios:            videoSeedanceAspectRatios,
 		DefaultResolution:       VideoResolution720P,
 		MinSeconds:              videoMinDurationSeconds,
 		MaxSeconds:              videoMaxDurationSeconds,
@@ -115,6 +127,7 @@ var videoModelSpecs = map[string]videoModelSpec{
 	// use the 2.0 family limits, with optional narrower account restrictions.
 	VideoModelSeedance20Mini: {
 		Resolutions:             []string{VideoResolution480P, VideoResolution720P},
+		AspectRatios:            videoSeedanceAspectRatios,
 		DefaultResolution:       VideoResolution720P,
 		MinSeconds:              videoMinDurationSeconds,
 		MaxSeconds:              videoMaxDurationSeconds,
@@ -127,6 +140,7 @@ var videoModelSpecs = map[string]videoModelSpec{
 	},
 	VideoModelSeedance25: {
 		Resolutions:             []string{VideoResolution480P, VideoResolution720P, VideoResolution1080P, VideoResolution4K},
+		AspectRatios:            videoSeedanceAspectRatios,
 		DefaultResolution:       VideoResolution720P,
 		AutoDurationSeconds:     5,
 		MinSeconds:              videoMinDurationSeconds,
@@ -141,7 +155,7 @@ var videoModelSpecs = map[string]videoModelSpec{
 		AudioNeedsVisual: true,
 	},
 	VideoModelSeedance25Flash: {
-		Resolutions: []string{VideoResolution480P, VideoResolution720P}, DefaultResolution: VideoResolution720P,
+		Resolutions: []string{VideoResolution480P, VideoResolution720P}, AspectRatios: videoSeedanceAspectRatios, DefaultResolution: VideoResolution720P,
 		MinSeconds: videoMinDurationSeconds, MaxSeconds: videoSeedance25MaxDuration, AutoDurationSeconds: 5,
 		MaxRefImages: 10, MaxRefVideos: 5, MaxRefAudios: 5, MaxRefTotal: 20,
 		MaxRefVideoSeconds: videoSeedance25MaxDuration, MaxRefVideoTotalSeconds: videoSeedance25MaxDuration,
@@ -152,6 +166,7 @@ var videoModelSpecs = map[string]videoModelSpec{
 	// 协议不变。
 	VideoModelGrokImagineVideo15: {
 		Resolutions:       []string{VideoResolution480P, VideoResolution720P, VideoResolution1080P},
+		AspectRatios:      videoGrokAspectRatios,
 		DefaultResolution: VideoResolution720P,
 		MinSeconds:        1,
 		MaxSeconds:        videoMaxDurationSeconds,
@@ -163,6 +178,7 @@ var videoModelSpecs = map[string]videoModelSpec{
 	// 只做参考图）。画幅只有 16:9/9:16/1:1，由 mikuapi 适配器的渠道闸门收紧。
 	VideoModelKlingV3Omni: {
 		Resolutions:       []string{VideoResolution720P, VideoResolution1080P, VideoResolution4K},
+		AspectRatios:      videoKlingV3AspectRatios,
 		DefaultResolution: VideoResolution720P,
 		MinSeconds:        3,
 		MaxSeconds:        videoMaxDurationSeconds,
@@ -171,6 +187,7 @@ var videoModelSpecs = map[string]videoModelSpec{
 	},
 	VideoModelKlingV4: {
 		Resolutions:             []string{VideoResolution720P, VideoResolution1080P},
+		AspectRatios:            videoKlingV4AspectRatios,
 		DefaultResolution:       VideoResolution720P,
 		MinSeconds:              3,
 		MaxSeconds:              30,
@@ -190,6 +207,7 @@ var videoModelSpecs = map[string]videoModelSpec{
 // before videoModelSpecs existed. It keeps agent groups, whose model catalog is
 // account-defined, on exactly the validation they had before.
 var videoDefaultModelSpec = videoModelSpec{
+	AspectRatios:            videoSeedanceAspectRatios,
 	DefaultResolution:       VideoResolution720P,
 	MinSeconds:              videoMinDurationSeconds,
 	MaxSeconds:              videoMaxDurationSeconds,
@@ -253,6 +271,14 @@ func SupportedVideoResolutions(model string) []string {
 		return nil
 	}
 	return append([]string(nil), spec.Resolutions...)
+}
+
+// SupportedVideoAspectRatios returns a copy of the concrete composition ratios
+// supported by the model, falling back to the default ratio set for custom
+// account-mapped video models.
+func SupportedVideoAspectRatios(model string) []string {
+	spec, _ := videoSpecForModel(model)
+	return append([]string(nil), spec.AspectRatios...)
 }
 
 // SupportedVideoDurations returns every integer duration (seconds) the model

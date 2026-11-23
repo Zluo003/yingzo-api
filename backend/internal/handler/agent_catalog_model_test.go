@@ -32,8 +32,27 @@ func TestAgentCatalogModelPublishesRoutingCapabilities(t *testing.T) {
 	capabilities := capabilitiesOf(t, model)
 	require.Equal(t, []string{"video"}, capabilities["output_modalities"])
 	require.Equal(t, []string{"video.generate"}, capabilities["operations"])
+	require.Equal(t, []string{"16:9", "4:3", "1:1", "3:4", "9:16", "21:9"}, capabilities["supported_aspect_ratios"])
 	require.Equal(t, []string{"720p", "4K"}, capabilities["supported_video_resolutions"])
 	require.Equal(t, true, capabilities["asynchronous"])
+}
+
+func TestAgentCatalogModelPublishesAspectRatiosForEverySupportedVideoModel(t *testing.T) {
+	for _, modelID := range append(service.SupportedVideoModels(), "seedance-custom") {
+		t.Run(modelID, func(t *testing.T) {
+			model := agentCatalogModel(service.AgentModelCatalogEntry{
+				ID:         modelID,
+				MediaTypes: []string{service.AgentMediaTypeVideo},
+				Platforms:  []string{service.PlatformVideo},
+				Interfaces: []string{service.AgentInterfaceSeedanceVideos},
+			}, nil)
+			caps := capabilitiesOf(t, model)
+			ratios, ok := caps["supported_aspect_ratios"].([]string)
+			require.True(t, ok, "model %s must publish supported_aspect_ratios", modelID)
+			require.Equal(t, service.SupportedVideoAspectRatios(modelID), ratios)
+			require.NotEmpty(t, ratios)
+		})
+	}
 }
 
 func boolPointer(value bool) *bool { return &value }
